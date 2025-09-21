@@ -1,6 +1,6 @@
-import { FaWater, FaChartLine, FaFileContract, FaBell } from 'react-icons/fa'
+import { FaWater, FaChartLine, FaFileContract, FaBell, FaCircle } from 'react-icons/fa'
 
-export default function Header({ currentTab, onTabChange }) {
+export default function Header({ currentTab, onTabChange, isHealthy }) {
     const tabs = [
         { id: 'dashboard', label: 'Dashboard', icon: FaChartLine },
         { id: 'contracts', label: 'Contracts', icon: FaFileContract },
@@ -18,6 +18,14 @@ export default function Header({ currentTab, onTabChange }) {
                             <span className="ml-2 text-xl font-bold text-gray-900">
                                 W.A.T.A. Chain
                             </span>
+                            <div className="ml-3 flex items-center">
+                                <FaCircle
+                                    className={`h-2 w-2 ${isHealthy ? 'text-green-500' : 'text-red-500'}`}
+                                />
+                                <span className="ml-1 text-xs text-gray-500">
+                                    {isHealthy ? 'Online' : 'Offline'}
+                                </span>
+                            </div>
                         </div>
                     </div>
 

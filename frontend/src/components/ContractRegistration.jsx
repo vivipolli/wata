@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { FaPlus, FaMapMarkerAlt } from 'react-icons/fa'
+import { useAgreements } from '../hooks'
+import { formatNumber } from '../utils'
 
-export default function ContractRegistration({ onAgreementCreated }) {
+export default function ContractRegistration() {
+    const { createAgreement, loading } = useAgreements()
     const [formData, setFormData] = useState({
         producerName: '',
         producerAddress: '',
@@ -11,7 +14,6 @@ export default function ContractRegistration({ onAgreementCreated }) {
         locationLng: '',
         durationDays: ''
     })
-    const [loading, setLoading] = useState(false)
     const [success, setSuccess] = useState(false)
 
     const handleChange = (e) => {
@@ -23,28 +25,21 @@ export default function ContractRegistration({ onAgreementCreated }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        setLoading(true)
         setSuccess(false)
 
         try {
-            const response = await fetch('http://localhost:3001/api/agreements', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    ...formData,
-                    baseValue: parseInt(formData.baseValue),
-                    hectares: parseInt(formData.hectares),
-                    durationDays: parseInt(formData.durationDays),
-                    locationLat: parseFloat(formData.locationLat) || null,
-                    locationLng: parseFloat(formData.locationLng) || null
-                })
-            })
+            const agreementData = {
+                ...formData,
+                baseValue: parseInt(formData.baseValue),
+                hectares: parseInt(formData.hectares),
+                durationDays: parseInt(formData.durationDays),
+                locationLat: parseFloat(formData.locationLat) || null,
+                locationLng: parseFloat(formData.locationLng) || null
+            }
 
-            const data = await response.json()
+            const result = await createAgreement(agreementData)
 
-            if (data.success) {
+            if (result) {
                 setSuccess(true)
                 setFormData({
                     producerName: '',
@@ -55,15 +50,9 @@ export default function ContractRegistration({ onAgreementCreated }) {
                     locationLng: '',
                     durationDays: ''
                 })
-                onAgreementCreated()
-            } else {
-                alert('Error creating agreement: ' + data.error)
             }
         } catch (error) {
             console.error('Error creating agreement:', error)
-            alert('Error creating agreement')
-        } finally {
-            setLoading(false)
         }
     }
 

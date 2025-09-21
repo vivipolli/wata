@@ -1,19 +1,26 @@
 import { useState, useEffect } from 'react'
 import { FaWater, FaFileContract, FaDollarSign, FaChartLine } from 'react-icons/fa'
+import { useAgreements, useReadings, usePayments } from '../hooks'
+import { formatNumber, formatCurrency, getWaterQualityStatus } from '../utils'
 
-export default function Dashboard({ agreements, readings, onRefresh }) {
+export default function Dashboard() {
+    const { agreements, loading: agreementsLoading } = useAgreements()
+    const { readings, loading: readingsLoading, simulateReading } = useReadings()
+    const { getPaymentStats } = usePayments()
+
     const [stats, setStats] = useState({
         activeContracts: 0,
         pendingPayments: 0,
         lastTurbidity: 0,
         complianceRate: 0
     })
+    const [loading, setLoading] = useState(false)
 
     useEffect(() => {
         calculateStats()
     }, [agreements, readings])
 
-    const calculateStats = () => {
+    const calculateStats = async () => {
         const activeContracts = agreements.filter(a => a.is_active).length
 
         const recentReadings = readings.slice(0, 10)
@@ -24,33 +31,34 @@ export default function Dashboard({ agreements, readings, onRefresh }) {
             ? (compliantReadings.length / recentReadings.length) * 100
             : 0
 
+        // Get payment stats
+        let pendingPayments = 0
+        try {
+            const paymentStats = await getPaymentStats()
+            if (paymentStats) {
+                pendingPayments = paymentStats.pendingPayments || 0
+            }
+        } catch (error) {
+            console.error('Error fetching payment stats:', error)
+        }
+
         setStats({
             activeContracts,
-            pendingPayments: 0, // Would be calculated from payments API
+            pendingPayments,
             lastTurbidity,
             complianceRate
         })
     }
 
-    const simulateReading = async () => {
+    const handleSimulateReading = async () => {
+        setLoading(true)
         try {
-            const response = await fetch('http://localhost:3001/api/readings/simulate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    agreementId: agreements[0]?.id || 1,
-                    locationLat: -23.5505,
-                    locationLng: -46.6333
-                })
-            })
-
-            if (response.ok) {
-                onRefresh()
-            }
+            const agreementId = agreements[0]?.id || 1
+            await simulateReading(agreementId, { lat: -23.5505, lng: -46.6333 })
         } catch (error) {
             console.error('Error simulating reading:', error)
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -128,10 +136,11 @@ export default function Dashboard({ agreements, readings, onRefresh }) {
                                 Recent Turbidity Readings
                             </h3>
                             <button
-                                onClick={simulateReading}
-                                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+                                onClick={handleSimulateReading}
+                                disabled={loading || agreementsLoading}
+                                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                             >
-                                Simulate Reading
+                                {loading ? 'Simulating...' : 'Simulate Reading'}
                             </button>
                         </div>
                         <div className="space-y-3">
