@@ -1,0 +1,75 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var HieroProto = _interopRequireWildcard(require("@hashgraph/proto"));
+var _ContractId = _interopRequireDefault(require("./ContractId.cjs"));
+var _StorageChange = _interopRequireDefault(require("./StorageChange.cjs"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+function _getRequireWildcardCache(e) { if ("function" != typeof WeakMap) return null; var r = new WeakMap(), t = new WeakMap(); return (_getRequireWildcardCache = function (e) { return e ? t : r; })(e); }
+function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e; if (null === e || "object" != typeof e && "function" != typeof e) return { default: e }; var t = _getRequireWildcardCache(r); if (t && t.has(e)) return t.get(e); var n = { __proto__: null }, a = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var u in e) if ("default" !== u && {}.hasOwnProperty.call(e, u)) { var i = a ? Object.getOwnPropertyDescriptor(e, u) : null; i && (i.get || i.set) ? Object.defineProperty(n, u, i) : n[u] = e[u]; } return n.default = e, t && t.set(e, n), n; }
+// SPDX-License-Identifier: Apache-2.0
+
+/**
+ * @deprecated - Use mirror node for contract traceability instead
+ */
+class ContractStateChange {
+  /**
+   * @private
+   * @param {object} props
+   * @param {ContractId} props.contractId
+   * @param {StorageChange[]} props.storageChanges
+   */
+  constructor(props) {
+    this.contractId = props.contractId;
+    this.storageChanges = props.storageChanges;
+    Object.freeze(this);
+  }
+
+  /**
+   * @internal
+   * @param {HieroProto.proto.IContractStateChange} change
+   * @returns {ContractStateChange}
+   */
+  static _fromProtobuf(change) {
+    // eslint-disable-next-line deprecation/deprecation
+    return new ContractStateChange({
+      contractId: _ContractId.default._fromProtobuf(/** @type {HieroProto.proto.IContractID} */change.contractId),
+      storageChanges: (change.storageChanges != null ? change.storageChanges : []
+
+      // eslint-disable-next-line deprecation/deprecation
+      ).map(change => _StorageChange.default._fromProtobuf(change))
+    });
+  }
+
+  /**
+   * @param {Uint8Array} bytes
+   * @returns {ContractStateChange}
+   */
+  static fromBytes(bytes) {
+    // eslint-disable-next-line deprecation/deprecation
+    return ContractStateChange._fromProtobuf(HieroProto.proto.ContractStateChange.decode(bytes));
+  }
+
+  /**
+   * @internal
+   * @returns {HieroProto.proto.IContractStateChange} change
+   */
+  _toProtobuf() {
+    return {
+      contractId: this.contractId._toProtobuf(),
+      storageChanges: this.storageChanges.map(storageChange => storageChange._toProtobuf())
+    };
+  }
+
+  /**
+   * @returns {Uint8Array}
+   */
+  toBytes() {
+    // eslint-disable-next-line deprecation/deprecation
+    return HieroProto.proto.ContractStateChange.encode(this._toProtobuf()).finish();
+  }
+}
+exports.default = ContractStateChange;

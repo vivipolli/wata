@@ -1,0 +1,64 @@
+import { IrysConfig, Network } from '@irys/upload-core';
+import { WebIrysConfig, WebToken } from './types';
+import { BaseWebIrys } from './base';
+import { Irys } from '@irys/upload-core';
+export type Adapter = PreAdapter | PostAdapter | BiphaseAdapter;
+export interface BaseAdapter {
+    phase: 'pre' | 'post' | 'both';
+    load?: (builder: this) => void;
+}
+export interface PreAdapter extends BaseAdapter {
+    phase: 'pre';
+    adaptTokenPre: (builder: UploadBuilder, tokenConfig: ConstructableWebToken) => Resolvable<void>;
+}
+export interface PostAdapter extends BaseAdapter {
+    phase: 'post';
+    adaptTokenPost: (builder: UploadBuilder, tokenConfig: WebToken) => Resolvable<void>;
+}
+export interface BiphaseAdapter extends BaseAdapter {
+    phase: 'both';
+    adaptTokenPre: (builder: UploadBuilder, tokenConfig: ConstructableWebToken) => Resolvable<void>;
+    adaptTokenPost: (builder: UploadBuilder, tokenConfig: WebToken) => Resolvable<void>;
+}
+export type Resolvable<T> = T | Promise<T>;
+export type Constructable<A extends any[], T> = {
+    new (...args: A): T;
+};
+export type ConstructableWebToken<T extends any[] = [TokenConfigTrimmed]> = Constructable<T, WebToken>;
+export type TokenConfigTrimmed<Wallet = string | object, Opts = any> = {
+    irys: Irys;
+    wallet?: Wallet;
+    providerUrl?: string;
+    opts?: Opts;
+};
+export declare class UploadBuilder {
+    preAdapters: (PreAdapter | BiphaseAdapter)[];
+    postAdapters: (PostAdapter | BiphaseAdapter)[];
+    token: ConstructableWebToken;
+    protected provider: any;
+    config: WebIrysConfig & {
+        irysConfig: IrysConfig;
+    };
+    constructed?: WebToken;
+    constructor(tokenClass: ConstructableWebToken);
+    withProvider(provider: any): this;
+    mainnet(): this;
+    devnet(): this;
+    withRpc(rpcUrl: string): this;
+    withTokenOptions(opts: any): this;
+    bundlerUrl(url: URL | string): this;
+    network(network: Network): this;
+    withIrysConfig(config: IrysConfig): this;
+    /**
+     * Set the HTTP request timeout - useful if you have a slower connection
+     * @param timeout - timeout in milliseconds
+     * @returns this (builder)
+     */
+    timeout(timeout: number): this;
+    withAdapter(adapter: Adapter): this;
+    build(): Promise<BaseWebIrys>;
+    then(onFulfilled?: ((value: BaseWebIrys) => any | PromiseLike<BaseWebIrys>) | undefined | null, onRejected?: (value: Error) => any | PromiseLike<Error> | undefined | null): Promise<BaseWebIrys | never>;
+    catch(onReject?: ((value: BaseWebIrys) => any | PromiseLike<BaseWebIrys>) | undefined | null): Promise<null>;
+    finally(onFinally?: (() => void) | null | undefined): Promise<BaseWebIrys | null>;
+}
+export declare const Builder: (tokenClass: ConstructableWebToken) => UploadBuilder;

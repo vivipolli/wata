@@ -1,0 +1,1 @@
+{"version":3,"file":"version.js","sources":["../src/version.js"],"sourcesContent":["export const SDK_NAME = \"hiero-sdk-js\";\nexport const SDK_VERSION =\n    typeof __SDK_VERSION__ !== \"undefined\" ? __SDK_VERSION__ : \"DEV\";\n"],"names":["SDK_NAME","SDK_VERSION"],"mappings":"AAAY,MAACA,EAAW,eACXC,EACgC"}

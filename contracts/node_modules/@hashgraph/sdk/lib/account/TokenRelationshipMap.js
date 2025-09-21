@@ -1,0 +1,2 @@
+import o from"../token/TokenId.js";import t from"./TokenRelationship.js";import r from"../ObjectMap.js";class s extends r{constructor(){super((t=>o.fromString(t)))}static _fromProtobuf(r){const f=new s;for(const s of r){const r=o._fromProtobuf(s.tokenId);f._set(r,t._fromProtobuf(s))}return f}_toProtobuf(){const o=[];for(const[t,r]of this)o.push(r._toProtobuf());return o}}export{s as default};
+//# sourceMappingURL=TokenRelationshipMap.js.map

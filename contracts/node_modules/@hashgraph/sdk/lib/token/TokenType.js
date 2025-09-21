@@ -1,0 +1,2 @@
+class e{constructor(e){this._code=e,Object.freeze(this)}toString(){switch(this){case e.FungibleCommon:return"FUNGIBLE_COMMON";case e.NonFungibleUnique:return"NON_FUNGIBLE_UNIQUE";default:return`UNKNOWN (${this._code})`}}static _fromCode(n){switch(n){case 0:return e.FungibleCommon;case 1:return e.NonFungibleUnique}throw new Error(`(BUG) TokenType.fromCode() does not handle code: ${n}`)}valueOf(){return this._code}}e.FungibleCommon=new e(0),e.NonFungibleUnique=new e(1);export{e as default};
+//# sourceMappingURL=TokenType.js.map

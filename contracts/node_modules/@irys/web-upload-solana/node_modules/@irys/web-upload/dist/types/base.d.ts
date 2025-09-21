@@ -1,0 +1,31 @@
+import '@irys/upload-core/hack';
+import { Irys, type IrysConfig, type Network } from '@irys/upload-core';
+import type { WebToken } from './types';
+import { WebUploader } from './upload';
+import { Resolvable } from './builder';
+export declare class BaseWebIrys extends Irys {
+    tokenConfig: WebToken;
+    uploader: WebUploader;
+    uploadFolder: InstanceType<typeof WebUploader>['uploadFolder'];
+    uploadFile: InstanceType<typeof WebUploader>['uploadFile'];
+    getTokenConfig: (irys: BaseWebIrys) => Resolvable<WebToken>;
+    constructor({ url, wallet, config, getTokenConfig, }: {
+        url?: string | Network;
+        wallet?: {
+            rpcUrl?: string;
+            name?: string;
+            provider: object;
+        };
+        config?: IrysConfig;
+        getTokenConfig: (irys: BaseWebIrys) => Resolvable<WebToken>;
+    });
+    build({ wallet, config, }: {
+        wallet?: {
+            rpcUrl?: string;
+            name?: string;
+            provider: object;
+        };
+        config?: IrysConfig;
+    }): Promise<void>;
+}
+export default BaseWebIrys;

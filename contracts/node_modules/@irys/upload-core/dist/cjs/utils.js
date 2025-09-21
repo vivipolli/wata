@@ -1,0 +1,474 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.erc20abi = exports.Utils = exports.httpErrData = exports.sleep = void 0;
+const tslib_1 = require("tslib");
+const base64url_1 = tslib_1.__importDefault(require("base64url"));
+const bignumber_js_1 = tslib_1.__importDefault(require("bignumber.js"));
+const async_retry_1 = tslib_1.__importDefault(require("async-retry"));
+bignumber_js_1.default.set({ DECIMAL_PLACES: 50 });
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+exports.sleep = sleep;
+const httpErrData = (res) => typeof res.data !== 'string' ? res.statusText : res.data;
+exports.httpErrData = httpErrData;
+class Utils {
+    constructor(api, token, tokenConfig) {
+        this.api = api;
+        this.token = token;
+        this.tokenConfig = tokenConfig;
+        this.bundles = this.tokenConfig.irys.bundles;
+    }
+    /**
+     * Throws an error if the provided axios reponse has a status code != 200
+     * @param res an axios response
+     * @returns nothing if the status code is 200
+     */
+    static checkAndThrow(res, context, exceptions) {
+        if (res?.status &&
+            !(exceptions ?? []).includes(res.status) &&
+            res.status != 200) {
+            throw new Error(`HTTP Error: ${context}: ${res.status} ${typeof res.data !== 'string' ? res.statusText : res.data}`);
+        }
+        return;
+    }
+    /**
+     * Gets the nonce used for withdrawal request validation from the bundler
+     * @returns nonce for the current user
+     */
+    async getNonce() {
+        const res = await this.api.get(`/account/withdrawals/${this.tokenConfig.name}?address=${this.tokenConfig.address}`);
+        Utils.checkAndThrow(res, 'Getting withdrawal nonce');
+        return res.data;
+    }
+    /**
+     * Gets the balance on the current bundler for the specified user
+     * @param address the user's address to query
+     * @returns the balance in winston
+     */
+    async getBalance(address) {
+        const res = await this.api.get(`/account/balance/${this.tokenConfig.name}?address=${address}`);
+        Utils.checkAndThrow(res, 'Getting balance');
+        return new bignumber_js_1.default(res.data.balance);
+    }
+    /**
+     * Queries the bundler to get it's address for a specific token
+     * @returns the bundler's address
+     */
+    async getBundlerAddress(token) {
+        const res = await this.api.get('/info');
+        Utils.checkAndThrow(res, 'Getting Bundler address');
+        const address = res.data.addresses[token ?? this.token];
+        if (!address) {
+            throw new Error(`Specified bundler does not support token ${token}`);
+        }
+        return address;
+    }
+    /**
+     * Calculates the price for [bytes] bytes paid for with [token] for the loaded Irys node.
+     * @param token
+     * @param bytes
+     * @returns
+     */
+    async getPrice(token, bytes, opts) {
+        let path = `/price/${token}/${bytes}`;
+        if (opts?.tags) {
+            const address = opts.address ?? this.tokenConfig.address;
+            path = opts.tags.reduce((b, t) => b + `&tags=${t.name}|${t.value}`, path + `?address=${address}`);
+        }
+        else if (opts?.address) {
+            path = path + `?address=${opts?.address}`;
+        }
+        const res = await this.api.get(path);
+        Utils.checkAndThrow(res, 'Getting storage cost');
+        return new bignumber_js_1.default(res.data);
+    }
+    /**
+     * This function *estimates* the cost in atomic units for uploading a given set of files
+     * note: this function becomes less accurate the smaller your transactions, unless you provide it with an accurate headerSizeAvg
+     * @param folderInfo either an array of file sizes in bytes, or an object containing the total number of files and the sum total size of the files in bytes
+     * note: for a more precise estimate, you can create an empty (dataless) transaction (make sure you still set tags and other metadata!) and then pass `tx.size` as `headerSizeAvg`
+     */
+    async estimateFolderPrice(folderInfo) {
+        if (Array.isArray(folderInfo)) {
+            folderInfo = {
+                fileCount: folderInfo.length,
+                totalBytes: folderInfo.reduce((acc, v) => acc + v, 0),
+            };
+        }
+        // create a 0 data byte tx to estimate the per tx header overhead
+        const headerSizeAvg = folderInfo.headerSizeAvg ??
+            this.bundles.createData('', this.tokenConfig.getSigner()).getRaw().length;
+        const pricePerTxBase = await this.getPrice(this.tokenConfig.name, headerSizeAvg);
+        const basePriceForTxs = pricePerTxBase.multipliedBy(folderInfo.fileCount);
+        const priceForData = (await this.getPrice(this.tokenConfig.name, folderInfo.totalBytes))
+            .plus(basePriceForTxs)
+            .decimalPlaces(0);
+        return priceForData;
+    }
+    /**
+     * Returns the decimal values' equivalent in atomic units
+     * @example
+     * 0.1 ETH -> 100,000,000,000,000,000 wei
+     * ```
+     * toAtomic(100_000_000_000_000_000) -> 0.1
+     * ```
+     * @param decimalAmount - amount in decimal
+     * @returns amount in atomic units
+     */
+    toAtomic(decimalAmount) {
+        return new bignumber_js_1.default(decimalAmount).multipliedBy(this.tokenConfig.base[1]);
+    }
+    /**
+     * Returns the atomic amounts' equivalent in decimal units
+     * @example
+     * 100,000,000,000,000,000 wei -> 0.1 ETH
+     * ```
+     * fromAtomic(0.1) -> 100_000_000_000_000_000
+     * ```
+     * @param atomicAmount
+     * @returns
+     */
+    fromAtomic(atomicAmount) {
+        return new bignumber_js_1.default(atomicAmount).dividedBy(this.tokenConfig.base[1]);
+    }
+    /**
+     * Polls for transaction confirmation (or at least pending status) - used for fast currencies
+     * before posting the fund request to the server (so the server doesn't have to poll)
+     * @param txid
+     * @returns
+     */
+    async confirmationPoll(txid, seconds = 30) {
+        if (this.tokenConfig.isSlow)
+            return;
+        if (seconds < 0)
+            seconds = 0;
+        let lastError;
+        let timedout = false;
+        let timedOutConfirmedButPending = false;
+        const internalPoll = async () => {
+            while (!timedout) {
+                const getRes = await this.tokenConfig
+                    .getTx(txid)
+                    .then((v) => {
+                    if (v?.confirmed && !v?.pending)
+                        return true;
+                    if (v?.confirmed && v?.pending)
+                        timedOutConfirmedButPending = true;
+                    return false;
+                })
+                    .catch((err) => {
+                    lastError = err;
+                    return false;
+                });
+                if (getRes)
+                    return true;
+                await (0, exports.sleep)(1000);
+            }
+            return false;
+        };
+        const racer = async () => {
+            await (0, exports.sleep)(seconds * 1_000);
+            timedout = true;
+            return 'RACE';
+        };
+        const r = await Promise.race([racer(), internalPoll()]);
+        if (r === 'RACE') {
+            // for now we failsafe
+            if (timedOutConfirmedButPending)
+                return true;
+            console.warn(`Tx ${txid} didn't finalize after ${seconds} seconds ${lastError ? ` - ${lastError}` : ''}`);
+            return lastError;
+        }
+        return r;
+    }
+    /**
+     * @deprecated this method is deprecated in favour of fromAtomic - removal slated for 0.12.0
+     */
+    unitConverter(baseUnits) {
+        return new bignumber_js_1.default(baseUnits).dividedBy(this.tokenConfig.base[1]);
+    }
+    async verifyReceipt(receipt) {
+        return Utils.verifyReceipt(this.bundles, receipt);
+    }
+    static async verifyReceipt(dependencies, receipt) {
+        const { id, deadlineHeight, timestamp, public: pubKey, signature, version, } = receipt;
+        const dh = await dependencies.deepHash([
+            dependencies.stringToBuffer('Bundlr'),
+            dependencies.stringToBuffer(version),
+            dependencies.stringToBuffer(id),
+            dependencies.stringToBuffer(deadlineHeight.toString()),
+            dependencies.stringToBuffer(timestamp.toString()),
+        ]);
+        return await dependencies
+            .getCryptoDriver()
+            .verify(pubKey, dh, base64url_1.default.toBuffer(signature));
+    }
+    async getReceipt(txId) {
+        // get receipt information from GQL
+        const query = `query {
+      transactions(ids: ["${txId}"]) {
+        edges {
+          node {
+            receipt {
+              signature
+              timestamp
+              version
+              deadlineHeight
+            }
+          }
+        }
+      }
+    }`;
+        const queryRes = await (0, async_retry_1.default)(async () => {
+            return await this.api.post('/graphql', { query }, {
+                headers: { 'content-type': 'application/json' },
+                validateStatus: (s) => s === 200,
+            });
+        });
+        const receiptData = queryRes?.data?.data?.transactions?.edges?.at(0)?.node?.receipt;
+        if (!receiptData)
+            throw new Error(`Missing required receipt data from node for tx: ${txId}`);
+        // get public key from node
+        const pubKey = (await this.api.get('/public')).data;
+        const receipt = {
+            public: pubKey,
+            version: receiptData.version,
+            id: txId,
+            timestamp: receiptData.timestamp,
+            validatorSignatures: [],
+            signature: receiptData.signature,
+            deadlineHeight: receiptData.deadlineHeight,
+            // use stub to conform to type
+            verify: async () => {
+                return false;
+            },
+        };
+        // inject method
+        receipt.verify = async () => this.verifyReceipt(receipt);
+        return receipt;
+    }
+}
+exports.Utils = Utils;
+exports.default = Utils;
+exports.erc20abi = [
+    {
+        constant: true,
+        inputs: [],
+        name: 'name',
+        outputs: [
+            {
+                name: '',
+                type: 'string',
+            },
+        ],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        constant: false,
+        inputs: [
+            {
+                name: '_spender',
+                type: 'address',
+            },
+            {
+                name: '_value',
+                type: 'uint256',
+            },
+        ],
+        name: 'approve',
+        outputs: [
+            {
+                name: '',
+                type: 'bool',
+            },
+        ],
+        payable: false,
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        constant: true,
+        inputs: [],
+        name: 'totalSupply',
+        outputs: [
+            {
+                name: '',
+                type: 'uint256',
+            },
+        ],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        constant: false,
+        inputs: [
+            {
+                name: '_from',
+                type: 'address',
+            },
+            {
+                name: '_to',
+                type: 'address',
+            },
+            {
+                name: '_value',
+                type: 'uint256',
+            },
+        ],
+        name: 'transferFrom',
+        outputs: [
+            {
+                name: '',
+                type: 'bool',
+            },
+        ],
+        payable: false,
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        constant: true,
+        inputs: [],
+        name: 'decimals',
+        outputs: [
+            {
+                name: '',
+                type: 'uint8',
+            },
+        ],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        constant: true,
+        inputs: [
+            {
+                name: '_owner',
+                type: 'address',
+            },
+        ],
+        name: 'balanceOf',
+        outputs: [
+            {
+                name: 'balance',
+                type: 'uint256',
+            },
+        ],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        constant: true,
+        inputs: [],
+        name: 'symbol',
+        outputs: [
+            {
+                name: '',
+                type: 'string',
+            },
+        ],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        constant: false,
+        inputs: [
+            {
+                name: '_to',
+                type: 'address',
+            },
+            {
+                name: '_value',
+                type: 'uint256',
+            },
+        ],
+        name: 'transfer',
+        outputs: [
+            {
+                name: '',
+                type: 'bool',
+            },
+        ],
+        payable: false,
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        constant: true,
+        inputs: [
+            {
+                name: '_owner',
+                type: 'address',
+            },
+            {
+                name: '_spender',
+                type: 'address',
+            },
+        ],
+        name: 'allowance',
+        outputs: [
+            {
+                name: '',
+                type: 'uint256',
+            },
+        ],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        payable: true,
+        stateMutability: 'payable',
+        type: 'fallback',
+    },
+    {
+        anonymous: false,
+        inputs: [
+            {
+                indexed: true,
+                name: 'owner',
+                type: 'address',
+            },
+            {
+                indexed: true,
+                name: 'spender',
+                type: 'address',
+            },
+            {
+                indexed: false,
+                name: 'value',
+                type: 'uint256',
+            },
+        ],
+        name: 'Approval',
+        type: 'event',
+    },
+    {
+        anonymous: false,
+        inputs: [
+            {
+                indexed: true,
+                name: 'from',
+                type: 'address',
+            },
+            {
+                indexed: true,
+                name: 'to',
+                type: 'address',
+            },
+            {
+                indexed: false,
+                name: 'value',
+                type: 'uint256',
+            },
+        ],
+        name: 'Transfer',
+        type: 'event',
+    },
+];
+//# sourceMappingURL=utils.js.map

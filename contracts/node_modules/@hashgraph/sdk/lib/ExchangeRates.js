@@ -1,0 +1,2 @@
+import t from"./ExchangeRate.js";import*as e from"@hashgraph/proto";const{proto:r}=e;class o{constructor(t){this.currentRate=t.currentRate,this.nextRate=t.nextRate,Object.freeze(this)}static _fromProtobuf(e){return new o({currentRate:t._fromProtobuf(e.currentRate),nextRate:t._fromProtobuf(e.nextRate)})}_toProtobuf(){return{currentRate:this.currentRate._toProtobuf(),nextRate:this.nextRate._toProtobuf()}}static fromBytes(t){return o._fromProtobuf(r.ExchangeRateSet.decode(t))}}export{o as default};
+//# sourceMappingURL=ExchangeRates.js.map

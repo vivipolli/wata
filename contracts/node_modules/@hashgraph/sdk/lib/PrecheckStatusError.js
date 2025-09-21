@@ -1,0 +1,2 @@
+import t from"./StatusError.js";class n extends t{constructor(t){super(t,`transaction ${t.transactionId.toString()} failed precheck with status ${t.status.toString()} against node account id ${t.nodeId.toString()}`),this.contractFunctionResult=t.contractFunctionResult,this.nodeId=t.nodeId}toJSON(){return{name:this.name,status:this.status.toString(),transactionId:this.transactionId.toString(),nodeId:this.nodeId.toString(),message:this.message,contractFunctionResult:this.contractFunctionResult}}}export{n as default};
+//# sourceMappingURL=PrecheckStatusError.js.map

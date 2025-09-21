@@ -1,0 +1,2 @@
+class e{constructor(e){this._code=e,Object.freeze(this)}toString(){switch(this){case e.Infinite:return"INFINITE";case e.Finite:return"FINITE";default:return`UNKNOWN (${this._code})`}}static _fromCode(t){switch(t){case 0:return e.Infinite;case 1:return e.Finite}throw new Error(`(BUG) TokenSupplyType.fromCode() does not handle code: ${t}`)}valueOf(){return this._code}}e.Infinite=new e(0),e.Finite=new e(1);export{e as default};
+//# sourceMappingURL=TokenSupplyType.js.map

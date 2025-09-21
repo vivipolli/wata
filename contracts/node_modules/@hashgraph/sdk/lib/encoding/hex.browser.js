@@ -1,0 +1,2 @@
+const t=[];for(let n=0;n<=255;n+=1)t.push(n.toString(16).padStart(2,"0"));function n(n){let r="";for(const s of n)r+=t[s];return r}function r(t){const n=(t.startsWith("0x")?t.substring(2):t).match(/.{1,2}/gu);return new Uint8Array((null==n?[]:n).map((t=>parseInt(t,16))))}function s(t){if("string"!=typeof t)return!1;const n=t.startsWith("0x")?t.substring(2):t;if(0===n.length)return!1;if(n.length%2!=0)return!1;return/^[0-9a-fA-F]+$/.test(n)}export{r as decode,n as encode,s as isHexString};
+//# sourceMappingURL=hex.browser.js.map

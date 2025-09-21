@@ -1,0 +1,2 @@
+import t from"./AccountId.js";import o from"../Hbar.js";class n{constructor(t){this.accountId=t.accountId,this.amount=t.amount instanceof o?t.amount:new o(t.amount),Object.freeze(this)}static _fromProtobuf(u){return new n({accountId:t._fromProtobuf(u.accountID),amount:o.fromTinybars(null!=u.amount?u.amount:0)})}_toProtobuf(){return{accountID:this.accountId._toProtobuf(),amount:this.amount.toTinybars()}}}export{n as default};
+//# sourceMappingURL=ProxyStaker.js.map

@@ -1,0 +1,33 @@
+{
+  "name": "wata-backend",
+  "version": "1.0.0",
+  "description": "W.A.T.A. Chain Backend - Hedera Integration",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@hashgraph/sdk": "^2.7.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.4.0",
+    "sqlite3": "^5.1.6",
+    "uuid": "^9.0.1",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "hedera",
+    "blockchain",
+    "water-quality",
+    "pes"
+  ],
+  "author": "W.A.T.A. Team",
+  "license": "MIT"
+}

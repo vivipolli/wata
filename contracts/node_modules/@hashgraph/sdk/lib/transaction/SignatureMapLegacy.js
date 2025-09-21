@@ -1,0 +1,2 @@
+import t from"./NodeAccountIdSignatureMapLegacy.js";import o from"../ObjectMap.js";import n from"../account/AccountId.js";class s extends o{constructor(){super((t=>n.fromString(t)))}static _fromTransaction(o){const n=new s;for(let s=0;s<o._nodeAccountIds.length;s++){const c=o._signedTransactions.get(s).sigMap;null!=c&&n._set(o._nodeAccountIds.list[s],t._fromTransactionSigMap(c))}return n}}export{s as default};
+//# sourceMappingURL=SignatureMapLegacy.js.map

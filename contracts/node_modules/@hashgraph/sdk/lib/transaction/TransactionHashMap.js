@@ -1,0 +1,2 @@
+import t from"../account/AccountId.js";import{digest as o}from"../cryptography/sha384.js";import s from"../ObjectMap.js";class n extends s{constructor(){super((o=>t.fromString(o)))}static async _fromTransaction(t){const s=new n;for(let n=0;n<t._nodeAccountIds.length;n++){const r=t._nodeAccountIds.list[n],c=t._transactions.get(n),a=await o(c.signedTransactionBytes);s._set(r,a)}return s}}export{n as default};
+//# sourceMappingURL=TransactionHashMap.js.map

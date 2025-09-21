@@ -1,0 +1,2 @@
+import r from"long";import o from"./PendingAirdropId.js";class d{constructor(r){this.airdropId=r.airdropId,this.amount=r.amount}toBytes(){return{pendingAirdropId:this.airdropId.toBytes(),pendingAirdropValue:{amount:this.amount}}}static fromBytes(i){if(null==i.pendingAirdropId)throw new Error("pendingAirdropId is required");const n=o.fromBytes(i.pendingAirdropId),t=i.pendingAirdropValue?.amount;return new d({airdropId:n,amount:t||r.ZERO})}}export{d as default};
+//# sourceMappingURL=PendingAirdropRecord.js.map

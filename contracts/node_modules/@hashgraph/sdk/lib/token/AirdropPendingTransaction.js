@@ -1,0 +1,2 @@
+import r from"../transaction/Transaction.js";class d extends r{constructor(r){super(),this._pendingAirdropIds=[],null!=r?.pendingAirdropIds&&(this._pendingAirdropIds=r.pendingAirdropIds)}get pendingAirdropIds(){return this._pendingAirdropIds}addPendingAirdropId(r){return this._requireNotFrozen(),this._pendingAirdropIds.push(r),this}setPendingAirdropIds(r){return this._requireNotFrozen(),this._pendingAirdropIds=r,this}}export{d as default};
+//# sourceMappingURL=AirdropPendingTransaction.js.map

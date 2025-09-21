@@ -1,0 +1,267 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var EntityIdHelper = _interopRequireWildcard(require("../EntityIdHelper.cjs"));
+var _Key = _interopRequireDefault(require("../Key.cjs"));
+var HieroProto = _interopRequireWildcard(require("@hashgraph/proto"));
+var _Cache = _interopRequireDefault(require("../Cache.cjs"));
+var hex = _interopRequireWildcard(require("../encoding/hex.cjs"));
+var _array = require("../array.cjs");
+var _long = _interopRequireDefault(require("long"));
+var _util = require("../util.cjs");
+var _EvmAddress = _interopRequireDefault(require("../EvmAddress.cjs"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+function _getRequireWildcardCache(e) { if ("function" != typeof WeakMap) return null; var r = new WeakMap(), t = new WeakMap(); return (_getRequireWildcardCache = function (e) { return e ? t : r; })(e); }
+function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e; if (null === e || "object" != typeof e && "function" != typeof e) return { default: e }; var t = _getRequireWildcardCache(r); if (t && t.has(e)) return t.get(e); var n = { __proto__: null }, a = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var u in e) if ("default" !== u && {}.hasOwnProperty.call(e, u)) { var i = a ? Object.getOwnPropertyDescriptor(e, u) : null; i && (i.get || i.set) ? Object.defineProperty(n, u, i) : n[u] = e[u]; } return n.default = e, t && t.set(e, n), n; }
+// SPDX-License-Identifier: Apache-2.0
+
+/**
+ * @typedef {import("../client/Client.js").default<*, *>} Client
+ */
+
+/**
+ * The ID for a crypto-currency contract on Hedera.
+ */
+class ContractId extends _Key.default {
+  /**
+   * @param {number | Long | import("../EntityIdHelper").IEntityId} props
+   * @param {(number | Long)=} realm
+   * @param {(number | Long)=} num
+   * @param {Uint8Array=} evmAddress
+   */
+  constructor(props, realm, num, evmAddress) {
+    super();
+    const result = EntityIdHelper.constructor(props, realm, num);
+    this.shard = result.shard;
+    this.realm = result.realm;
+    this.num = result.num;
+    this.evmAddress = evmAddress != null ? evmAddress : null;
+
+    /**
+     * @type {string | null}
+     */
+    this._checksum = null;
+  }
+
+  /**
+   * @description This handles both long-zero format and evm address format addresses.
+   * If an actual evm address is passed, please use `ContractId.populateAccountNum(client)` method
+   * to get the actual `num` value, since there is no cryptographic relation to the evm address
+   * and cannot be populated directly
+   * @param {Long | number} shard
+   * @param {Long | number} realm
+   * @param {string} evmAddress
+   * @returns {ContractId}
+   */
+  static fromEvmAddress(shard, realm, evmAddress) {
+    const evmAddressObj = _EvmAddress.default.fromString(evmAddress);
+    const [shardLong, realmLong, num, address] = EntityIdHelper.fromEvmAddress(shard, realm, evmAddressObj.toString());
+    return new ContractId(shardLong, realmLong, num, address?.toBytes());
+  }
+
+  /**
+   * @param {string} text
+   * @returns {ContractId}
+   */
+  static fromString(text) {
+    const result = EntityIdHelper.fromStringSplitter(text);
+    if (Number.isNaN(result.shard) || Number.isNaN(result.realm)) {
+      throw new Error("invalid format for entity ID");
+    }
+    const shard = result.shard != null ? _long.default.fromString(result.shard) : _long.default.ZERO;
+    const realm = result.realm != null ? _long.default.fromString(result.realm) : _long.default.ZERO;
+    const [num, evmAddress] = result.numOrHex.length < 40 ? [_long.default.fromString(result.numOrHex), undefined] : [_long.default.ZERO, hex.decode(result.numOrHex)];
+    return new ContractId(shard, realm, num, evmAddress);
+  }
+
+  /**
+   * @internal
+   * @param {HieroProto.proto.IContractID} id
+   * @returns {ContractId}
+   */
+  static _fromProtobuf(id) {
+    const contractId = new ContractId(id.shardNum != null ? id.shardNum : 0, id.realmNum != null ? id.realmNum : 0, id.contractNum != null ? id.contractNum : 0);
+    return contractId;
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  get checksum() {
+    return this._checksum;
+  }
+
+  /**
+   * @description Gets the actual `num` field of the `ContractId` from the Mirror Node.
+   * Should be used after generating `ContractId.fromEvmAddress()` because it sets the `num` field to `0`
+   * automatically since there is no connection between the `num` and the `evmAddress`
+   * @param {Client} client
+   * @returns {Promise<ContractId>}
+   */
+  async populateAccountNum(client) {
+    if (this.evmAddress === null) {
+      throw new Error("field `evmAddress` should not be null");
+    }
+    const mirrorUrl = client.mirrorNetwork[0].slice(0, client.mirrorNetwork[0].indexOf(":"));
+
+    /* eslint-disable */
+    const url = `https://${mirrorUrl}/api/v1/contracts/${hex.encode(this.evmAddress)}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    const mirrorAccountId = data.contract_id;
+    this.num = _long.default.fromString(mirrorAccountId.slice(mirrorAccountId.lastIndexOf(".") + 1));
+    /* eslint-enable */
+
+    return this;
+  }
+
+  /**
+   * @deprecated - Use `validateChecksum` instead
+   * @param {Client} client
+   */
+  validate(client) {
+    console.warn("Deprecated: Use `validateChecksum` instead");
+    this.validateChecksum(client);
+  }
+
+  /**
+   * @param {Client} client
+   */
+  validateChecksum(client) {
+    EntityIdHelper.validateChecksum(this.shard, this.realm, this.num, this._checksum, client);
+  }
+
+  /**
+   * @param {Uint8Array} bytes
+   * @returns {ContractId}
+   */
+  static fromBytes(bytes) {
+    return ContractId._fromProtobuf(HieroProto.proto.ContractID.decode(bytes));
+  }
+
+  /**
+   * @deprecated - Use `fromEvmAddress` instead
+   * @param {string} address
+   * @returns {ContractId}
+   */
+  static fromSolidityAddress(address) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    if ((0, _util.isLongZeroAddress)(hex.decode(address))) {
+      return new ContractId(...EntityIdHelper.fromSolidityAddress(address));
+    } else {
+      return this.fromEvmAddress(0, 0, address);
+    }
+  }
+
+  /**
+   * @deprecated - Use `toEvmAddress` instead
+   * @returns {string}
+   */
+  toSolidityAddress() {
+    if (this.evmAddress != null) {
+      return hex.encode(this.evmAddress);
+    } else {
+      return EntityIdHelper.toSolidityAddress([this.shard, this.realm, this.num]);
+    }
+  }
+
+  /**
+   * @returns {string} EVM-compatible address representation of the entity
+   */
+  toEvmAddress() {
+    if (this.evmAddress != null) {
+      return EntityIdHelper.toEvmAddress(this.evmAddress);
+    }
+    return EntityIdHelper.toEvmAddress(this.num);
+  }
+  /**
+   * @internal
+   * @returns {HieroProto.proto.IContractID}
+   */
+  _toProtobuf() {
+    return {
+      contractNum: this.num,
+      shardNum: this.shard,
+      realmNum: this.realm,
+      evmAddress: this.evmAddress
+    };
+  }
+
+  /**
+   * @returns {string}
+   */
+  toString() {
+    if (this.evmAddress != null) {
+      return `${this.shard.toString()}.${this.realm.toString()}.${hex.encode(this.evmAddress)}`;
+    } else {
+      return `${this.shard.toString()}.${this.realm.toString()}.${this.num.toString()}`;
+    }
+  }
+
+  /**
+   * @param {Client} client
+   * @returns {string}
+   */
+  toStringWithChecksum(client) {
+    return EntityIdHelper.toStringWithChecksum(this.toString(), client);
+  }
+
+  /**
+   * @returns {Uint8Array}
+   */
+  toBytes() {
+    return HieroProto.proto.ContractID.encode(this._toProtobuf()).finish();
+  }
+
+  /**
+   * @returns {ContractId}
+   */
+  clone() {
+    const id = new ContractId(this);
+    id._checksum = this._checksum;
+    id.evmAddress = this.evmAddress;
+    return id;
+  }
+
+  /**
+   * @param {ContractId} other
+   * @returns {number}
+   */
+  compare(other) {
+    return EntityIdHelper.compare([this.shard, this.realm, this.num], [other.shard, other.realm, other.num]);
+  }
+
+  /**
+   * @param {this} other
+   * @returns {boolean}
+   */
+  equals(other) {
+    let evmAddresses = false;
+    if (this.evmAddress != null && other.evmAddress != null) {
+      evmAddresses = (0, _array.arrayEqual)(this.evmAddress, other.evmAddress);
+    }
+    return this.shard.eq(other.shard) && this.realm.eq(other.realm) && this.num.eq(other.num) && evmAddresses;
+  }
+
+  /**
+   * @returns {HieroProto.proto.IKey}
+   */
+  _toProtobufKey() {
+    return {
+      contractID: this._toProtobuf()
+    };
+  }
+
+  /**
+   * @param {HieroProto.proto.IContractID} key
+   * @returns {ContractId}
+   */
+  static __fromProtobufKey(key) {
+    return ContractId._fromProtobuf(key);
+  }
+}
+exports.default = ContractId;
+_Cache.default.setContractId(key => ContractId.__fromProtobufKey(key));

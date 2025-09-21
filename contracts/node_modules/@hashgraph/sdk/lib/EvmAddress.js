@@ -1,0 +1,2 @@
+import t from"./Key.js";import{decode as r,encode as s}from"./encoding/hex.js";import{arrayEqual as e}from"./util.js";class i extends t{constructor(t){super(),this._bytes=t}static fromString(t){if(40!==(t=t.startsWith("0x")?t.slice(2):t).length)throw new Error("Input EVM address string is not the correct size");return new i(r(t))}static fromBytes(t){return new i(t)}toBytes(){return this._bytes}toString(){return s(this._bytes)}equals(t){return e(this._bytes,t._bytes)}}export{i as default};
+//# sourceMappingURL=EvmAddress.js.map

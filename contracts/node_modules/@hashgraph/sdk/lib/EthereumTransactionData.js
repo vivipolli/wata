@@ -1,0 +1,2 @@
+import t from"./Cache.js";class e{constructor(t){this.callData=t.callData}static fromBytes(e){if(0===e.length)throw new Error("empty bytes");switch(e[0]){case 1:return t.ethereumTransactionDataEip2930FromBytes(e);case 2:return t.ethereumTransactionDataEip1559FromBytes(e);default:return t.ethereumTransactionDataLegacyFromBytes(e)}}toBytes(){throw new Error("not implemented")}toString(){throw new Error("not implemented")}toJSON(){throw new Error("not implemented")}}export{e as default};
+//# sourceMappingURL=EthereumTransactionData.js.map

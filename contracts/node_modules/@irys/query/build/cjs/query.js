@@ -1,0 +1,23 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Query = void 0;
+const graphql_1 = require("./graphql");
+const queries_1 = require("./queries");
+// import type { ArweaveBlock, ArweaveBlockVars } from "./queries/arweave/block.js";
+// import type { ArweaveTransaction, ArweaveTransactionVars } from "./queries/arweave/transaction.js";
+class Query {
+    constructor(opts = { network: "mainnet" }) {
+        this.opts = opts;
+    }
+    search(queryName, opts) {
+        var _a;
+        // const queryInstance =
+        const query = (_a = opts === null || opts === void 0 ? void 0 : opts.query) !== null && _a !== void 0 ? _a : queries_1.queries[queryName];
+        const queryInstance = new graphql_1.GraphQLQuery(Object.assign(Object.assign({}, this.opts), { query, queryName }));
+        // @ts-expect-error overloading
+        return queryInstance;
+    }
+}
+exports.Query = Query;
+exports.default = Query;
+//# sourceMappingURL=query.js.map

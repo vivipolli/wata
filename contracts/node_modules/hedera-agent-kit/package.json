@@ -1,0 +1,33 @@
+{
+  "name": "hedera-agent-kit",
+  "version": "1.0.6",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "test": "ts-node tests/index.ts",
+    "test-vitest": "vitest run",
+    "prepare": "npm run build",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.7"
+  },
+  "dependencies": {
+    "@hashgraph/sdk": "^2.56.0",
+    "@langchain/core": "^0.3.26",
+    "@langchain/langgraph": "^0.2.34",
+    "@langchain/openai": "^0.3.16",
+    "bignumber.js": "^9.1.2",
+    "dotenv": "^16.4.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hedera-dev/hedera-agent-kit"
+  }
+}

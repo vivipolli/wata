@@ -1,0 +1,1 @@
+This library is a port from starkex-resources/**/signature.js.

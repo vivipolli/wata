@@ -1,0 +1,37 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _NodeAccountIdSignatureMapLegacy = _interopRequireDefault(require("./NodeAccountIdSignatureMapLegacy.cjs"));
+var _ObjectMap = _interopRequireDefault(require("../ObjectMap.cjs"));
+var _AccountId = _interopRequireDefault(require("../account/AccountId.cjs"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+/* eslint-disable deprecation/deprecation */
+
+/**
+ * @deprecated
+ * @augments {ObjectMap<AccountId, NodeAccountIdSignatureMapLegacy>}
+ */
+class SignatureMap extends _ObjectMap.default {
+  constructor() {
+    super(s => _AccountId.default.fromString(s));
+  }
+
+  /**
+   * @param {import("./Transaction.js").default} transaction
+   * @returns {SignatureMap}
+   */
+  static _fromTransaction(transaction) {
+    const signatures = new SignatureMap();
+    for (let i = 0; i < transaction._nodeAccountIds.length; i++) {
+      const sigMap = transaction._signedTransactions.get(i).sigMap;
+      if (sigMap != null) {
+        signatures._set(transaction._nodeAccountIds.list[i], _NodeAccountIdSignatureMapLegacy.default._fromTransactionSigMap(sigMap));
+      }
+    }
+    return signatures;
+  }
+}
+exports.default = SignatureMap;

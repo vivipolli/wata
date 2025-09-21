@@ -1,0 +1,80 @@
+/**
+ * @namespace proto
+ * @typedef {import("@hashgraph/proto").proto.ITransaction} ITransaction
+ * @typedef {import("@hashgraph/proto").proto.ITransaction} ISignedTransaction
+ * @typedef {import("@hashgraph/proto").proto.TransactionBody} TransactionBody
+ * @typedef {import("@hashgraph/proto").proto.ITransactionBody} ITransactionBody
+ * @typedef {import("@hashgraph/proto").proto.ITransactionResponse} ITransactionResponse
+ */
+/**
+ * @namespace com.hedera.hapi.node.addressbook
+ * @typedef {import("@hashgraph/proto").com.hedera.hapi.node.addressbook.INodeDeleteTransactionBody} INodeDeleteTransactionBody
+ */
+/**
+ * @typedef {import("../channel/Channel.js").default} Channel
+ * @typedef {import("../transaction/TransactionId.js").default} TransactionId
+ * @typedef {import("../client/Client.js").default<*, *>} Client
+ * @typedef {import("../account/AccountId.js").default} AccountId
+ */
+/**
+ * A transaction to delete a consensus node in the network.
+ */
+export default class NodeDeleteTransaction extends Transaction {
+    /**
+     * @internal
+     * @param {ITransaction[]} transactions
+     * @param {ISignedTransaction[]} signedTransactions
+     * @param {TransactionId[]} transactionIds
+     * @param {AccountId[]} nodeIds
+     * @param {ITransactionBody[]} bodies
+     * @returns {NodeDeleteTransaction}
+     */
+    static _fromProtobuf(transactions: ITransaction[], signedTransactions: ISignedTransaction[], transactionIds: TransactionId[], nodeIds: AccountId[], bodies: ITransactionBody[]): NodeDeleteTransaction;
+    /**
+     * @param {object} [props]
+     * @param {Long} [props.nodeId]
+     */
+    constructor(props?: {
+        nodeId?: import("long") | undefined;
+    });
+    /**
+     * @private
+     * @type {?Long}
+     * @description Consensus node identifier in the network state. It's required.
+     */
+    private _nodeId;
+    /**
+     * @param {Long} nodeId
+     * @description Set consensus node identifier.
+     * @returns {NodeDeleteTransaction}
+     */
+    setNodeId(nodeId: Long): NodeDeleteTransaction;
+    /**
+     * @description Get consensus node identifier.
+     * @returns {?Long}
+     */
+    get nodeId(): Long | null;
+    /**
+     * @override
+     * @param {?import("../client/Client.js").default<Channel, *>} client
+     * @returns {this}
+     */
+    override freezeWith(client: import("../client/Client.js").default<Channel, any> | null): this;
+    /**
+     * @override
+     * @protected
+     * @returns {INodeDeleteTransactionBody}
+     */
+    protected override _makeTransactionData(): INodeDeleteTransactionBody;
+}
+export type ITransaction = import("@hashgraph/proto").proto.ITransaction;
+export type ISignedTransaction = import("@hashgraph/proto").proto.ITransaction;
+export type TransactionBody = import("@hashgraph/proto").proto.TransactionBody;
+export type ITransactionBody = import("@hashgraph/proto").proto.ITransactionBody;
+export type ITransactionResponse = import("@hashgraph/proto").proto.ITransactionResponse;
+export type INodeDeleteTransactionBody = import("@hashgraph/proto").com.hedera.hapi.node.addressbook.INodeDeleteTransactionBody;
+export type Channel = import("../channel/Channel.js").default;
+export type TransactionId = import("../transaction/TransactionId.js").default;
+export type Client = import("../client/Client.js").default<any, any>;
+export type AccountId = import("../account/AccountId.js").default;
+import Transaction from "../transaction/Transaction.js";

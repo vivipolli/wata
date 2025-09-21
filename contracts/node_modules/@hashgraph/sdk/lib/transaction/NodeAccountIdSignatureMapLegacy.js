@@ -1,0 +1,2 @@
+import e from"../ObjectMap.js";import r from"../PublicKey.js";class t extends e{constructor(){super((e=>r.fromString(e)))}static _fromTransactionSigMap(e){const s=new t,o=null!=e.sigPair?e.sigPair:[];for(const e of o)null!=e.pubKeyPrefix&&(null!=e.ed25519?s._set(r.fromBytesED25519(e.pubKeyPrefix),e.ed25519):null!=e.ECDSASecp256k1&&s._set(r.fromBytesECDSA(e.pubKeyPrefix),e.ECDSASecp256k1));return s}}export{t as default};
+//# sourceMappingURL=NodeAccountIdSignatureMapLegacy.js.map

@@ -1,0 +1,2 @@
+class e{constructor(e){this._value=e,Object.freeze(this)}toString(){switch(this){case e.Inclusive:return"INCLUSIVE";case e.Exclusive:return"EXCLUSIVE";default:return`UNKNOWN (${this._value.toString()})`}}static _fromValue(t){switch(t){case!1:return e.Inclusive;case!0:return e.Exclusive}}valueOf(){return this._value}}e.Inclusive=new e(!1),e.Exclusive=new e(!0);export{e as default};
+//# sourceMappingURL=FeeAssessmentMethod.js.map

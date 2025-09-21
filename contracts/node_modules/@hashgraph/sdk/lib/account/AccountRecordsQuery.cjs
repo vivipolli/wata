@@ -1,0 +1,163 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _Query = _interopRequireWildcard(require("../query/Query.cjs"));
+var _AccountId = _interopRequireDefault(require("./AccountId.cjs"));
+var _TransactionRecord = _interopRequireDefault(require("../transaction/TransactionRecord.cjs"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+function _getRequireWildcardCache(e) { if ("function" != typeof WeakMap) return null; var r = new WeakMap(), t = new WeakMap(); return (_getRequireWildcardCache = function (e) { return e ? t : r; })(e); }
+function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e; if (null === e || "object" != typeof e && "function" != typeof e) return { default: e }; var t = _getRequireWildcardCache(r); if (t && t.has(e)) return t.get(e); var n = { __proto__: null }, a = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var u in e) if ("default" !== u && {}.hasOwnProperty.call(e, u)) { var i = a ? Object.getOwnPropertyDescriptor(e, u) : null; i && (i.get || i.set) ? Object.defineProperty(n, u, i) : n[u] = e[u]; } return n.default = e, t && t.set(e, n), n; }
+// SPDX-License-Identifier: Apache-2.0
+
+/**
+ * @namespace proto
+ * @typedef {import("@hashgraph/proto").proto.IQuery} HieroProto.proto.IQuery
+ * @typedef {import("@hashgraph/proto").proto.IQueryHeader} HieroProto.proto.IQueryHeader
+ * @typedef {import("@hashgraph/proto").proto.IResponse} HieroProto.proto.IResponse
+ * @typedef {import("@hashgraph/proto").proto.IResponseHeader} HieroProto.proto.IResponseHeader
+ * @typedef {import("@hashgraph/proto").proto.ICryptoGetAccountRecordsQuery} HieroProto.proto.ICryptoGetAccountRecordsQuery
+ * @typedef {import("@hashgraph/proto").proto.ICryptoGetAccountRecordsResponse} HieroProto.proto.ICryptoGetAccountRecordsResponse
+ * @typedef {import("@hashgraph/proto").proto.ITransactionRecord} HieroProto.proto.ITransactionRecord
+ */
+
+/**
+ * @typedef {import("../channel/Channel.js").default} Channel
+ * @typedef {import("../client/Client.js").default<*, *>} Client
+ */
+
+/**
+ * Get all the records for an account for any transfers into it and out of it,
+ * that were above the threshold, during the last 25 hours.
+ *
+ * @augments {Query<TransactionRecord[]>}
+ */
+class AccountRecordsQuery extends _Query.default {
+  /**
+   * @param {object} [props]
+   * @param {AccountId | string} [props.accountId]
+   */
+  constructor(props = {}) {
+    super();
+
+    /**
+     * @type {?AccountId}
+     * @private
+     */
+    this._accountId = null;
+    if (props.accountId != null) {
+      this.setAccountId(props.accountId);
+    }
+  }
+
+  /**
+   * @internal
+   * @param {HieroProto.proto.IQuery} query
+   * @returns {AccountRecordsQuery}
+   */
+  static _fromProtobuf(query) {
+    const records = /** @type {HieroProto.proto.ICryptoGetAccountRecordsQuery} */
+    query.cryptoGetAccountRecords;
+    return new AccountRecordsQuery({
+      accountId: records.accountID != null ? _AccountId.default._fromProtobuf(records.accountID) : undefined
+    });
+  }
+
+  /**
+   * @returns {?AccountId}
+   */
+  get accountId() {
+    return this._accountId;
+  }
+
+  /**
+   * Set the account ID for which the records are being requested.
+   *
+   * @param {AccountId | string} accountId
+   * @returns {this}
+   */
+  setAccountId(accountId) {
+    this._accountId = typeof accountId === "string" ? _AccountId.default.fromString(accountId) : accountId.clone();
+    return this;
+  }
+
+  /**
+   * @param {Client} client
+   */
+  _validateChecksums(client) {
+    if (this._accountId != null) {
+      this._accountId.validateChecksum(client);
+    }
+  }
+
+  /**
+   * @override
+   * @internal
+   * @param {Channel} channel
+   * @param {HieroProto.proto.IQuery} request
+   * @returns {Promise<HieroProto.proto.IResponse>}
+   */
+  _execute(channel, request) {
+    return channel.crypto.getAccountRecords(request);
+  }
+
+  /**
+   * @override
+   * @internal
+   * @param {HieroProto.proto.IResponse} response
+   * @returns {HieroProto.proto.IResponseHeader}
+   */
+  _mapResponseHeader(response) {
+    const cryptoGetAccountRecords = /** @type {HieroProto.proto.ICryptoGetAccountRecordsResponse} */
+    response.cryptoGetAccountRecords;
+    return /** @type {HieroProto.proto.IResponseHeader} */cryptoGetAccountRecords.header;
+  }
+
+  /**
+   * @protected
+   * @override
+   * @param {HieroProto.proto.IResponse} response
+   * @param {AccountId} nodeAccountId
+   * @param {HieroProto.proto.IQuery} request
+   * @returns {Promise<TransactionRecord[]>}
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _mapResponse(response, nodeAccountId, request) {
+    const cryptoGetAccountRecords = /** @type {HieroProto.proto.ICryptoGetAccountRecordsResponse} */
+    response.cryptoGetAccountRecords;
+    const records = /** @type {HieroProto.proto.ITransactionRecord[]} */
+    cryptoGetAccountRecords.records;
+    return Promise.resolve(records.map(record => _TransactionRecord.default._fromProtobuf({
+      transactionRecord: record
+    })));
+  }
+
+  /**
+   * @override
+   * @internal
+   * @param {HieroProto.proto.IQueryHeader} header
+   * @returns {HieroProto.proto.IQuery}
+   */
+  _onMakeRequest(header) {
+    return {
+      cryptoGetAccountRecords: {
+        header,
+        accountID: this._accountId != null ? this._accountId._toProtobuf() : null
+      }
+    };
+  }
+
+  /**
+   * @returns {string}
+   */
+  _getLogId() {
+    const timestamp = this._paymentTransactionId != null && this._paymentTransactionId.validStart != null ? this._paymentTransactionId.validStart : this._timestamp;
+    return `AccountRecordsQuery:${timestamp.toString()}`;
+  }
+}
+exports.default = AccountRecordsQuery;
+_Query.QUERY_REGISTRY.set("cryptoGetAccountRecords",
+// eslint-disable-next-line @typescript-eslint/unbound-method
+AccountRecordsQuery._fromProtobuf);

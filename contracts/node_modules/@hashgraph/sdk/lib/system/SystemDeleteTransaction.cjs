@@ -1,0 +1,200 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _Transaction = _interopRequireWildcard(require("../transaction/Transaction.cjs"));
+var _FileId = _interopRequireDefault(require("../file/FileId.cjs"));
+var _ContractId = _interopRequireDefault(require("../contract/ContractId.cjs"));
+var _Timestamp = _interopRequireDefault(require("../Timestamp.cjs"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+function _getRequireWildcardCache(e) { if ("function" != typeof WeakMap) return null; var r = new WeakMap(), t = new WeakMap(); return (_getRequireWildcardCache = function (e) { return e ? t : r; })(e); }
+function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e; if (null === e || "object" != typeof e && "function" != typeof e) return { default: e }; var t = _getRequireWildcardCache(r); if (t && t.has(e)) return t.get(e); var n = { __proto__: null }, a = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var u in e) if ("default" !== u && {}.hasOwnProperty.call(e, u)) { var i = a ? Object.getOwnPropertyDescriptor(e, u) : null; i && (i.get || i.set) ? Object.defineProperty(n, u, i) : n[u] = e[u]; } return n.default = e, t && t.set(e, n), n; }
+// SPDX-License-Identifier: Apache-2.0
+
+/**
+ * @namespace proto
+ * @typedef {import("@hashgraph/proto").proto.ITransaction} HieroProto.proto.ITransaction
+ * @typedef {import("@hashgraph/proto").proto.ISignedTransaction} HieroProto.proto.ISignedTransaction
+ * @typedef {import("@hashgraph/proto").proto.TransactionBody} HieroProto.proto.TransactionBody
+ * @typedef {import("@hashgraph/proto").proto.ITransactionBody} HieroProto.proto.ITransactionBody
+ * @typedef {import("@hashgraph/proto").proto.ITransactionResponse} HieroProto.proto.ITransactionResponse
+ * @typedef {import("@hashgraph/proto").proto.ISystemDeleteTransactionBody} HieroProto.proto.ISystemDeleteTransactionBody
+ * @typedef {import("@hashgraph/proto").proto.IContractID} HieroProto.proto.IContractID
+ * @typedef {import("@hashgraph/proto").proto.IFileID} HieroProto.proto.IFileID
+ */
+
+/**
+ * @typedef {import("../channel/Channel.js").default} Channel
+ * @typedef {import("../account/AccountId.js").default} AccountId
+ * @typedef {import("../transaction/TransactionId.js").default} TransactionId
+ */
+
+/**
+ * Deprecated: Do not use.
+ * @deprecated
+ */
+class SystemDeleteTransaction extends _Transaction.default {
+  /**
+   * @param {object} [props]
+   * @param {FileId | string} [props.fileId]
+   * @param {ContractId | string} [props.contractId]
+   * @param {Timestamp} [props.expirationTime]
+   */
+  constructor(props = {}) {
+    super();
+
+    /**
+     * @private
+     * @type {?FileId}
+     */
+    this._fileId = null;
+
+    /**
+     * @private
+     * @type {?ContractId}
+     */
+    this._contractId = null;
+
+    /**
+     * @private
+     * @type {?Timestamp}
+     */
+    this._expirationTime = null;
+    if (props.fileId != null) {
+      this.setFileId(props.fileId);
+    }
+    if (props.contractId != null) {
+      this.setContractId(props.contractId);
+    }
+    if (props.expirationTime != null) {
+      this.setExpirationTime(props.expirationTime);
+    }
+  }
+
+  /**
+   * @internal
+   * @param {HieroProto.proto.ITransaction[]} transactions
+   * @param {HieroProto.proto.ISignedTransaction[]} signedTransactions
+   * @param {TransactionId[]} transactionIds
+   * @param {AccountId[]} nodeIds
+   * @param {HieroProto.proto.ITransactionBody[]} bodies
+   * @returns {SystemDeleteTransaction}
+   */
+  static _fromProtobuf(transactions, signedTransactions, transactionIds, nodeIds, bodies) {
+    const body = bodies[0];
+    const systemDelete = /** @type {HieroProto.proto.ISystemDeleteTransactionBody} */
+    body.systemDelete;
+    return _Transaction.default._fromProtobufTransactions(
+    // eslint-disable-next-line deprecation/deprecation
+    new SystemDeleteTransaction({
+      fileId: systemDelete.fileID != null ? _FileId.default._fromProtobuf(/** @type {HieroProto.proto.IFileID} */
+      systemDelete.fileID) : undefined,
+      contractId: systemDelete.contractID != null ? _ContractId.default._fromProtobuf(/** @type {HieroProto.proto.IContractID} */
+      systemDelete.contractID) : undefined,
+      expirationTime: systemDelete.expirationTime != null ? _Timestamp.default._fromProtobuf(systemDelete.expirationTime) : undefined
+    }), transactions, signedTransactions, transactionIds, nodeIds, bodies);
+  }
+
+  /**
+   * @returns {?FileId}
+   */
+  get fileId() {
+    return this._fileId;
+  }
+
+  /**
+   * @param {FileId | string} fileId
+   * @returns {this}
+   */
+  setFileId(fileId) {
+    this._requireNotFrozen();
+    this._fileId = fileId instanceof _FileId.default ? fileId : _FileId.default.fromString(fileId);
+    return this;
+  }
+
+  /**
+   * @returns {?ContractId}
+   */
+  get contractId() {
+    return this._contractId;
+  }
+
+  /**
+   * @param {ContractId | string} contractId
+   * @returns {this}
+   */
+  setContractId(contractId) {
+    this._requireNotFrozen();
+    this._contractId = contractId instanceof _ContractId.default ? contractId : _ContractId.default.fromString(contractId);
+    return this;
+  }
+
+  /**
+   * @returns {?Timestamp}
+   */
+  get expirationTime() {
+    return this._expirationTime;
+  }
+
+  /**
+   * @param {Timestamp} expirationTime
+   * @returns {SystemDeleteTransaction}
+   */
+  setExpirationTime(expirationTime) {
+    this._requireNotFrozen();
+    this._expirationTime = expirationTime;
+    return this;
+  }
+
+  /**
+   * @override
+   * @internal
+   * @param {Channel} channel
+   * @param {HieroProto.proto.ITransaction} request
+   * @returns {Promise<HieroProto.proto.ITransactionResponse>}
+   */
+  _execute(channel, request) {
+    if (this._fileId != null) {
+      return channel.file.systemDelete(request);
+    } else {
+      return channel.smartContract.systemDelete(request);
+    }
+  }
+
+  /**
+   * @override
+   * @protected
+   * @returns {NonNullable<HieroProto.proto.TransactionBody["data"]>}
+   */
+  _getTransactionDataCase() {
+    return "systemDelete";
+  }
+
+  /**
+   * @override
+   * @protected
+   * @returns {HieroProto.proto.ISystemDeleteTransactionBody}
+   */
+  _makeTransactionData() {
+    return {
+      fileID: this._fileId != null ? this._fileId._toProtobuf() : null,
+      contractID: this._contractId != null ? this._contractId._toProtobuf() : null,
+      expirationTime: this._expirationTime != null ? this._expirationTime._toProtobuf() : null
+    };
+  }
+
+  /**
+   * @returns {string}
+   */
+  _getLogId() {
+    const timestamp = /** @type {import("../Timestamp.js").default} */
+    this._transactionIds.current.validStart;
+    return `SystemDeleteTransaction:${timestamp.toString()}`;
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/unbound-method, deprecation/deprecation
+exports.default = SystemDeleteTransaction;
+_Transaction.TRANSACTION_REGISTRY.set("systemDelete", SystemDeleteTransaction._fromProtobuf);

@@ -1,0 +1,2 @@
+class t{constructor(t){this._code=t,Object.freeze(this)}toString(){switch(this){case t.FullValidation:return"FULL_VALIDATION";case t.NoValidation:return"NO_VALIDATION";default:return`UNKNOWN (${this._code})`}}static _fromCode(e){switch(e){case 0:return t.FullValidation;case 1:return t.NoValidation}throw new Error(`(BUG) TokenKeyValidation.fromCode() does not handle code: ${e}`)}valueOf(){return this._code}}t.FullValidation=new t(0),t.NoValidation=new t(1);export{t as default};
+//# sourceMappingURL=TokenKeyValidation.js.map

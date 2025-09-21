@@ -1,0 +1,2 @@
+class t extends Error{constructor(s,r){super(r),this.name="StatusError",this.status=s.status,this.transactionId=s.transactionId,this.message=r,void 0!==Error.captureStackTrace&&Error.captureStackTrace(this,t)}toJSON(){return{name:this.name,status:this.status.toString(),transactionId:this.transactionId.toString(),message:this.message}}toString(){return JSON.stringify(this.toJSON())}valueOf(){return this.toJSON()}}export{t as default};
+//# sourceMappingURL=StatusError.js.map

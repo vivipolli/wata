@@ -1,0 +1,174 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _Query = _interopRequireWildcard(require("../query/Query.cjs"));
+var _TopicId = _interopRequireDefault(require("./TopicId.cjs"));
+var _TopicInfo = _interopRequireDefault(require("./TopicInfo.cjs"));
+var _Hbar = _interopRequireDefault(require("../Hbar.cjs"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+function _getRequireWildcardCache(e) { if ("function" != typeof WeakMap) return null; var r = new WeakMap(), t = new WeakMap(); return (_getRequireWildcardCache = function (e) { return e ? t : r; })(e); }
+function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e; if (null === e || "object" != typeof e && "function" != typeof e) return { default: e }; var t = _getRequireWildcardCache(r); if (t && t.has(e)) return t.get(e); var n = { __proto__: null }, a = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var u in e) if ("default" !== u && {}.hasOwnProperty.call(e, u)) { var i = a ? Object.getOwnPropertyDescriptor(e, u) : null; i && (i.get || i.set) ? Object.defineProperty(n, u, i) : n[u] = e[u]; } return n.default = e, t && t.set(e, n), n; }
+// SPDX-License-Identifier: Apache-2.0
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
+/**
+ * @namespace proto
+ * @typedef {import("@hashgraph/proto").proto.IQuery} HieroProto.proto.IQuery
+ * @typedef {import("@hashgraph/proto").proto.IQueryHeader} HieroProto.proto.IQueryHeader
+ * @typedef {import("@hashgraph/proto").proto.IResponse} HieroProto.proto.IResponse
+ * @typedef {import("@hashgraph/proto").proto.IResponseHeader} HieroProto.proto.IResponseHeader
+ * @typedef {import("@hashgraph/proto").proto.IConsensusGetTopicInfoResponse} HieroProto.proto.IConsensusGetTopicInfoResponse
+ * @typedef {import("@hashgraph/proto").proto.IConsensusGetTopicInfoQuery} HieroProto.proto.IConsensusGetTopicInfoQuery
+ */
+
+/**
+ * @namespace com
+ * @typedef {import("@hashgraph/proto").com.hedera.mirror.api.proto.IConsensusTopicResponse} com.hedera.mirror.api.proto.IConsensusTopicResponse
+ */
+
+/**
+ * @typedef {import("../channel/Channel.js").default} Channel
+ * @typedef {import("../client/Client.js").default<*, *>} Client
+ * @typedef {import("../account/AccountId.js").default} AccountId
+ */
+
+/**
+ * Retrieve the latest state of a topic.
+ *
+ * @augments {Query<TopicInfo>}
+ */
+class TopicInfoQuery extends _Query.default {
+  /**
+   * @param {object} [props]
+   * @param {TopicId | string} [props.topicId]
+   */
+  constructor(props = {}) {
+    super();
+
+    /**
+     * @private
+     * @type {?TopicId}
+     */
+    this._topicId = null;
+    if (props.topicId != null) {
+      this.setTopicId(props.topicId);
+    }
+  }
+
+  /**
+   * @internal
+   * @param {HieroProto.proto.IQuery} query
+   * @returns {TopicInfoQuery}
+   */
+  static _fromProtobuf(query) {
+    const info = /** @type {HieroProto.proto.IConsensusGetTopicInfoQuery} */
+    query.consensusGetTopicInfo;
+    return new TopicInfoQuery({
+      topicId: info.topicID != null ? _TopicId.default._fromProtobuf(info.topicID) : undefined
+    });
+  }
+
+  /**
+   * @returns {?TopicId}
+   */
+  get topicId() {
+    return this._topicId;
+  }
+
+  /**
+   * Set the topic ID for which the info is being requested.
+   *
+   * @param {TopicId | string} topicId
+   * @returns {TopicInfoQuery}
+   */
+  setTopicId(topicId) {
+    this._topicId = typeof topicId === "string" ? _TopicId.default.fromString(topicId) : topicId.clone();
+    return this;
+  }
+
+  /**
+   * @override
+   * @param {import("../client/Client.js").default<Channel, *>} client
+   * @returns {Promise<Hbar>}
+   */
+  async getCost(client) {
+    return super.getCost(client);
+  }
+
+  /**
+   * @param {Client} client
+   */
+  _validateChecksums(client) {
+    if (this._topicId != null) {
+      this._topicId.validateChecksum(client);
+    }
+  }
+
+  /**
+   * @override
+   * @internal
+   * @param {Channel} channel
+   * @param {HieroProto.proto.IQuery} request
+   * @returns {Promise<HieroProto.proto.IResponse>}
+   */
+  _execute(channel, request) {
+    return channel.consensus.getTopicInfo(request);
+  }
+
+  /**
+   * @override
+   * @internal
+   * @param {HieroProto.proto.IResponse} response
+   * @returns {HieroProto.proto.IResponseHeader}
+   */
+  _mapResponseHeader(response) {
+    const consensusGetTopicInfo = /** @type {HieroProto.proto.IConsensusGetTopicInfoResponse} */
+    response.consensusGetTopicInfo;
+    return /** @type {HieroProto.proto.IResponseHeader} */consensusGetTopicInfo.header;
+  }
+
+  /**
+   * @protected
+   * @override
+   * @param {HieroProto.proto.IResponse} response
+   * @param {AccountId} nodeAccountId
+   * @param {HieroProto.proto.IQuery} request
+   * @returns {Promise<TopicInfo>}
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _mapResponse(response, nodeAccountId, request) {
+    return Promise.resolve(_TopicInfo.default._fromProtobuf(/** @type {HieroProto.proto.IConsensusGetTopicInfoResponse} */
+    response.consensusGetTopicInfo));
+  }
+
+  /**
+   * @override
+   * @internal
+   * @param {HieroProto.proto.IQueryHeader} header
+   * @returns {HieroProto.proto.IQuery}
+   */
+  _onMakeRequest(header) {
+    return {
+      consensusGetTopicInfo: {
+        header,
+        topicID: this._topicId != null ? this._topicId._toProtobuf() : null
+      }
+    };
+  }
+
+  /**
+   * @returns {string}
+   */
+  _getLogId() {
+    const timestamp = this._paymentTransactionId != null && this._paymentTransactionId.validStart != null ? this._paymentTransactionId.validStart : this._timestamp;
+    return `TopicInfoQuery:${timestamp.toString()}`;
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/unbound-method
+exports.default = TopicInfoQuery;
+_Query.QUERY_REGISTRY.set("consensusGetTopicInfo", TopicInfoQuery._fromProtobuf);

@@ -1,0 +1,41 @@
+import { RunnableConfig } from "@langchain/core/runnables";
+import type { ChannelVersions, CheckpointMetadata } from "@langchain/langgraph-checkpoint";
+export declare function getNullChannelVersion(currentVersions: ChannelVersions): string | number | undefined;
+export declare function getNewChannelVersions(previousVersions: ChannelVersions, currentVersions: ChannelVersions): ChannelVersions;
+export declare function _coerceToDict(value: any, defaultKey: string): any;
+export type RetryPolicy = {
+    /**
+     * Amount of time that must elapse before the first retry occurs in milliseconds.
+     * @default 500
+     */
+    initialInterval?: number;
+    /**
+     * Multiplier by which the interval increases after each retry.
+     * @default 2
+     */
+    backoffFactor?: number;
+    /**
+     * Maximum amount of time that may elapse between retries in milliseconds.
+     * @default 128000
+     */
+    maxInterval?: number;
+    /**
+     * Maximum amount of time that may elapse between retries.
+     * @default 3
+     */
+    maxAttempts?: number;
+    /** Whether to add random jitter to the interval between retries. */
+    jitter?: boolean;
+    /** A function that returns True for exceptions that should trigger a retry. */
+    retryOn?: (e: any) => boolean;
+    /** Whether to log a warning when a retry is attempted. Defaults to true. */
+    logWarning?: boolean;
+};
+export declare function patchConfigurable(config: RunnableConfig | undefined, patch: Record<string, any>): RunnableConfig;
+export declare function patchCheckpointMap(config: RunnableConfig, metadata?: CheckpointMetadata): RunnableConfig;
+/**
+ * Combine multiple abort signals into a single abort signal.
+ * @param signals - The abort signals to combine.
+ * @returns A single abort signal that is aborted if any of the input signals are aborted.
+ */
+export declare function combineAbortSignals(...signals: AbortSignal[]): AbortSignal;

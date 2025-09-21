@@ -1,0 +1,2 @@
+import t from"./ContractId.js";class o{constructor(t){this.contractId=t.contractId,this.bloom=t.bloom,this.topics=t.topics,this.data=t.data,Object.freeze(this)}static _fromProtobuf(a){return new o({contractId:t._fromProtobuf(a.contractID),bloom:null!=a.bloom?a.bloom:new Uint8Array,topics:null!=a.topic?a.topic:[],data:null!=a.data?a.data:new Uint8Array})}_toProtobuf(){return{contractID:this.contractId._toProtobuf(),bloom:this.bloom,topic:this.topics,data:this.data}}}export{o as default};
+//# sourceMappingURL=ContractLogInfo.js.map

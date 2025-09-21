@@ -1,0 +1,111 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var HieroProto = _interopRequireWildcard(require("@hashgraph/proto"));
+var _FeeComponents = _interopRequireDefault(require("./FeeComponents.cjs"));
+var _FeeDataType = _interopRequireDefault(require("./FeeDataType.cjs"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+function _getRequireWildcardCache(e) { if ("function" != typeof WeakMap) return null; var r = new WeakMap(), t = new WeakMap(); return (_getRequireWildcardCache = function (e) { return e ? t : r; })(e); }
+function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e; if (null === e || "object" != typeof e && "function" != typeof e) return { default: e }; var t = _getRequireWildcardCache(r); if (t && t.has(e)) return t.get(e); var n = { __proto__: null }, a = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var u in e) if ("default" !== u && {}.hasOwnProperty.call(e, u)) { var i = a ? Object.getOwnPropertyDescriptor(e, u) : null; i && (i.get || i.set) ? Object.defineProperty(n, u, i) : n[u] = e[u]; } return n.default = e, t && t.set(e, n), n; }
+// SPDX-License-Identifier: Apache-2.0
+
+/**
+ * A total fee, in component amounts charged for a transaction.
+ *
+ * Total fees are composed of three sets of components.
+ * - Node data, components that compensate the specific node that submitted
+ *   the transaction.
+ * - Network data, components that compensate the Hedera network for gossiping
+ *   the transaction and determining the consensus timestamp.
+ * - Service data, components that compensate the Hedera network for the ongoing
+ *   maintenance and operation of the network, as well as ongoing development
+ *   of network services.
+ *
+ * Fee components are recorded in thousandths of a tiny cent, and the network
+ * exchange rate converts these to tinybar amounts, which are what the network
+ * charges for transactions and what the network reports in the record stream.
+ */
+class FeeData {
+  /**
+   * @param {object} [props]
+   * @param {FeeComponents} [props.nodedata]
+   * @param {FeeComponents} [props.networkdata]
+   * @param {FeeComponents} [props.servicedata]
+   * @param {FeeDataType} [props.feeDataType]
+   */
+  constructor(props = {}) {
+    /*
+     * Fee paid to the submitting node
+     *
+     * @type {FeeComponents}
+     */
+    this.nodedata = props.nodedata;
+
+    /*
+     * Fee paid to the network for processing a transaction into consensus
+     *
+     * @type {FeeComponents}
+     */
+    this.networkdata = props.networkdata;
+
+    /*
+     * Fee paid to the network for providing the service associated with the transaction; for instance, storing a file
+     *
+     * @type {FeeComponents}
+     */
+    this.servicedata = props.servicedata;
+
+    /*
+     * SubType distinguishing between different types of FeeData, correlating to the same HederaFunctionality
+     *
+     * @type {SubType}
+     */
+    this.feeDataType = props.feeDataType;
+  }
+
+  /**
+   * @param {Uint8Array} bytes
+   * @returns {FeeData}
+   */
+  static fromBytes(bytes) {
+    return FeeData._fromProtobuf(HieroProto.proto.FeeData.decode(bytes));
+  }
+
+  /**
+   * @internal
+   * @param {HieroProto.proto.IFeeData} feeData
+   * @returns {FeeData}
+   */
+  static _fromProtobuf(feeData) {
+    return new FeeData({
+      nodedata: feeData.nodedata != null ? _FeeComponents.default._fromProtobuf(feeData.nodedata) : undefined,
+      networkdata: feeData.networkdata != null ? _FeeComponents.default._fromProtobuf(feeData.networkdata) : undefined,
+      servicedata: feeData.servicedata != null ? _FeeComponents.default._fromProtobuf(feeData.servicedata) : undefined,
+      feeDataType: feeData.subType != null ? _FeeDataType.default._fromCode(feeData.subType) : undefined
+    });
+  }
+
+  /**
+   * @internal
+   * @returns {HieroProto.proto.IFeeData}
+   */
+  _toProtobuf() {
+    return {
+      nodedata: this.nodedata != null ? this.nodedata._toProtobuf() : undefined,
+      networkdata: this.networkdata != null ? this.networkdata._toProtobuf() : undefined,
+      servicedata: this.servicedata != null ? this.servicedata._toProtobuf() : undefined,
+      subType: this.feeDataType != null ? this.feeDataType.valueOf() : undefined
+    };
+  }
+
+  /**
+   * @returns {Uint8Array}
+   */
+  toBytes() {
+    return HieroProto.proto.FeeData.encode(this._toProtobuf()).finish();
+  }
+}
+exports.default = FeeData;

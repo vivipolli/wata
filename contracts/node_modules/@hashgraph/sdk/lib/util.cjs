@@ -1,0 +1,464 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.REQUIRE_UINT8ARRAY_ERROR = exports.REQUIRE_TYPE_ERROR = exports.REQUIRE_STRING_OR_UINT8ARRAY_ERROR = exports.REQUIRE_STRING_ERROR = exports.REQUIRE_NUMBER_ERROR = exports.REQUIRE_NON_NULL_ERROR = exports.REQUIRE_LONG_ERROR = exports.REQUIRE_BIGNUMBER_ERROR = exports.REQUIRE_ARRAY_ERROR = exports.FUNCTION_CONVERT_TO_NUMBER_PARSE_ERROR = exports.FUNCTION_CONVERT_TO_NUMBER_ERROR = exports.FUNCTION_CONVERT_TO_BIGNUMBER_ERROR = void 0;
+exports.arrayEqual = arrayEqual;
+exports.compare = compare;
+exports.convertToBigNumber = convertToBigNumber;
+exports.convertToBigNumberArray = convertToBigNumberArray;
+exports.convertToNumber = convertToNumber;
+exports.isBigNumber = isBigNumber;
+exports.isLong = isLong;
+exports.isLongZeroAddress = isLongZeroAddress;
+exports.isNonNull = isNonNull;
+exports.isNumber = isNumber;
+exports.isString = isString;
+exports.isStringOrUint8Array = isStringOrUint8Array;
+exports.isType = isType;
+exports.isUint8Array = isUint8Array;
+exports.requireBigNumber = requireBigNumber;
+exports.requireLong = requireLong;
+exports.requireNonNull = requireNonNull;
+exports.requireNotNegative = requireNotNegative;
+exports.requireNumber = requireNumber;
+exports.requireString = requireString;
+exports.requireStringOrUint8Array = requireStringOrUint8Array;
+exports.requireType = requireType;
+exports.requireUint8Array = requireUint8Array;
+exports.safeView = safeView;
+exports.screamingSnakeToPascalCase = screamingSnakeToPascalCase;
+exports.shuffle = shuffle;
+exports.wait = wait;
+var _bignumber = _interopRequireDefault(require("bignumber.js"));
+var _long = _interopRequireDefault(require("long"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+// SPDX-License-Identifier: Apache-2.0
+
+/**
+ * @typedef {import("./Hbar.js").default} Hbar
+ */
+
+/**
+ * Utility Error Messages
+ */
+const REQUIRE_NON_NULL_ERROR = exports.REQUIRE_NON_NULL_ERROR = "This value cannot be null | undefined.";
+const REQUIRE_STRING_ERROR = exports.REQUIRE_STRING_ERROR = "This value must be a string.";
+const REQUIRE_UINT8ARRAY_ERROR = exports.REQUIRE_UINT8ARRAY_ERROR = "This value must be a Uint8Array.";
+const REQUIRE_STRING_OR_UINT8ARRAY_ERROR = exports.REQUIRE_STRING_OR_UINT8ARRAY_ERROR = "This value must be a string or Uint8Array.";
+const REQUIRE_NUMBER_ERROR = exports.REQUIRE_NUMBER_ERROR = "This value must be a Number.";
+const REQUIRE_BIGNUMBER_ERROR = exports.REQUIRE_BIGNUMBER_ERROR = "This value must be a BigNumber.";
+const REQUIRE_ARRAY_ERROR = exports.REQUIRE_ARRAY_ERROR = "The provided variable must be an Array.";
+const REQUIRE_LONG_ERROR = exports.REQUIRE_LONG_ERROR = "This value must be a Long.";
+const REQUIRE_TYPE_ERROR = exports.REQUIRE_TYPE_ERROR = "The provided variables are not matching types.";
+const FUNCTION_CONVERT_TO_BIGNUMBER_ERROR = exports.FUNCTION_CONVERT_TO_BIGNUMBER_ERROR = "This value must be a String, Number, or BigNumber to be converted.";
+const FUNCTION_CONVERT_TO_NUMBER_ERROR = exports.FUNCTION_CONVERT_TO_NUMBER_ERROR = "This value must be a String, Number, or BigNumber to be converted.";
+const FUNCTION_CONVERT_TO_NUMBER_PARSE_ERROR = exports.FUNCTION_CONVERT_TO_NUMBER_PARSE_ERROR = "Unable to parse given variable. Returns NaN.";
+
+//Soft Checks
+
+/**
+ * Takes any param and returns false if null or undefined.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {boolean}
+ */
+function isNonNull(variable) {
+  return variable != null;
+}
+
+/**
+ * Takes any param and returns true if param variable and type are the same.
+ *
+ * @param {any | null | undefined} variable
+ * @param {any | null | undefined} type
+ * @returns {boolean}
+ */
+function isType(variable, type) {
+  return typeof variable == typeof type;
+}
+
+/**
+ * Takes any param and returns true if param is not null and of type Uint8Array.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {boolean}
+ */
+function isUint8Array(variable) {
+  return isNonNull(variable) && variable instanceof Uint8Array;
+}
+
+/**
+ * Takes any param and returns true if param is not null and of type Number.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {boolean}
+ */
+function isNumber(variable) {
+  return isNonNull(variable) && (typeof variable == "number" || variable instanceof Number);
+}
+
+/**
+ * Takes any param and returns true if param is not null and of type BigNumber.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {boolean}
+ */
+function isBigNumber(variable) {
+  return isNonNull(variable) && variable instanceof _bignumber.default;
+}
+
+/**
+ * Takes any param and returns true if param is not null and of type BigNumber.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {boolean}
+ */
+function isLong(variable) {
+  return isNonNull(variable) && variable instanceof _long.default;
+}
+
+/**
+ * Takes any param and returns true if param is not null and of type string.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {boolean}
+ */
+function isString(variable) {
+  return isNonNull(variable) && typeof variable == "string";
+}
+
+/**
+ * Takes any param and returns true if param is not null and type string or Uint8Array.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {boolean}
+ */
+function isStringOrUint8Array(variable) {
+  return isNonNull(variable) && (isString(variable) || isUint8Array(variable));
+}
+
+/**
+ * Takes an address as `Uint8Array` and returns whether or not this is a long-zero address
+ *
+ * @param {Uint8Array} address
+ * @returns {boolean}
+ */
+function isLongZeroAddress(address) {
+  for (let i = 0; i < 12; i++) {
+    if (address[i] != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Takes any param and returns false if null or undefined.
+ *
+ * @template {Long | Hbar} T
+ * @param {T} variable
+ * @returns {T}
+ */
+function requireNotNegative(variable) {
+  if (variable.isNegative()) {
+    throw new Error("negative value not allowed");
+  }
+  return variable;
+}
+
+/**
+ * Takes any param and throws custom error if null or undefined.
+ *
+ * @param {any} variable
+ * @returns {object}
+ */
+function requireNonNull(variable) {
+  if (!isNonNull(variable)) {
+    throw new Error(REQUIRE_NON_NULL_ERROR);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return variable;
+  }
+}
+
+/**
+ * Takes any param and throws custom error if params are not same type.
+ *
+ * @param {any | null | undefined} variable
+ * @param {any | null | undefined} type
+ * @returns {object}
+ */
+function requireType(variable, type) {
+  if (!isType(variable, type)) {
+    throw new Error(REQUIRE_TYPE_ERROR);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return variable;
+  }
+}
+
+/**
+ * Takes any param and throws custom error if non BigNumber.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {BigNumber}
+ */
+function requireBigNumber(variable) {
+  if (!isBigNumber(requireNonNull(variable))) {
+    throw new Error(REQUIRE_BIGNUMBER_ERROR);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return /** @type {BigNumber} */variable;
+  }
+}
+
+/**
+ * Takes any param and throws custom error if non BigNumber.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {Long}
+ */
+function requireLong(variable) {
+  if (!isLong(requireNonNull(variable))) {
+    throw new Error(REQUIRE_LONG_ERROR);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return /** @type {Long} */variable;
+  }
+}
+
+/**
+ * Takes any param and throws custom error if non string.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {string}
+ */
+function requireString(variable) {
+  if (!isString(requireNonNull(variable))) {
+    throw new Error(REQUIRE_STRING_ERROR);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return /** @type {string} */variable;
+  }
+}
+
+/**
+ * Takes any param and throws custom error if non Uint8Array.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {Uint8Array}
+ */
+function requireUint8Array(variable) {
+  if (!isUint8Array(requireNonNull(variable))) {
+    throw new Error(REQUIRE_UINT8ARRAY_ERROR);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return /** @type {Uint8Array} */variable;
+  }
+}
+
+/**
+ * Takes any param and throws custom error if non Uint8Array.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {number}
+ */
+function requireNumber(variable) {
+  if (!isNumber(requireNonNull(variable))) {
+    throw new Error(REQUIRE_NUMBER_ERROR);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return /** @type {number} */variable;
+  }
+}
+
+/**
+ * Takes any param and throws custom error if null or undefined and not a string or Uint8Array.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {string | Uint8Array}
+ */
+function requireStringOrUint8Array(variable) {
+  if (isStringOrUint8Array(requireNonNull(variable))) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return /** @type {string | Uint8Array} */variable;
+  } else {
+    throw new Error(REQUIRE_STRING_OR_UINT8ARRAY_ERROR);
+  }
+}
+
+//Conversions
+
+/**
+ * Converts number or string to BigNumber.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {BigNumber}
+ */
+function convertToBigNumber(variable) {
+  requireNonNull(variable);
+  if (isBigNumber(variable) || isString(variable) || isNumber(variable) || isLong(variable)) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    return new _bignumber.default(variable);
+  }
+  throw new Error(FUNCTION_CONVERT_TO_BIGNUMBER_ERROR);
+}
+
+/**
+ * Converts Array of Numbers or Strings to Array of BigNumbers.
+ *
+ * @param {any | null | undefined} variable
+ * @returns {Array<BigNumber>}
+ */
+function convertToBigNumberArray(variable) {
+  if (variable instanceof Array) {
+    return /** @type {Array<BigNumber>} */variable.map(convertToBigNumber);
+  } else {
+    throw new Error(REQUIRE_ARRAY_ERROR);
+  }
+}
+
+/**
+ * @param {*} variable
+ * @returns {number}
+ */
+function convertToNumber(variable) {
+  requireNonNull(variable);
+  if (isBigNumber(variable) || isString(variable) || isNumber(variable) || isLong(variable)) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    const num = parseInt(variable);
+    if (isNaN(num)) {
+      throw new Error(FUNCTION_CONVERT_TO_NUMBER_PARSE_ERROR);
+    } else {
+      return num;
+    }
+  } else {
+    throw new Error(FUNCTION_CONVERT_TO_NUMBER_ERROR);
+  }
+}
+
+/**
+ * Creates a DataView on top of an Uint8Array that could be or not be pooled, ensuring that we don't get out of bounds.
+ *
+ * @param {Uint8Array | Int8Array} arr
+ * @param {number | undefined} offset
+ * @param {number | undefined} length
+ * @returns {DataView}
+ */
+function safeView(arr, offset = 0, length = arr.byteLength) {
+  if (!(Number.isInteger(offset) && offset >= 0)) throw new Error("Invalid offset!");
+  if (!(Number.isInteger(length) && length >= 0)) throw new Error("Invalid length!");
+  return new DataView(arr.buffer, arr.byteOffset + offset, Math.min(length, arr.byteLength - offset));
+}
+
+/**
+ * @param {any} a
+ * @param {any} b
+ * @param {Set<string>=} ignore
+ * @returns {boolean}
+ */
+function compare(a, b, ignore = new Set()) {
+  if (typeof a === "object" && typeof b === "object") {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    const aKeys = Object.keys(a);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) {
+      return false;
+    }
+    for (let i = 0; i < aKeys.length; i++) {
+      if (aKeys[i] !== bKeys[i]) {
+        return false;
+      }
+      if (ignore.has(aKeys[i])) {
+        continue;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      if (!compare(a[aKeys[i]], b[bKeys[i]], ignore)) {
+        return false;
+      }
+    }
+    return true;
+  } else if (typeof a === "number" && typeof b === "number") {
+    return a === b;
+  } else if (typeof a === "string" && typeof b === "string") {
+    return a === b;
+  } else if (typeof a === "boolean" && typeof b === "boolean") {
+    return a === b;
+  } else {
+    return false;
+  }
+}
+
+/**
+ * https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+ *
+ * @template T
+ * @param {Array<T>} array
+ */
+function shuffle(array) {
+  var currentIndex = array.length,
+    temporaryValue,
+    randomIndex;
+
+  // While there remain elements to shuffle...
+  while (0 !== currentIndex) {
+    // Pick a remaining element...
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex -= 1;
+
+    // And swap it with the current element.
+    temporaryValue = array[currentIndex];
+    array[currentIndex] = array[randomIndex];
+    array[randomIndex] = temporaryValue;
+  }
+}
+
+/**
+ * @param {Uint8Array} array1
+ * @param {Uint8Array} array2
+ * @returns {boolean}
+ */
+function arrayEqual(array1, array2) {
+  if (array1 === array2) {
+    return true;
+  }
+  if (array1.byteLength !== array2.byteLength) {
+    return false;
+  }
+  const view1 = new DataView(array1.buffer, array1.byteOffset, array1.byteLength);
+  const view2 = new DataView(array2.buffer, array2.byteOffset, array2.byteLength);
+  let i = array1.byteLength;
+  while (i--) {
+    if (view1.getUint8(i) !== view2.getUint8(i)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * @description Function that delays an execution for a given time (in milliseconds)
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Converts a SCREAMING_SNAKE_CASE string to PascalCase
+ * @param {string} name - The string to convert
+ * @returns {string} The converted PascalCase string
+ */
+function screamingSnakeToPascalCase(name) {
+  const words = name.toLowerCase().split("_");
+  let result = "";
+  for (let i = 0; i < words.length; i++) {
+    result += words[i].charAt(0).toUpperCase() + words[i].slice(1);
+  }
+  return result;
+}

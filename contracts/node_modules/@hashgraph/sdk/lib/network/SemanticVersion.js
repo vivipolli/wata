@@ -1,0 +1,2 @@
+import*as t from"@hashgraph/proto";class o{constructor(t){this.major=t.major,this.minor=t.minor,this.patch=t.patch,Object.freeze(this)}static _fromProtobuf(t){return new o({major:t.major,minor:t.minor,patch:t.patch})}_toProtobuf(){return{major:this.major,minor:this.minor,patch:this.patch}}static fromBytes(r){return o._fromProtobuf(t.proto.SemanticVersion.decode(r))}toBytes(){return t.proto.SemanticVersion.encode(this._toProtobuf()).finish()}}export{o as default};
+//# sourceMappingURL=SemanticVersion.js.map

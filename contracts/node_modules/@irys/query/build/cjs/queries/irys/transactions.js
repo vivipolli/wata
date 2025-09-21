@@ -1,0 +1,62 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.irysTransactionsQuery = exports.transactionVars = exports.transactions = void 0;
+// derive type from minimal object, use this object to validate structure in code.
+exports.transactions = {
+    id: "",
+    receipt: {
+        deadlineHeight: 0,
+        signature: "",
+        timestamp: 0,
+        version: "",
+    },
+    tags: [{ name: "", value: "" }],
+    address: "",
+    token: "",
+    signature: "",
+    timestamp: 0,
+};
+// default variables
+exports.transactionVars = {
+    ids: undefined,
+    after: undefined,
+    token: undefined,
+    from: undefined,
+    pageSize: 100,
+    sort: "ASC",
+    // hasTags: undefined,
+    tags: undefined,
+    fromTimestamp: undefined,
+    toTimestamp: undefined,
+};
+exports.irysTransactionsQuery = {
+    name: "transactions",
+    query: exports.transactions,
+    enumValues: ["order"],
+    vars: exports.transactionVars,
+    remapVars: {
+        pageSize: "first",
+        sort: "order",
+        from: "owners",
+        fromTimestamp: (_k, v, vars) => {
+            const ts = new Date(v).getTime();
+            if (isNaN(ts))
+                throw new Error("invalid from timestamp");
+            vars.timestamp = Object.assign(Object.assign({}, vars.timestamp), { from: ts });
+            vars.fromTimestamp = undefined;
+        },
+        toTimestamp: (_k, v, vars) => {
+            const ts = new Date(v).getTime();
+            if (isNaN(ts))
+                throw new Error("invalid to timestamp");
+            vars.timestamp = Object.assign(Object.assign({}, vars.timestamp), { to: ts });
+            vars.toTimestamp = undefined;
+        },
+    },
+    paging: {
+        hasNextPage: "hasNextPage",
+        cursor: "cursor",
+        limiterName: "pageSize",
+    },
+};
+//# sourceMappingURL=transactions.js.map

@@ -1,0 +1,274 @@
+/**
+ * @namespace proto
+ * @typedef {import("@hashgraph/proto").proto.ITransaction} ITransaction
+ * @typedef {import("@hashgraph/proto").proto.ITransaction} ISignedTransaction
+ * @typedef {import("@hashgraph/proto").proto.TransactionBody} TransactionBody
+ * @typedef {import("@hashgraph/proto").proto.ITransactionBody} ITransactionBody
+ * @typedef {import("@hashgraph/proto").proto.ITransactionResponse} ITransactionResponse
+ */
+/**
+ * @namespace com.hedera.hapi.node.addressbook
+ * @typedef {import("@hashgraph/proto").com.hedera.hapi.node.addressbook.INodeUpdateTransactionBody} INodeUpdateTransactionBody
+ */
+/**
+ * @typedef {import("../channel/Channel.js").default} Channel
+ * @typedef {import("../transaction/TransactionId.js").default} TransactionId
+ * @typedef {import("../client/Client.js").default<*, *>} Client
+ */
+/**
+ * @description A transaction to update a consensus node in the network.
+ */
+export default class NodeUpdateTransaction extends Transaction {
+    /**
+     * @internal
+     * @param {ITransaction[]} transactions
+     * @param {ISignedTransaction[]} signedTransactions
+     * @param {TransactionId[]} transactionIds
+     * @param {AccountId[]} nodeIds
+     * @param {ITransactionBody[]} bodies
+     * @returns {NodeUpdateTransaction}
+     */
+    static _fromProtobuf(transactions: ITransaction[], signedTransactions: ISignedTransaction[], transactionIds: TransactionId[], nodeIds: AccountId[], bodies: ITransactionBody[]): NodeUpdateTransaction;
+    /**
+     * @param {object} [props]
+     * @param {Long} [props.nodeId]
+     * @param {AccountId} [props.accountId]
+     * @param {?string} [props.description]
+     * @param {Array<ServiceEndpoint>} [props.gossipEndpoints]
+     * @param {?Array<ServiceEndpoint>} [props.serviceEndpoints]
+     * @param {?Uint8Array} [props.gossipCaCertificate]
+     * @param {?Uint8Array} [props.grpcCertificateHash]
+     * @param {ServiceEndpoint} [props.grpcWebProxyEndpoint]
+     * @param {Key} [props.adminKey]
+     * @param {boolean} [props.declineReward]
+     */
+    constructor(props?: {
+        nodeId?: import("long") | undefined;
+        accountId?: AccountId | undefined;
+        description?: string | null | undefined;
+        gossipEndpoints?: ServiceEndpoint[] | undefined;
+        serviceEndpoints?: ServiceEndpoint[] | null | undefined;
+        gossipCaCertificate?: Uint8Array<ArrayBufferLike> | null | undefined;
+        grpcCertificateHash?: Uint8Array<ArrayBufferLike> | null | undefined;
+        grpcWebProxyEndpoint?: ServiceEndpoint | undefined;
+        adminKey?: Key | undefined;
+        declineReward?: boolean | undefined;
+    });
+    /**
+     * @private
+     * @type {?Long}
+     * @description A consensus node identifier in the network state. It's required.
+     */
+    private _nodeId;
+    /**
+     * @private
+     * @type {?AccountId}
+     * @description Desired new account identifier of the node.
+     */
+    private _accountId;
+    /**
+     * @private
+     * @type {?string}
+     * @description Short description of the node. If set, this value SHALL replace the previous value.
+     */
+    private _description;
+    /**
+     * @private
+     * @type {?Array<ServiceEndpoint>}
+     * @description List of service endpoints for gossip.
+     */
+    private _gossipEndpoints;
+    /**
+     * @private
+     * @type {?Array<ServiceEndpoint>}
+     * @description List of service endpoints for gRPC calls.
+     */
+    private _serviceEndpoints;
+    /**
+     * @private
+     * @type {?Uint8Array}
+     * @description Certificate used to sign gossip events.
+     */
+    private _gossipCaCertificate;
+    /**
+     * @private
+     * @type {?Uint8Array}
+     * @description Hash of the node gRPC TLS certificate.
+     */
+    private _grpcCertificateHash;
+    /**
+     * @private
+     * @type {?ServiceEndpoint}
+     * @description Proxy endpoint for gRPC web calls.
+     */
+    private _grpcWebProxyEndpoint;
+    /**
+     * @private
+     * @type {?Key}
+     * @description Administrative key controlled by the node operator.
+     */
+    private _adminKey;
+    /**
+     * @private
+     * @type {?boolean}
+     * @description Whether the node declines rewards.
+     */
+    private _declineReward;
+    /**
+     * @param {Long} nodeId
+     * @description Set consensus node identifier in the network state.
+     * @returns {NodeUpdateTransaction}
+     */
+    setNodeId(nodeId: Long): NodeUpdateTransaction;
+    /**
+     * @description Get consensus node identifier in the network state.
+     * @returns {?Long}
+     */
+    get nodeId(): Long | null;
+    /**
+     * @param {AccountId | string} accountId
+     * @description Set desired new account identifier of the node.
+     * @returns {NodeUpdateTransaction}
+     */
+    setAccountId(accountId: AccountId | string): NodeUpdateTransaction;
+    /**
+     * @description Get desired new account identifier of the node.
+     * @returns {?AccountId}
+     */
+    get accountId(): AccountId | null;
+    /**
+     * @param {string} description
+     * @description Set description of the node.
+     * @returns {NodeUpdateTransaction}
+     */
+    setDescription(description: string): NodeUpdateTransaction;
+    /**
+     * @description Clear description of the node.
+     * @returns {void}
+     */
+    clearDescription(): void;
+    /**
+     * @description Get description of the node.
+     * @returns {?string}
+     */
+    get description(): string | null;
+    /**
+     * @param {ServiceEndpoint[]} gossipEndpoints
+     * @description Set list of service endpoints for gossip.
+     * @returns {NodeUpdateTransaction}
+     */
+    setGossipEndpoints(gossipEndpoints: ServiceEndpoint[]): NodeUpdateTransaction;
+    /**
+     * @description Get list of service endpoints for gossip.
+     * @returns {?Array<ServiceEndpoint>}
+     */
+    get gossipEndpoints(): Array<ServiceEndpoint> | null;
+    /**
+     * @param {ServiceEndpoint} endpoint
+     * @description Add an endpoint to the list of service endpoints for gossip.
+     * @returns {NodeUpdateTransaction}
+     */
+    addGossipEndpoint(endpoint: ServiceEndpoint): NodeUpdateTransaction;
+    /**
+     * @param {ServiceEndpoint[]} serviceEndpoints
+     * @description Set list of service endpoints for gRPC calls.
+     * @returns {NodeUpdateTransaction}
+     */
+    setServiceEndpoints(serviceEndpoints: ServiceEndpoint[]): NodeUpdateTransaction;
+    /**
+     * @description Get list of service endpoints for gRPC calls.
+     * @returns {?Array<ServiceEndpoint>}
+     */
+    get serviceEndpoints(): Array<ServiceEndpoint> | null;
+    /**
+     * @param {ServiceEndpoint} endpoint
+     * @description Add an endpoint to the list of service endpoints for gRPC calls.
+     * @returns {NodeUpdateTransaction}
+     */
+    addServiceEndpoint(endpoint: ServiceEndpoint): NodeUpdateTransaction;
+    /**
+     * @param {Uint8Array} bytes
+     * @description Set certificate used to sign gossip events.
+     * @returns {NodeUpdateTransaction}
+     */
+    setGossipCaCertificate(bytes: Uint8Array): NodeUpdateTransaction;
+    /**
+     * @description Get certificate used to sign gossip events.
+     * @returns {?Uint8Array}
+     */
+    get gossipCaCertificate(): Uint8Array | null;
+    /**
+     * @param {Uint8Array} bytes
+     * @description Set hash of the node gRPC TLS certificate.
+     * @returns {NodeUpdateTransaction}
+     */
+    setCertificateHash(bytes: Uint8Array): NodeUpdateTransaction;
+    /**
+     * @description Get hash of the node gRPC TLS certificate.
+     * @returns {?Uint8Array}
+     */
+    get certificateHash(): Uint8Array | null;
+    /**
+     * @param {ServiceEndpoint} endpoint
+     * @description Set proxy endpoint for gRPC web calls.
+     * @returns {NodeUpdateTransaction}
+     */
+    setGrpcWebProxyEndpoint(endpoint: ServiceEndpoint): NodeUpdateTransaction;
+    /**
+     * @description Get proxy endpoint for gRPC web calls.
+     * @returns {?ServiceEndpoint}
+     */
+    get grpcWebProxyEndpoint(): ServiceEndpoint | null;
+    /**
+     * @param {Key} adminKey
+     * @description Set administrative key controlled by the node operator.
+     * @returns {NodeUpdateTransaction}
+     */
+    setAdminKey(adminKey: Key): NodeUpdateTransaction;
+    /**
+     * @description Get administrative key controlled by the node operator.
+     * @returns {?Key}
+     */
+    get adminKey(): Key | null;
+    /**
+     * @param {boolean} declineReward
+     * @description Set whether the node declines rewards.
+     * @returns {NodeUpdateTransaction}
+     */
+    setDeclineReward(declineReward: boolean): NodeUpdateTransaction;
+    /**
+     * @description Get whether the node declines rewards.
+     * @returns {?boolean}
+     */
+    get declineReward(): boolean | null;
+    /**
+     * @description Deletes the gRPC proxy endpoint and sets it to null in the mirror node, effectively removing it from the network state.
+     * @returns {NodeUpdateTransaction}
+     */
+    deleteGrpcWebProxyEndpoint(): NodeUpdateTransaction;
+    /**
+     * @override
+     * @param {?import("../client/Client.js").default<Channel, *>} client
+     * @returns {this}
+     */
+    override freezeWith(client: import("../client/Client.js").default<Channel, any> | null): this;
+    /**
+     * @override
+     * @protected
+     * @returns {INodeUpdateTransactionBody}
+     */
+    protected override _makeTransactionData(): INodeUpdateTransactionBody;
+}
+export type ITransaction = import("@hashgraph/proto").proto.ITransaction;
+export type ISignedTransaction = import("@hashgraph/proto").proto.ITransaction;
+export type TransactionBody = import("@hashgraph/proto").proto.TransactionBody;
+export type ITransactionBody = import("@hashgraph/proto").proto.ITransactionBody;
+export type ITransactionResponse = import("@hashgraph/proto").proto.ITransactionResponse;
+export type INodeUpdateTransactionBody = import("@hashgraph/proto").com.hedera.hapi.node.addressbook.INodeUpdateTransactionBody;
+export type Channel = import("../channel/Channel.js").default;
+export type TransactionId = import("../transaction/TransactionId.js").default;
+export type Client = import("../client/Client.js").default<any, any>;
+import Transaction from "../transaction/Transaction.js";
+import AccountId from "../account/AccountId.js";
+import ServiceEndpoint from "./ServiceEndpoint.js";
+import Key from "../Key.js";

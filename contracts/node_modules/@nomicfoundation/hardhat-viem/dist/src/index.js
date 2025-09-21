@@ -1,0 +1,10 @@
+import "./type-extensions.js";
+const hardhatPlugin = {
+    id: "hardhat-viem",
+    hookHandlers: {
+        network: () => import("./internal/hook-handlers/network.js"),
+    },
+    npmPackage: "@nomicfoundation/hardhat-viem",
+};
+export default hardhatPlugin;
+//# sourceMappingURL=index.js.map

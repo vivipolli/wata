@@ -1,0 +1,90 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _ClientConstants = require("../constants/ClientConstants.cjs");
+var _GrpcServiceError = _interopRequireDefault(require("../grpc/GrpcServiceError.cjs"));
+var _GrpcStatus = _interopRequireDefault(require("../grpc/GrpcStatus.cjs"));
+var _HttpError = _interopRequireDefault(require("../http/HttpError.cjs"));
+var _HttpStatus = _interopRequireDefault(require("../http/HttpStatus.cjs"));
+var _version = require("../version.cjs");
+var _Channel = _interopRequireWildcard(require("./Channel.cjs"));
+function _getRequireWildcardCache(e) { if ("function" != typeof WeakMap) return null; var r = new WeakMap(), t = new WeakMap(); return (_getRequireWildcardCache = function (e) { return e ? t : r; })(e); }
+function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e; if (null === e || "object" != typeof e && "function" != typeof e) return { default: e }; var t = _getRequireWildcardCache(r); if (t && t.has(e)) return t.get(e); var n = { __proto__: null }, a = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var u in e) if ("default" !== u && {}.hasOwnProperty.call(e, u)) { var i = a ? Object.getOwnPropertyDescriptor(e, u) : null; i && (i.get || i.set) ? Object.defineProperty(n, u, i) : n[u] = e[u]; } return n.default = e, t && t.set(e, n), n; }
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+// SPDX-License-Identifier: Apache-2.0
+
+class WebChannel extends _Channel.default {
+  /**
+   * @param {string} address
+   */
+  constructor(address) {
+    super();
+
+    /**
+     * @type {string}
+     * @private
+     */
+    this._address = address;
+  }
+
+  /**
+   * @override
+   * @returns {void}
+   */
+  close() {
+    // do nothing
+  }
+
+  /**
+   * @override
+   * @protected
+   * @param {string} serviceName
+   * @returns {import("protobufjs").RPCImpl}
+   */
+  _createUnaryClient(serviceName) {
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    return async (method, requestData, callback) => {
+      try {
+        const shouldUseHttps = !(this._address.includes("localhost") || this._address.includes("127.0.0.1"));
+        const address = shouldUseHttps ? `https://${this._address}` : `http://${this._address}`;
+        // this will be executed in a browser environment so eslint is
+        // disabled for the fetch call
+        //eslint-disable-next-line n/no-unsupported-features/node-builtins
+        const response = await fetch(`${address}/proto.${serviceName}/${method.name}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/grpc-web+proto",
+            "x-user-agent": `${_version.SDK_NAME}/${_version.SDK_VERSION}`,
+            "x-grpc-web": "1"
+          },
+          body: (0, _Channel.encodeRequest)(requestData)
+        });
+        if (!response.ok) {
+          const error = new _HttpError.default(_HttpStatus.default._fromValue(response.status));
+          callback(error, null);
+        }
+
+        // Check headers for gRPC errors
+        const grpcStatus = response.headers.get("grpc-status");
+        const grpcMessage = response.headers.get("grpc-message");
+        if (grpcStatus != null && grpcMessage != null) {
+          const error = new _GrpcServiceError.default(_GrpcStatus.default._fromValue(parseInt(grpcStatus)), _ClientConstants.ALL_WEB_NETWORK_NODES?.[this._address]?.toString());
+          error.message = grpcMessage;
+          callback(error, null);
+        }
+        const responseBuffer = await response.arrayBuffer();
+        const unaryResponse = (0, _Channel.decodeUnaryResponse)(responseBuffer);
+        callback(null, unaryResponse);
+      } catch (error) {
+        const err = new _GrpcServiceError.default(
+        // retry on grpc web errors
+        _GrpcStatus.default._fromValue(18), _ClientConstants.ALL_WEB_NETWORK_NODES?.[this._address]?.toString());
+        callback(err, null);
+      }
+    };
+  }
+}
+exports.default = WebChannel;

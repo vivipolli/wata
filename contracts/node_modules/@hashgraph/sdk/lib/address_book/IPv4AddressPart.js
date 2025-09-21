@@ -1,0 +1,2 @@
+class t{constructor(t={}){this._left=null,null!=t.left&&this.setLeft(t.left),this._right=null,null!=t.right&&this.setRight(t.right)}get left(){return this._left}setLeft(t){return this._left=t,this}get right(){return this._right}setRight(t){return this._right=t,this}toString(){return null!=this._left&&null!=this._right?`${this._left.toString()}.${this._right.toString()}`:""}}export{t as default};
+//# sourceMappingURL=IPv4AddressPart.js.map

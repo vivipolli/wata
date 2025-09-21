@@ -1,0 +1,2 @@
+import e from"./Cache.js";class t{_toProtobufKey(){throw new Error("not implemented")}static _fromProtobufKey(t){return null!=t.contractID?e.contractId(t.contractID):null!=t.delegatableContractId?e.delegateContractId(t.delegatableContractId):null!=t.ed25519&&t.ed25519.byteLength>0?e.publicKeyED25519(t.ed25519):null!=t.ECDSASecp256k1&&t.ECDSASecp256k1.byteLength>0?e.publicKeyECDSA(t.ECDSASecp256k1):null!=t.thresholdKey&&null!=t.thresholdKey.threshold?e.thresholdKey(t.thresholdKey):null!=t.keyList?e.keyList(t.keyList):null}}export{t as default};
+//# sourceMappingURL=Key.js.map
