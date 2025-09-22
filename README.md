@@ -37,6 +37,29 @@ W.A.T.A. Chain implements a three-layer decentralized architecture:
 - **Smart Contracts**: Solidity (PESContract.sol)
 - **Relayer Pattern**: Automated payment processing
 
+## 🧪 Testing
+
+W.A.T.A. Chain includes comprehensive test suites for both smart contracts and backend services.
+
+### Run All Tests
+
+```bash
+# Execute complete test suite
+./run-all-tests.sh
+```
+
+### Individual Test Suites
+
+```bash
+# Smart Contract Tests (Hardhat)
+cd contracts && yarn test
+
+# Backend Integration Tests (Jest)
+cd backend && yarn test:coverage
+```
+
+For detailed testing documentation, see [TESTING.md](TESTING.md).
+
 ## 🚀 Quick Start
 
 ### Prerequisites

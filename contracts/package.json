@@ -1,4 +1,13 @@
 {
+  "name": "wata-contracts",
+  "version": "1.0.0",
+  "description": "W.A.T.A. Chain Smart Contracts",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy-hedera.js --network hedera_testnet",
+    "verify": "hardhat run scripts/verify-contract.js"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.0",
@@ -31,6 +40,7 @@
     "viem": "^2.30.0"
   },
   "dependencies": {
+    "@hashgraph/sdk": "^2.73.1",
     "@metaplex-foundation/mpl-core": "^1.4.0",
     "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
     "@metaplex-foundation/umi": "^1.2.0",
@@ -44,9 +54,9 @@
     "@web3auth/modal": "^9.7.0",
     "@web3auth/modal-react-hooks": "^9.7.0",
     "axios": "^1.8.4",
+    "dotenv": "^17.2.2",
     "hedera-agent-kit": "^1.0.6",
     "react-router-dom": "6",
     "tweetnacl": "^1.0.3"
-  },
-  "type": "module"
+  }
 }
