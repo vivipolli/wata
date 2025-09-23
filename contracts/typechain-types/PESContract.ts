@@ -26,25 +26,36 @@ import type {
 export interface PESContractInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "SCORE_THRESHOLD"
       | "agreementCounter"
       | "agreements"
       | "createAgreement"
       | "deactivateAgreement"
       | "getAgreement"
+      | "getAgreementScore"
+      | "oracleManager"
       | "owner"
       | "recordAudit"
       | "relayer"
       | "requestPayment"
+      | "setOracleManager"
       | "setRelayer"
+      | "submitValidatedBatch"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
       | "AgreementCreated"
       | "AuditRecorded"
+      | "PaymentApproved"
       | "PaymentRequested"
+      | "ValidatedBatchSubmitted"
   ): EventFragment;
 
+  encodeFunctionData(
+    functionFragment: "SCORE_THRESHOLD",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "agreementCounter",
     values?: undefined
@@ -65,6 +76,14 @@ export interface PESContractInterface extends Interface {
     functionFragment: "getAgreement",
     values: [BigNumberish]
   ): string;
+  encodeFunctionData(
+    functionFragment: "getAgreementScore",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "oracleManager",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "recordAudit",
@@ -76,10 +95,22 @@ export interface PESContractInterface extends Interface {
     values: [BigNumberish, BytesLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "setOracleManager",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "setRelayer",
     values: [AddressLike]
   ): string;
+  encodeFunctionData(
+    functionFragment: "submitValidatedBatch",
+    values: [BigNumberish, BytesLike, BigNumberish]
+  ): string;
 
+  decodeFunctionResult(
+    functionFragment: "SCORE_THRESHOLD",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "agreementCounter",
     data: BytesLike
@@ -97,6 +128,14 @@ export interface PESContractInterface extends Interface {
     functionFragment: "getAgreement",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "getAgreementScore",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "oracleManager",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "recordAudit",
@@ -107,7 +146,15 @@ export interface PESContractInterface extends Interface {
     functionFragment: "requestPayment",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "setOracleManager",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "setRelayer", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "submitValidatedBatch",
+    data: BytesLike
+  ): Result;
 }
 
 export namespace AgreementCreatedEvent {
@@ -151,6 +198,34 @@ export namespace AuditRecordedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace PaymentApprovedEvent {
+  export type InputTuple = [
+    agreementId: BigNumberish,
+    producer: AddressLike,
+    amount: BigNumberish,
+    auditHash: BytesLike,
+    score: BigNumberish
+  ];
+  export type OutputTuple = [
+    agreementId: bigint,
+    producer: string,
+    amount: bigint,
+    auditHash: string,
+    score: bigint
+  ];
+  export interface OutputObject {
+    agreementId: bigint;
+    producer: string;
+    amount: bigint;
+    auditHash: string;
+    score: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace PaymentRequestedEvent {
   export type InputTuple = [
     agreementId: BigNumberish,
@@ -169,6 +244,34 @@ export namespace PaymentRequestedEvent {
     producer: string;
     amount: bigint;
     auditHash: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace ValidatedBatchSubmittedEvent {
+  export type InputTuple = [
+    agreementId: BigNumberish,
+    oracle: AddressLike,
+    auditHash: BytesLike,
+    score: BigNumberish,
+    timestamp: BigNumberish
+  ];
+  export type OutputTuple = [
+    agreementId: bigint,
+    oracle: string,
+    auditHash: string,
+    score: bigint,
+    timestamp: bigint
+  ];
+  export interface OutputObject {
+    agreementId: bigint;
+    oracle: string;
+    auditHash: string;
+    score: bigint;
+    timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -219,18 +322,33 @@ export interface PESContract extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  SCORE_THRESHOLD: TypedContractMethod<[], [bigint], "view">;
+
   agreementCounter: TypedContractMethod<[], [bigint], "view">;
 
   agreements: TypedContractMethod<
     [arg0: BigNumberish],
     [
-      [string, string, bigint, bigint, boolean, bigint] & {
+      [
+        string,
+        string,
+        bigint,
+        bigint,
+        boolean,
+        bigint,
+        bigint,
+        string,
+        bigint
+      ] & {
         agreementHash: string;
         producer: string;
         baseValue: bigint;
         hectares: bigint;
         isActive: boolean;
         createdAt: bigint;
+        lastScore: bigint;
+        lastAuditHash: string;
+        lastUpdateTimestamp: bigint;
       }
     ],
     "view"
@@ -256,17 +374,38 @@ export interface PESContract extends BaseContract {
   getAgreement: TypedContractMethod<
     [_agreementId: BigNumberish],
     [
-      [string, string, bigint, bigint, boolean, bigint] & {
+      [
+        string,
+        string,
+        bigint,
+        bigint,
+        boolean,
+        bigint,
+        bigint,
+        string,
+        bigint
+      ] & {
         agreementHash: string;
         producer: string;
         baseValue: bigint;
         hectares: bigint;
         isActive: boolean;
         createdAt: bigint;
+        lastScore: bigint;
+        lastAuditHash: string;
+        lastUpdateTimestamp: bigint;
       }
     ],
     "view"
   >;
+
+  getAgreementScore: TypedContractMethod<
+    [_agreementId: BigNumberish],
+    [bigint],
+    "view"
+  >;
+
+  oracleManager: TypedContractMethod<[], [string], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
 
@@ -284,8 +423,20 @@ export interface PESContract extends BaseContract {
     "nonpayable"
   >;
 
+  setOracleManager: TypedContractMethod<
+    [_oracleManager: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   setRelayer: TypedContractMethod<
     [_relayer: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  submitValidatedBatch: TypedContractMethod<
+    [_agreementId: BigNumberish, _auditHash: BytesLike, _score: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -295,6 +446,9 @@ export interface PESContract extends BaseContract {
   ): T;
 
   getFunction(
+    nameOrSignature: "SCORE_THRESHOLD"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "agreementCounter"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -302,13 +456,26 @@ export interface PESContract extends BaseContract {
   ): TypedContractMethod<
     [arg0: BigNumberish],
     [
-      [string, string, bigint, bigint, boolean, bigint] & {
+      [
+        string,
+        string,
+        bigint,
+        bigint,
+        boolean,
+        bigint,
+        bigint,
+        string,
+        bigint
+      ] & {
         agreementHash: string;
         producer: string;
         baseValue: bigint;
         hectares: bigint;
         isActive: boolean;
         createdAt: bigint;
+        lastScore: bigint;
+        lastAuditHash: string;
+        lastUpdateTimestamp: bigint;
       }
     ],
     "view"
@@ -333,17 +500,36 @@ export interface PESContract extends BaseContract {
   ): TypedContractMethod<
     [_agreementId: BigNumberish],
     [
-      [string, string, bigint, bigint, boolean, bigint] & {
+      [
+        string,
+        string,
+        bigint,
+        bigint,
+        boolean,
+        bigint,
+        bigint,
+        string,
+        bigint
+      ] & {
         agreementHash: string;
         producer: string;
         baseValue: bigint;
         hectares: bigint;
         isActive: boolean;
         createdAt: bigint;
+        lastScore: bigint;
+        lastAuditHash: string;
+        lastUpdateTimestamp: bigint;
       }
     ],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "getAgreementScore"
+  ): TypedContractMethod<[_agreementId: BigNumberish], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "oracleManager"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
@@ -361,8 +547,18 @@ export interface PESContract extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "setOracleManager"
+  ): TypedContractMethod<[_oracleManager: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "setRelayer"
   ): TypedContractMethod<[_relayer: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "submitValidatedBatch"
+  ): TypedContractMethod<
+    [_agreementId: BigNumberish, _auditHash: BytesLike, _score: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
   getEvent(
     key: "AgreementCreated"
@@ -379,11 +575,25 @@ export interface PESContract extends BaseContract {
     AuditRecordedEvent.OutputObject
   >;
   getEvent(
+    key: "PaymentApproved"
+  ): TypedContractEvent<
+    PaymentApprovedEvent.InputTuple,
+    PaymentApprovedEvent.OutputTuple,
+    PaymentApprovedEvent.OutputObject
+  >;
+  getEvent(
     key: "PaymentRequested"
   ): TypedContractEvent<
     PaymentRequestedEvent.InputTuple,
     PaymentRequestedEvent.OutputTuple,
     PaymentRequestedEvent.OutputObject
+  >;
+  getEvent(
+    key: "ValidatedBatchSubmitted"
+  ): TypedContractEvent<
+    ValidatedBatchSubmittedEvent.InputTuple,
+    ValidatedBatchSubmittedEvent.OutputTuple,
+    ValidatedBatchSubmittedEvent.OutputObject
   >;
 
   filters: {
@@ -409,6 +619,17 @@ export interface PESContract extends BaseContract {
       AuditRecordedEvent.OutputObject
     >;
 
+    "PaymentApproved(uint256,address,uint256,bytes32,uint256)": TypedContractEvent<
+      PaymentApprovedEvent.InputTuple,
+      PaymentApprovedEvent.OutputTuple,
+      PaymentApprovedEvent.OutputObject
+    >;
+    PaymentApproved: TypedContractEvent<
+      PaymentApprovedEvent.InputTuple,
+      PaymentApprovedEvent.OutputTuple,
+      PaymentApprovedEvent.OutputObject
+    >;
+
     "PaymentRequested(uint256,address,uint256,bytes32)": TypedContractEvent<
       PaymentRequestedEvent.InputTuple,
       PaymentRequestedEvent.OutputTuple,
@@ -418,6 +639,17 @@ export interface PESContract extends BaseContract {
       PaymentRequestedEvent.InputTuple,
       PaymentRequestedEvent.OutputTuple,
       PaymentRequestedEvent.OutputObject
+    >;
+
+    "ValidatedBatchSubmitted(uint256,address,bytes32,uint256,uint256)": TypedContractEvent<
+      ValidatedBatchSubmittedEvent.InputTuple,
+      ValidatedBatchSubmittedEvent.OutputTuple,
+      ValidatedBatchSubmittedEvent.OutputObject
+    >;
+    ValidatedBatchSubmitted: TypedContractEvent<
+      ValidatedBatchSubmittedEvent.InputTuple,
+      ValidatedBatchSubmittedEvent.OutputTuple,
+      ValidatedBatchSubmittedEvent.OutputObject
     >;
   };
 }

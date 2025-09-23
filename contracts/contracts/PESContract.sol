@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import "./OracleManager.sol";
+
 contract PESContract {
     struct Agreement {
         bytes32 agreementHash;
@@ -9,6 +11,9 @@ contract PESContract {
         uint256 hectares;
         bool isActive;
         uint256 createdAt;
+        uint256 lastScore;
+        bytes32 lastAuditHash;
+        uint256 lastUpdateTimestamp;
     }
 
     mapping(uint256 => Agreement) public agreements;
@@ -16,6 +21,9 @@ contract PESContract {
 
     address public owner;
     address public relayer;
+    OracleManager public oracleManager;
+
+    uint256 public constant SCORE_THRESHOLD = 70; // 0.7 * 100 for precision
 
     event AgreementCreated(
         uint256 indexed agreementId,
@@ -23,6 +31,22 @@ contract PESContract {
         address indexed producer,
         uint256 baseValue,
         uint256 hectares
+    );
+
+    event ValidatedBatchSubmitted(
+        uint256 indexed agreementId,
+        address indexed oracle,
+        bytes32 indexed auditHash,
+        uint256 score,
+        uint256 timestamp
+    );
+
+    event PaymentApproved(
+        uint256 indexed agreementId,
+        address indexed producer,
+        uint256 amount,
+        bytes32 indexed auditHash,
+        uint256 score
     );
 
     event PaymentRequested(
@@ -44,9 +68,10 @@ contract PESContract {
         _;
     }
 
-    constructor() {
+    constructor(address _oracleManager) {
         owner = msg.sender;
         relayer = msg.sender;
+        oracleManager = OracleManager(_oracleManager);
     }
 
     function setRelayer(address _relayer) external onlyOwner {
@@ -71,7 +96,10 @@ contract PESContract {
             baseValue: _baseValue,
             hectares: _hectares,
             isActive: true,
-            createdAt: block.timestamp
+            createdAt: block.timestamp,
+            lastScore: 0,
+            lastAuditHash: bytes32(0),
+            lastUpdateTimestamp: 0
         });
 
         emit AgreementCreated(
@@ -83,6 +111,47 @@ contract PESContract {
         );
 
         return agreementId;
+    }
+
+    function submitValidatedBatch(
+        uint256 _agreementId,
+        bytes32 _auditHash,
+        uint256 _score
+    ) external {
+        require(
+            oracleManager.isAuthorizedOracle(msg.sender),
+            "Only authorized oracle can submit batch"
+        );
+        require(_agreementId < agreementCounter, "Agreement does not exist");
+        require(_score <= 100, "Score must be between 0 and 100");
+
+        Agreement storage agreement = agreements[_agreementId];
+        require(agreement.isActive, "Agreement is not active");
+
+        // Update agreement with new score and audit hash
+        agreement.lastScore = _score;
+        agreement.lastAuditHash = _auditHash;
+        agreement.lastUpdateTimestamp = block.timestamp;
+
+        emit ValidatedBatchSubmitted(
+            _agreementId,
+            msg.sender,
+            _auditHash,
+            _score,
+            block.timestamp
+        );
+
+        // If score meets threshold, approve payment
+        if (_score >= SCORE_THRESHOLD) {
+            uint256 paymentAmount = agreement.baseValue * agreement.hectares;
+            emit PaymentApproved(
+                _agreementId,
+                agreement.producer,
+                paymentAmount,
+                _auditHash,
+                _score
+            );
+        }
     }
 
     function requestPayment(
@@ -118,7 +187,10 @@ contract PESContract {
             uint256 baseValue,
             uint256 hectares,
             bool isActive,
-            uint256 createdAt
+            uint256 createdAt,
+            uint256 lastScore,
+            bytes32 lastAuditHash,
+            uint256 lastUpdateTimestamp
         )
     {
         require(_agreementId < agreementCounter, "Agreement does not exist");
@@ -130,8 +202,22 @@ contract PESContract {
             agreement.baseValue,
             agreement.hectares,
             agreement.isActive,
-            agreement.createdAt
+            agreement.createdAt,
+            agreement.lastScore,
+            agreement.lastAuditHash,
+            agreement.lastUpdateTimestamp
         );
+    }
+
+    function getAgreementScore(
+        uint256 _agreementId
+    ) external view returns (uint256) {
+        require(_agreementId < agreementCounter, "Agreement does not exist");
+        return agreements[_agreementId].lastScore;
+    }
+
+    function setOracleManager(address _oracleManager) external onlyOwner {
+        oracleManager = OracleManager(_oracleManager);
     }
 
     function deactivateAgreement(uint256 _agreementId) external onlyOwner {

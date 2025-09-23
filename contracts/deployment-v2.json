@@ -1,0 +1,32 @@
+{
+  "network": "hedera-testnet",
+  "timestamp": "2025-09-23T13:28:51.353Z",
+  "deployer": "0x386960838e34953603e77a143fD87af5E5A3351b",
+  "contracts": {
+    "OracleManager": {
+      "address": "0x8D6AFFAdb405920b342dA772463E00Af47DDA9eA",
+      "txHash": "0x46eb6338ebf79fecc21f195540c9108fd5a6bee555961aa83c52886aa383dae2"
+    },
+    "PESContract": {
+      "address": "0xA87811913e89079F1e9EcAE045e65990837A3796",
+      "txHash": "0x40cd95f25a4fabe55c4387d89aca217b5e31b91193fc3e77f5a7895c8389c914"
+    }
+  },
+  "authorizedOracles": [
+    "0x386960838e34953603e77a143fD87af5E5A3351b"
+  ],
+  "configuration": {
+    "scoreThreshold": 70,
+    "oracleCount": 1
+  },
+  "deployment_info": {
+    "phase": "Phase 2 - Oracle System",
+    "features": [
+      "Oracle authorization/revocation",
+      "Batch validation with scores",
+      "Automatic payment approval for scores >= 70",
+      "Audit trail with cryptographic signatures",
+      "Integration with relayer automation"
+    ]
+  }
+}

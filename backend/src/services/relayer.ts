@@ -10,6 +10,7 @@ interface PaymentData {
   transaction_hash?: string
   created_at: string
   processed_at?: string
+  batch_id?: number
 }
 
 interface AgreementData {
@@ -77,13 +78,14 @@ export class RelayerService {
   }
 
   private startEventProcessing(): void {
-    // Simulate listening for PaymentRequested events
+    // Simulate listening for PaymentApproved events from the oracle system
     // In production, this would connect to Hedera's event system
     this.intervalId = setInterval(async () => {
       if (!this.isRunning) return
 
       try {
         await this.processPendingPayments()
+        await this.processApprovedPayments()
       } catch (error) {
         console.error('Error processing payments:', error)
       }
@@ -102,6 +104,36 @@ export class RelayerService {
     }
   }
 
+  private async processApprovedPayments(): Promise<void> {
+    try {
+      // Get batches that have been validated and have scores >= 70
+      const approvedBatches = await (this.database as any).all(`
+        SELECT b.*, a.producer_address, a.base_value, a.hectares 
+        FROM batches b
+        JOIN agreements a ON b.agreement_id = a.id
+        WHERE b.score >= 70 
+        AND b.validation_status = 'submitted'
+        AND b.id NOT IN (
+          SELECT DISTINCT batch_id FROM payments WHERE batch_id IS NOT NULL
+        )
+        ORDER BY b.submitted_at ASC
+      `)
+
+      for (const batch of approvedBatches) {
+        await this.handlePaymentApproved(
+          batch.agreement_id,
+          batch.producer_address,
+          batch.base_value * batch.hectares,
+          batch.audit_hash,
+          batch.score,
+          batch.id
+        )
+      }
+    } catch (error) {
+      console.error('Error processing approved payments:', error)
+    }
+  }
+
   private async processPayment(payment: PaymentData): Promise<void> {
     try {
       console.log(`Processing payment ${payment.id} for agreement ${payment.agreement_id}`)
@@ -113,12 +145,17 @@ export class RelayerService {
         return
       }
 
-      // Simulate HBAR transfer
-      // In production, this would use Hedera SDK to transfer HBAR or HTS tokens
-      const transactionHash = await this.simulateHbarTransfer(
-        agreement.producer_address,
-        payment.amount
+      // Get the transaction hash from the oracle logs for this batch
+      const oracleLog = await (this.database as any).get(
+        'SELECT transaction_hash FROM oracle_logs WHERE batch_id = ? AND action = "batch_submitted" ORDER BY timestamp DESC LIMIT 1',
+        [payment.batch_id]
       )
+      
+      const transactionHash = oracleLog?.transaction_hash || 'simulated_transfer'
+
+      // In production, this would use Hedera SDK to transfer HBAR or HTS tokens
+      // For now, we'll use the batch transaction hash as the payment reference
+      console.log(`Processing payment for batch ${payment.batch_id} with tx: ${transactionHash}`)
 
       // Update payment status
       await this.database.updatePaymentStatus(
@@ -151,6 +188,55 @@ export class RelayerService {
     return transactionHash
   }
 
+  async handlePaymentApproved(
+    agreementId: number, 
+    producerAddress: string, 
+    amount: number, 
+    auditHash: string, 
+    score: number,
+    batchId: number
+  ): Promise<void> {
+    try {
+      console.log(`Payment approved event received:`)
+      console.log(`- Agreement ID: ${agreementId}`)
+      console.log(`- Producer: ${producerAddress}`)
+      console.log(`- Amount: ${amount}`)
+      console.log(`- Score: ${score}`)
+      console.log(`- Audit Hash: ${auditHash}`)
+
+      // Create payment record in database
+      const paymentId = await this.database.createPayment({
+        agreementId: agreementId,
+        batchId: batchId,
+        amount: amount,
+        status: 'pending',
+        auditHash: auditHash,
+        score: score
+      })
+
+      console.log(`Payment record created with ID: ${paymentId}`)
+      
+      // Process payment immediately
+      const payment = await this.database.getPayment(paymentId) as PaymentData
+      if (payment) {
+        await this.processPayment(payment)
+        
+        // Record audit on blockchain after successful payment
+        await this.hederaService.recordAudit(auditHash)
+        
+        // Log the successful payment processing
+        await this.database.createOracleLog({
+          batchId: batchId,
+          action: 'payment_processed',
+          details: `Payment of ${amount} processed for score ${score}`,
+          transactionHash: payment.transaction_hash
+        })
+      }
+    } catch (error) {
+      console.error('Error handling payment approved event:', error)
+    }
+  }
+
   async handlePaymentRequested(agreementId: number, producerAddress: string, amount: number, auditHash: string): Promise<void> {
     try {
       console.log(`Payment requested event received:`)
@@ -163,7 +249,8 @@ export class RelayerService {
       const paymentId = await this.database.createPayment({
         agreementId: agreementId,
         amount: amount,
-        status: 'pending'
+        status: 'pending',
+        auditHash: auditHash
       })
 
       console.log(`Payment record created with ID: ${paymentId}`)

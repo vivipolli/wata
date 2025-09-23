@@ -91,6 +91,11 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         hectares
       )
 
+      // Update database with blockchain ID
+      if (blockchainAgreementId) {
+        await database.updateAgreementBlockchainId(agreementId, blockchainAgreementId)
+      }
+
       const response: ApiResponse<CreateAgreementResponse> = {
         success: true,
         data: {

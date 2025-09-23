@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { FaWater, FaFileContract, FaDollarSign, FaChartLine } from 'react-icons/fa'
-import { useAgreements, useReadings, usePayments } from '../hooks'
+import { FaWater, FaFileContract, FaDollarSign, FaChartLine, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa'
+import { useAgreements, useReadings, usePayments, useOracle } from '../hooks'
 import { formatNumber } from '../utils'
 import type { DashboardProps } from '../types'
 import type { IconType } from 'react-icons'
+import PaymentHistory from './PaymentHistory'
 
 interface StatCardProps {
   title: string
@@ -18,6 +19,8 @@ interface Stats {
   pendingPayments: number
   lastTurbidity: number
   complianceRate: number
+  averageScore: number
+  validationRate: number
 }
 
 const StatCard = ({ title, value, icon: Icon, color, subtitle }: StatCardProps) => (
@@ -53,12 +56,15 @@ export default function Dashboard({}: DashboardProps) {
   const { agreements, loading: agreementsLoading } = useAgreements()
   const { readings, loading: readingsLoading, simulateReading } = useReadings()
   const { getPaymentStats } = usePayments()
+  const { stats: oracleStats } = useOracle()
   
   const [stats, setStats] = useState<Stats>({
     activeContracts: 0,
     pendingPayments: 0,
     lastTurbidity: 0,
-    complianceRate: 0
+    complianceRate: 0,
+    averageScore: 0,
+    validationRate: 0
   })
   const [loading, setLoading] = useState<boolean>(false)
 
@@ -88,11 +94,21 @@ export default function Dashboard({}: DashboardProps) {
       console.error('Error fetching payment stats:', error)
     }
 
+    // Calculate average score from oracle stats
+    const averageScore = oracleStats ? parseFloat(oracleStats.successRate) : 0
+    
+    // Calculate validation rate (successful validations vs total attempts)
+    const validationRate = oracleStats && oracleStats.recentValidations > 0
+      ? (oracleStats.recentSubmissions / oracleStats.recentValidations) * 100
+      : 0
+
     setStats({
       activeContracts,
       pendingPayments,
       lastTurbidity,
-      complianceRate
+      complianceRate,
+      averageScore,
+      validationRate
     })
   }
 
@@ -118,7 +134,7 @@ export default function Dashboard({}: DashboardProps) {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 mb-8">
           <StatCard
             title="Active Contracts"
             value={stats.activeContracts}
@@ -143,6 +159,19 @@ export default function Dashboard({}: DashboardProps) {
             value={`${formatNumber(stats.complianceRate, 1)}%`}
             icon={FaChartLine}
             color="text-purple-600"
+          />
+          <StatCard
+            title="Oracle Score"
+            value={`${formatNumber(stats.averageScore, 1)}%`}
+            icon={FaCheckCircle}
+            color="text-indigo-600"
+            subtitle={stats.averageScore >= 70 ? "Good" : "Needs Improvement"}
+          />
+          <StatCard
+            title="Validation Rate"
+            value={`${formatNumber(stats.validationRate, 1)}%`}
+            icon={stats.validationRate >= 80 ? FaCheckCircle : FaExclamationTriangle}
+            color={stats.validationRate >= 80 ? "text-green-600" : "text-orange-600"}
           />
         </div>
 
@@ -216,6 +245,11 @@ export default function Dashboard({}: DashboardProps) {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Payment History */}
+      <div className="mt-8">
+        <PaymentHistory />
       </div>
     </div>
   )

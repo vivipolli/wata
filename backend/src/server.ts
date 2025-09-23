@@ -7,6 +7,7 @@ import { RelayerService } from './services/relayer.js'
 import agreementRoutes from './routes/agreements.js'
 import readingRoutes from './routes/readings.js'
 import paymentRoutes from './routes/payments.js'
+import oracleRoutes from './routes/oracle.js'
 import type { HealthStatus } from './types/index.js'
 
 dotenv.config()
@@ -27,6 +28,7 @@ const relayerService = new RelayerService(hederaService, db)
 app.use('/api/agreements', agreementRoutes(hederaService, db))
 app.use('/api/readings', readingRoutes(db))
 app.use('/api/payments', paymentRoutes(hederaService, db, relayerService))
+app.use('/api/oracle', oracleRoutes(db, hederaService))
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {

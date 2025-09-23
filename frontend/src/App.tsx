@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard'
 import ContractRegistration from './components/ContractRegistration'
 import Monitoring from './components/Monitoring'
 import Notifications from './components/Notifications'
+import Audit from './components/Audit'
 import { useHealth } from './hooks'
 
 function App(): JSX.Element {
@@ -18,6 +19,8 @@ function App(): JSX.Element {
         return <ContractRegistration />
       case 'monitoring':
         return <Monitoring />
+      case 'audit':
+        return <Audit />
       case 'notifications':
         return <Notifications />
       default:

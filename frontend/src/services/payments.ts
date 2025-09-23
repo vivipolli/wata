@@ -108,6 +108,30 @@ export const paymentsService = {
     } catch (error: any) {
       throw new Error(`Failed to fetch payment history: ${error.message}`)
     }
+  },
+
+  /**
+   * Get payment history (alias for getHistory)
+   */
+  async getPaymentHistory(): Promise<Payment[]> {
+    try {
+      const response = await this.getHistory({ limit: 50 })
+      return response.data?.payments || []
+    } catch (error: any) {
+      throw new Error(`Failed to fetch payment history: ${error.message}`)
+    }
+  },
+
+  /**
+   * Get payments for an agreement (alias for getByAgreement)
+   */
+  async getAgreementPayments(agreementId: number): Promise<Payment[]> {
+    try {
+      const response = await this.getByAgreement(agreementId)
+      return response.data?.payments || []
+    } catch (error: any) {
+      throw new Error(`Failed to fetch payments for agreement ${agreementId}: ${error.message}`)
+    }
   }
 }
 

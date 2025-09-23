@@ -17,13 +17,21 @@ export class HederaService {
     async initialize() {
         try {
             this.accountId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
-            this.privateKey = PrivateKey.fromString(process.env.HEDERA_PRIVATE_KEY);
+            this.privateKey = PrivateKey.fromStringECDSA(process.env.HEDERA_PRIVATE_KEY);
             this.contractAddress = process.env.CONTRACT_ADDRESS;
             if (!this.accountId || !this.privateKey || !this.contractAddress) {
                 throw new Error('Missing required Hedera configuration');
             }
             this.client = Client.forTestnet().setOperator(this.accountId, this.privateKey);
-            this.contractId = ContractId.fromString(this.contractAddress);
+            // Convert Ethereum address to Hedera Contract ID if needed
+            if (this.contractAddress.startsWith('0x')) {
+                // For Ethereum-style addresses, we need to use ContractId.fromEvmAddress
+                this.contractId = ContractId.fromEvmAddress(0, 0, this.contractAddress);
+            }
+            else {
+                // For Hedera-style addresses (0.0.123456)
+                this.contractId = ContractId.fromString(this.contractAddress);
+            }
             console.log('Hedera service initialized');
             console.log('Account ID:', this.accountId.toString());
             console.log('Contract Address:', this.contractAddress);
@@ -37,7 +45,7 @@ export class HederaService {
         try {
             const transaction = new ContractExecuteTransaction()
                 .setContractId(this.contractId)
-                .setGas(100000)
+                .setGas(200000)
                 .setFunction('createAgreement', new ContractFunctionParameters()
                 .addBytes32(formatBytes32String(agreementHash))
                 .addAddress(producerAddress)
@@ -45,8 +53,9 @@ export class HederaService {
                 .addUint256(hectares));
             const response = await transaction.execute(this.client);
             const receipt = await response.getRecord(this.client);
-            console.log('Agreement created on Hedera:', receipt.contractFunctionResult?.getUint256(0));
-            return receipt.contractFunctionResult?.getUint256(0);
+            const result = receipt.contractFunctionResult?.getUint256(0);
+            console.log('Agreement created on Hedera:', result);
+            return Number(result || 0);
         }
         catch (error) {
             console.error('Error creating agreement on Hedera:', error);
@@ -57,7 +66,7 @@ export class HederaService {
         try {
             const transaction = new ContractExecuteTransaction()
                 .setContractId(this.contractId)
-                .setGas(100000)
+                .setGas(200000)
                 .setFunction('requestPayment', new ContractFunctionParameters()
                 .addUint256(agreementId)
                 .addBytes32(formatBytes32String(auditHash)));
@@ -71,11 +80,52 @@ export class HederaService {
             throw error;
         }
     }
+    async submitValidatedBatch(agreementId, auditHash, score) {
+        try {
+            const transaction = new ContractExecuteTransaction()
+                .setContractId(this.contractId)
+                .setGas(200000)
+                .setFunction('submitValidatedBatch', new ContractFunctionParameters()
+                .addUint256(agreementId)
+                .addBytes32(formatBytes32String(auditHash))
+                .addUint256(score));
+            const response = await transaction.execute(this.client);
+            const receipt = await response.getRecord(this.client);
+            // Get the transaction ID from the response
+            // In Hedera, we use the transaction ID in format: accountId@validStart.nonce
+            const accountId = receipt.transactionId.accountId?.toString();
+            const validStart = receipt.transactionId.validStart;
+            const nonce = receipt.transactionId.nonce;
+            // Construct Transaction ID in the correct format: accountId@validStart.nonce
+            const transactionId = `${accountId}@${validStart.seconds}.${validStart.nanos}`;
+            console.log('Transaction ID from Hedera:', transactionId);
+            console.log('Transaction ID parts:', {
+                accountId,
+                validStart: `${validStart.seconds}.${validStart.nanos}`,
+                nonce
+            });
+            console.log('Validated batch submitted to Hedera:', {
+                agreementId,
+                auditHash,
+                score,
+                transactionId
+            });
+            // Return receipt with transaction ID
+            return {
+                ...receipt,
+                transactionHash: transactionId
+            };
+        }
+        catch (error) {
+            console.error('Error submitting validated batch to Hedera:', error);
+            throw error;
+        }
+    }
     async recordAudit(auditHash) {
         try {
             const transaction = new ContractExecuteTransaction()
                 .setContractId(this.contractId)
-                .setGas(100000)
+                .setGas(200000)
                 .setFunction('recordAudit', new ContractFunctionParameters()
                 .addBytes32(formatBytes32String(auditHash)));
             const response = await transaction.execute(this.client);
@@ -92,7 +142,7 @@ export class HederaService {
         try {
             const query = new ContractCallQuery()
                 .setContractId(this.contractId)
-                .setGas(100000)
+                .setGas(200000)
                 .setFunction('getAgreement', new ContractFunctionParameters().addUint256(agreementId));
             const response = await query.execute(this.client);
             const result = response.getContractFunctionResult();

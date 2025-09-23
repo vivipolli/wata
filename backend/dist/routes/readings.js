@@ -7,7 +7,7 @@ export default function readingRoutes(database) {
         try {
             const { agreementId, turbidityNtu, locationLat, locationLng, isSimulated = false } = req.body;
             // Validate required fields
-            if (!agreementId || turbidityNtu === undefined) {
+            if (agreementId === undefined || agreementId === null || turbidityNtu === undefined) {
                 const response = {
                     success: false,
                     error: 'Missing required fields: agreementId, turbidityNtu'
@@ -73,7 +73,7 @@ export default function readingRoutes(database) {
     router.post('/simulate', async (req, res) => {
         try {
             const { agreementId, locationLat, locationLng } = req.body;
-            if (!agreementId) {
+            if (agreementId === undefined || agreementId === null) {
                 const response = {
                     success: false,
                     error: 'Missing required field: agreementId'

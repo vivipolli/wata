@@ -38,9 +38,47 @@
       ]
     },
     "/home/vivi/projetos/hackathons/wata/contracts/contracts/PESContract.sol": {
-      "lastModificationDate": 1758489666907,
-      "contentHash": "6009dacbe70b7d797299e6a644eda5eb",
+      "lastModificationDate": 1758581261526,
+      "contentHash": "cb3cd50ce4b844c5d99acaacfbd1b5f5",
       "sourceName": "contracts/PESContract.sol",
+      "solcConfig": {
+        "version": "0.8.28",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./OracleManager.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.28"
+      ],
+      "artifacts": [
+        "PESContract"
+      ]
+    },
+    "/home/vivi/projetos/hackathons/wata/contracts/contracts/OracleManager.sol": {
+      "lastModificationDate": 1758581227044,
+      "contentHash": "41f45de89ef9fe97a9fe982ef2e676bd",
+      "sourceName": "contracts/OracleManager.sol",
       "solcConfig": {
         "version": "0.8.28",
         "settings": {
@@ -70,7 +108,7 @@
         "^0.8.28"
       ],
       "artifacts": [
-        "PESContract"
+        "OracleManager"
       ]
     }
   }

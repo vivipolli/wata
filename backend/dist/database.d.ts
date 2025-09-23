@@ -21,9 +21,31 @@ interface ReadingData {
 }
 interface PaymentData {
     agreementId: number;
+    batchId?: number;
     amount: number;
     transactionHash?: string;
     status: 'pending' | 'processing' | 'completed' | 'failed';
+    auditHash?: string;
+    score?: number;
+}
+interface BatchData {
+    agreementId: number;
+    auditHash: string;
+    oracleSignature?: string;
+    score: number;
+    readingsCount: number;
+    averageTurbidity: number;
+    medianTurbidity?: number;
+    outliersDetected?: number;
+    validationStatus?: 'pending' | 'validated' | 'rejected';
+    oracleAddress?: string;
+}
+interface OracleLogData {
+    batchId: number;
+    action: string;
+    details?: string;
+    oracleAddress?: string;
+    transactionHash?: string;
 }
 export declare class Database {
     private dbPath;
@@ -37,6 +59,7 @@ export declare class Database {
     createAgreement(agreementData: AgreementData): Promise<number>;
     getAgreement(id: number): Promise<DatabaseRow | undefined>;
     getAgreementByHash(agreementHash: string): Promise<DatabaseRow | undefined>;
+    updateAgreementBlockchainId(id: number, blockchainId: number): Promise<void>;
     getAllAgreements(): Promise<DatabaseRow[]>;
     createReading(readingData: ReadingData): Promise<number>;
     getReadingsByAgreement(agreementId: number, limit?: number): Promise<DatabaseRow[]>;
@@ -46,6 +69,17 @@ export declare class Database {
     getPaymentsByAgreement(agreementId: number): Promise<DatabaseRow[]>;
     getPendingPayments(): Promise<DatabaseRow[]>;
     getPayment(paymentId: number): Promise<DatabaseRow | undefined>;
+    createBatch(batchData: BatchData): Promise<number>;
+    getBatch(batchId: number): Promise<DatabaseRow | undefined>;
+    getBatchByAuditHash(auditHash: string): Promise<DatabaseRow | undefined>;
+    getBatchesByAgreement(agreementId: number, limit?: number): Promise<DatabaseRow[]>;
+    updateBatchStatus(batchId: number, status: string, submittedAt?: Date): Promise<void>;
+    getPendingBatches(): Promise<DatabaseRow[]>;
+    createOracleLog(logData: OracleLogData): Promise<number>;
+    getOracleLogsByBatch(batchId: number): Promise<DatabaseRow[]>;
+    getRecentOracleLogs(limit?: number): Promise<DatabaseRow[]>;
+    getWeeklyReadings(agreementId: number, weekStart: Date, weekEnd: Date): Promise<DatabaseRow[]>;
+    getAgreementsWithRecentActivity(days?: number): Promise<DatabaseRow[]>;
     close(): void;
 }
 export {};

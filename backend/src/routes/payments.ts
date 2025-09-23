@@ -151,6 +151,42 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
     }
   })
 
+  // Get payment history
+  router.get('/history', async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50
+      const status = req.query.status as string
+      
+      let payments
+      if (status) {
+        payments = await (database as any).all(
+          'SELECT * FROM payments WHERE status = ? ORDER BY created_at DESC LIMIT ?',
+          [status, limit]
+        )
+      } else {
+        payments = await (database as any).all(
+          'SELECT * FROM payments ORDER BY created_at DESC LIMIT ?',
+          [limit]
+        )
+      }
+
+      const response: ApiResponse = {
+        success: true,
+        data: { payments }
+      }
+
+      res.json(response)
+    } catch (error) {
+      console.error('Error fetching payment history:', error)
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to fetch payment history',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
   // Get payment statistics
   router.get('/stats', async (req: Request, res: Response) => {
     try {

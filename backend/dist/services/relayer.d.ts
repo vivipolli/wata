@@ -18,8 +18,10 @@ export declare class RelayerService {
     stop(): void;
     private startEventProcessing;
     private processPendingPayments;
+    private processApprovedPayments;
     private processPayment;
     private simulateHbarTransfer;
+    handlePaymentApproved(agreementId: number, producerAddress: string, amount: number, auditHash: string, score: number, batchId: number): Promise<void>;
     handlePaymentRequested(agreementId: number, producerAddress: string, amount: number, auditHash: string): Promise<void>;
     triggerPaymentCheck(agreementId: number): Promise<PaymentCheckResult>;
 }

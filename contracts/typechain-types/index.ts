@@ -2,7 +2,9 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { Lock } from "./Lock";
+export type { OracleManager } from "./OracleManager";
 export type { PESContract } from "./PESContract";
 export * as factories from "./factories";
 export { Lock__factory } from "./factories/Lock__factory";
+export { OracleManager__factory } from "./factories/OracleManager__factory";
 export { PESContract__factory } from "./factories/PESContract__factory";

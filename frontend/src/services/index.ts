@@ -7,6 +7,7 @@ import agreementsService from './agreements'
 import readingsService from './readings'
 import paymentsService from './payments'
 import healthService from './health'
+import { oracleService } from './oracle'
 import apiClient from './api'
 
 // Export individual services
@@ -15,6 +16,7 @@ export {
   readingsService,
   paymentsService,
   healthService,
+  oracleService,
   apiClient
 }
 
@@ -24,5 +26,6 @@ export default {
   readings: readingsService,
   payments: paymentsService,
   health: healthService,
+  oracle: oracleService,
   api: apiClient
 }

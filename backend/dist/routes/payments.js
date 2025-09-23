@@ -5,7 +5,7 @@ export default function paymentRoutes(hederaService, database, relayerService) {
     router.post('/trigger-check/:agreementId', async (req, res) => {
         try {
             const agreementId = parseInt(req.params.agreementId);
-            if (!agreementId) {
+            if (isNaN(agreementId) || agreementId < 0) {
                 const response = {
                     success: false,
                     error: 'Invalid agreement ID'
@@ -113,6 +113,34 @@ export default function paymentRoutes(hederaService, database, relayerService) {
             const response = {
                 success: false,
                 error: 'Failed to process payment',
+                message: error instanceof Error ? error.message : 'Unknown error'
+            };
+            res.status(500).json(response);
+        }
+    });
+    // Get payment history
+    router.get('/history', async (req, res) => {
+        try {
+            const limit = parseInt(req.query.limit) || 50;
+            const status = req.query.status;
+            let payments;
+            if (status) {
+                payments = await database.all('SELECT * FROM payments WHERE status = ? ORDER BY created_at DESC LIMIT ?', [status, limit]);
+            }
+            else {
+                payments = await database.all('SELECT * FROM payments ORDER BY created_at DESC LIMIT ?', [limit]);
+            }
+            const response = {
+                success: true,
+                data: { payments }
+            };
+            res.json(response);
+        }
+        catch (error) {
+            console.error('Error fetching payment history:', error);
+            const response = {
+                success: false,
+                error: 'Failed to fetch payment history',
                 message: error instanceof Error ? error.message : 'Unknown error'
             };
             res.status(500).json(response);

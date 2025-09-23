@@ -34,9 +34,33 @@ interface ReadingData {
 
 interface PaymentData {
   agreementId: number
+  batchId?: number
   amount: number
   transactionHash?: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
+  auditHash?: string
+  score?: number
+}
+
+interface BatchData {
+  agreementId: number
+  auditHash: string
+  oracleSignature?: string
+  score: number
+  readingsCount: number
+  averageTurbidity: number
+  medianTurbidity?: number
+  outliersDetected?: number
+  validationStatus?: 'pending' | 'validated' | 'rejected'
+  oracleAddress?: string
+}
+
+interface OracleLogData {
+  batchId: number
+  action: string
+  details?: string
+  oracleAddress?: string
+  transactionHash?: string
 }
 
 export class Database {
@@ -133,6 +157,28 @@ export class Database {
         location_lng REAL,
         is_simulated BOOLEAN DEFAULT 0,
         audit_hash TEXT,
+        batch_id INTEGER,
+        is_validated BOOLEAN DEFAULT 0,
+        FOREIGN KEY (agreement_id) REFERENCES agreements (id),
+        FOREIGN KEY (batch_id) REFERENCES batches (id)
+      )
+    `
+
+    const createBatchesTable = `
+      CREATE TABLE IF NOT EXISTS batches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agreement_id INTEGER NOT NULL,
+        audit_hash TEXT UNIQUE NOT NULL,
+        oracle_signature TEXT,
+        score REAL NOT NULL,
+        readings_count INTEGER NOT NULL,
+        average_turbidity REAL NOT NULL,
+        median_turbidity REAL,
+        outliers_detected INTEGER DEFAULT 0,
+        validation_status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        submitted_at DATETIME,
+        oracle_address TEXT,
         FOREIGN KEY (agreement_id) REFERENCES agreements (id)
       )
     `
@@ -141,18 +187,37 @@ export class Database {
       CREATE TABLE IF NOT EXISTS payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         agreement_id INTEGER NOT NULL,
+        batch_id INTEGER,
         amount INTEGER NOT NULL,
         transaction_hash TEXT,
         status TEXT DEFAULT 'pending',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         processed_at DATETIME,
-        FOREIGN KEY (agreement_id) REFERENCES agreements (id)
+        audit_hash TEXT,
+        score REAL,
+        FOREIGN KEY (agreement_id) REFERENCES agreements (id),
+        FOREIGN KEY (batch_id) REFERENCES batches (id)
+      )
+    `
+
+    const createOracleLogsTable = `
+      CREATE TABLE IF NOT EXISTS oracle_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT,
+        oracle_address TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        transaction_hash TEXT,
+        FOREIGN KEY (batch_id) REFERENCES batches (id)
       )
     `
 
     await this.run(createAgreementsTable)
     await this.run(createReadingsTable)
+    await this.run(createBatchesTable)
     await this.run(createPaymentsTable)
+    await this.run(createOracleLogsTable)
   }
 
   async createAgreement(agreementData: AgreementData): Promise<number> {
@@ -170,10 +235,10 @@ export class Database {
     const result = await this.run(
       `INSERT INTO agreements 
        (agreement_hash, producer_name, producer_address, base_value, hectares, 
-        location_lat, location_lng, duration_days)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        location_lat, location_lng, duration_days, blockchain_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [agreementHash, producerName, producerAddress, baseValue, hectares, 
-       locationLat, locationLng, durationDays]
+       locationLat, locationLng, durationDays, null]
     )
 
     const id = result?.lastID
@@ -189,6 +254,10 @@ export class Database {
 
   async getAgreementByHash(agreementHash: string): Promise<DatabaseRow | undefined> {
     return await this.get('SELECT * FROM agreements WHERE agreement_hash = ?', [agreementHash])
+  }
+
+  async updateAgreementBlockchainId(id: number, blockchainId: number): Promise<void> {
+    await this.run('UPDATE agreements SET blockchain_id = ? WHERE id = ?', [blockchainId, id])
   }
 
   async getAllAgreements(): Promise<DatabaseRow[]> {
@@ -237,12 +306,12 @@ export class Database {
   }
 
   async createPayment(paymentData: PaymentData): Promise<number> {
-    const { agreementId, amount, transactionHash, status } = paymentData
+    const { agreementId, batchId, amount, transactionHash, status, auditHash, score } = paymentData
 
     const result = await this.run(
-      `INSERT INTO payments (agreement_id, amount, transaction_hash, status)
-       VALUES (?, ?, ?, ?)`,
-      [agreementId, amount, transactionHash, status]
+      `INSERT INTO payments (agreement_id, batch_id, amount, transaction_hash, status, audit_hash, score)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [agreementId, batchId, amount, transactionHash, status, auditHash, score]
     )
 
     return result?.lastID || 0
@@ -284,6 +353,127 @@ export class Database {
 
   async getPayment(paymentId: number): Promise<DatabaseRow | undefined> {
     return await this.get('SELECT * FROM payments WHERE id = ?', [paymentId])
+  }
+
+  // Batch methods
+  async createBatch(batchData: BatchData): Promise<number> {
+    const {
+      agreementId,
+      auditHash,
+      oracleSignature,
+      score,
+      readingsCount,
+      averageTurbidity,
+      medianTurbidity,
+      outliersDetected,
+      validationStatus,
+      oracleAddress
+    } = batchData
+
+    const result = await this.run(
+      `INSERT INTO batches 
+       (agreement_id, audit_hash, oracle_signature, score, readings_count, 
+        average_turbidity, median_turbidity, outliers_detected, validation_status, oracle_address)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [agreementId, auditHash, oracleSignature, score, readingsCount, 
+       averageTurbidity, medianTurbidity, outliersDetected, validationStatus, oracleAddress]
+    )
+
+    return result?.lastID || 0
+  }
+
+  async getBatch(batchId: number): Promise<DatabaseRow | undefined> {
+    return await this.get('SELECT * FROM batches WHERE id = ?', [batchId])
+  }
+
+  async getBatchByAuditHash(auditHash: string): Promise<DatabaseRow | undefined> {
+    return await this.get('SELECT * FROM batches WHERE audit_hash = ?', [auditHash])
+  }
+
+  async getBatchesByAgreement(agreementId: number, limit: number = 50): Promise<DatabaseRow[]> {
+    return await this.all(
+      `SELECT * FROM batches 
+       WHERE agreement_id = ? 
+       ORDER BY created_at DESC 
+       LIMIT ?`,
+      [agreementId, limit]
+    )
+  }
+
+  async updateBatchStatus(batchId: number, status: string, submittedAt?: Date): Promise<void> {
+    const updateFields: string[] = ['validation_status = ?']
+    const params: any[] = [status]
+
+    if (submittedAt) {
+      updateFields.push('submitted_at = ?')
+      params.push(submittedAt.toISOString())
+    }
+
+    params.push(batchId)
+
+    await this.run(
+      `UPDATE batches SET ${updateFields.join(', ')} WHERE id = ?`,
+      params
+    )
+  }
+
+  async getPendingBatches(): Promise<DatabaseRow[]> {
+    return await this.all(
+      'SELECT * FROM batches WHERE validation_status = "pending" ORDER BY created_at ASC'
+    )
+  }
+
+  // Oracle log methods
+  async createOracleLog(logData: OracleLogData): Promise<number> {
+    const { batchId, action, details, oracleAddress, transactionHash } = logData
+
+    const result = await this.run(
+      `INSERT INTO oracle_logs (batch_id, action, details, oracle_address, transaction_hash)
+       VALUES (?, ?, ?, ?, ?)`,
+      [batchId, action, details, oracleAddress, transactionHash]
+    )
+
+    return result?.lastID || 0
+  }
+
+  async getOracleLogsByBatch(batchId: number): Promise<DatabaseRow[]> {
+    return await this.all(
+      'SELECT * FROM oracle_logs WHERE batch_id = ? ORDER BY timestamp DESC',
+      [batchId]
+    )
+  }
+
+  async getRecentOracleLogs(limit: number = 100): Promise<DatabaseRow[]> {
+    return await this.all(
+      `SELECT ol.*, b.audit_hash, b.agreement_id 
+       FROM oracle_logs ol
+       JOIN batches b ON ol.batch_id = b.id
+       ORDER BY ol.timestamp DESC 
+       LIMIT ?`,
+      [limit]
+    )
+  }
+
+  // Weekly aggregation methods
+  async getWeeklyReadings(agreementId: number, weekStart: Date, weekEnd: Date): Promise<DatabaseRow[]> {
+    return await this.all(
+      `SELECT * FROM readings 
+       WHERE agreement_id = ? 
+       AND timestamp BETWEEN ? AND ?
+       ORDER BY timestamp ASC`,
+      [agreementId, weekStart.toISOString(), weekEnd.toISOString()]
+    )
+  }
+
+  async getAgreementsWithRecentActivity(days: number = 7): Promise<DatabaseRow[]> {
+    return await this.all(
+      `SELECT DISTINCT a.* 
+       FROM agreements a
+       JOIN readings r ON a.id = r.agreement_id
+       WHERE r.timestamp >= datetime('now', '-${days} days')
+       AND a.is_active = 1
+       ORDER BY a.created_at DESC`
+    )
   }
 
   close(): void {

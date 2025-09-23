@@ -14,8 +14,9 @@ export declare class HederaService {
     private contractAddress;
     private contractId;
     initialize(): Promise<void>;
-    createAgreement(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<bigint | undefined>;
+    createAgreement(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<number | undefined>;
     requestPayment(agreementId: number, auditHash: string): Promise<TransactionRecord>;
+    submitValidatedBatch(agreementId: number, auditHash: string, score: number): Promise<TransactionRecord>;
     recordAudit(auditHash: string): Promise<TransactionRecord>;
     getAgreement(agreementId: number): Promise<AgreementData>;
     transferHbar(toAddress: string, amount: number): Promise<string>;

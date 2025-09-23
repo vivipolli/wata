@@ -1,4 +1,4 @@
-import { FaWater, FaChartLine, FaFileContract, FaBell, FaCircle } from 'react-icons/fa'
+import { FaWater, FaChartLine, FaFileContract, FaBell, FaCircle, FaShieldAlt } from 'react-icons/fa'
 import type { HeaderProps } from '../types'
 import type { IconType } from 'react-icons'
 
@@ -13,6 +13,7 @@ export default function Header({ currentTab, onTabChange, isHealthy = false }: H
     { id: 'dashboard', label: 'Dashboard', icon: FaChartLine },
     { id: 'contracts', label: 'Contracts', icon: FaFileContract },
     { id: 'monitoring', label: 'Monitoring', icon: FaWater },
+    { id: 'audit', label: 'Audit', icon: FaShieldAlt },
     { id: 'notifications', label: 'Notifications', icon: FaBell }
   ]
 

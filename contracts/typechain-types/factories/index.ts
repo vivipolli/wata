@@ -2,4 +2,5 @@
 /* tslint:disable */
 /* eslint-disable */
 export { Lock__factory } from "./Lock__factory";
+export { OracleManager__factory } from "./OracleManager__factory";
 export { PESContract__factory } from "./PESContract__factory";

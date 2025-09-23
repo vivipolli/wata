@@ -18,7 +18,7 @@ export const useHealth = (): UseHealthReturn => {
     try {
       const response = await healthService.checkHealth()
       setHealthData(response)
-      setIsHealthy(response.status === 'OK')
+      setIsHealthy(response.status === 'healthy')
     } catch (err: any) {
       setError(err.message)
       setIsHealthy(false)
@@ -45,7 +45,7 @@ export const useHealth = (): UseHealthReturn => {
     try {
       const response = await healthService.getSystemStatus()
       setHealthData(response)
-      setIsHealthy(response.status === 'OK')
+      setIsHealthy(response.status === 'healthy')
       return response
     } catch (err: any) {
       setError(err.message)

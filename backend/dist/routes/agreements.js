@@ -41,6 +41,10 @@ export default function agreementRoutes(hederaService, database) {
             });
             // Create agreement on Hedera blockchain
             const blockchainAgreementId = await hederaService.createAgreement(agreementHash, producerAddress, baseValue, hectares);
+            // Update database with blockchain ID
+            if (blockchainAgreementId) {
+                await database.updateAgreementBlockchainId(agreementId, blockchainAgreementId);
+            }
             const response = {
                 success: true,
                 data: {
