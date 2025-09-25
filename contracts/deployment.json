@@ -1,9 +1,8 @@
 {
-  "contractId": "0.0.6884916",
-  "contractAddress": "0000000000000000000000000000000000690e34",
+  "contractAddress": "0xd580e716e96fb351A9e524588500A99b1068946A",
+  "oracleManagerAddress": "0x3f7D477EA4F036c47aE57d23DBe8e751cE37005a",
   "network": "hedera_testnet",
-  "deployedAt": "2025-09-22T18:59:04.495Z",
-  "deployer": "0.0.5904577",
-  "gasUsed": "N/A",
-  "transactionId": "0.0.5904577@1758567533.183156397"
+  "deployedAt": "2025-09-25T19:51:22.470Z",
+  "owner": "0x386960838e34953603e77a143fD87af5E5A3351b",
+  "relayer": "0x386960838e34953603e77a143fD87af5E5A3351b"
 }

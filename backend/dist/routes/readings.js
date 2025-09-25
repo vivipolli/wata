@@ -14,11 +14,11 @@ export default function readingRoutes(database) {
                 };
                 return res.status(400).json(response);
             }
-            // Validate turbidity range (0-20 NTU)
-            if (turbidityNtu < 0 || turbidityNtu > 20) {
+            // Validate turbidity range (0-100 NTU) - Business Rule: Leituras fora do intervalo aceitável (0–100 NTU) são automaticamente rejeitadas
+            if (turbidityNtu < 0 || turbidityNtu > 100) {
                 const response = {
                     success: false,
-                    error: 'Turbidity must be between 0 and 20 NTU'
+                    error: 'Turbidity must be between 0 and 100 NTU'
                 };
                 return res.status(400).json(response);
             }
@@ -196,8 +196,8 @@ export default function readingRoutes(database) {
             const averageTurbidity = turbidityValues.reduce((sum, val) => sum + val, 0) / turbidityValues.length;
             const minTurbidity = Math.min(...turbidityValues);
             const maxTurbidity = Math.max(...turbidityValues);
-            // Calculate compliance rate (turbidity <= 10 NTU)
-            const compliantReadings = recentReadings.filter((r) => r.turbidity_ntu <= 10);
+            // Calculate compliance rate (turbidity <= 100 NTU) - All readings within valid range are compliant
+            const compliantReadings = recentReadings.filter((r) => r.turbidity_ntu <= 100);
             const complianceRate = (compliantReadings.length / recentReadings.length) * 100;
             const response = {
                 success: true,

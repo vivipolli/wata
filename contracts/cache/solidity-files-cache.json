@@ -8,11 +8,12 @@
       "solcConfig": {
         "version": "0.8.28",
         "settings": {
-          "evmVersion": "paris",
           "optimizer": {
-            "enabled": false,
+            "enabled": true,
             "runs": 200
           },
+          "viaIR": true,
+          "evmVersion": "paris",
           "outputSelection": {
             "*": {
               "*": [
@@ -38,17 +39,18 @@
       ]
     },
     "/home/vivi/projetos/hackathons/wata/contracts/contracts/PESContract.sol": {
-      "lastModificationDate": 1758581261526,
-      "contentHash": "cb3cd50ce4b844c5d99acaacfbd1b5f5",
+      "lastModificationDate": 1758829817347,
+      "contentHash": "5e355b8278b281efaadededee776d7fc",
       "sourceName": "contracts/PESContract.sol",
       "solcConfig": {
         "version": "0.8.28",
         "settings": {
-          "evmVersion": "paris",
           "optimizer": {
-            "enabled": false,
+            "enabled": true,
             "runs": 200
           },
+          "viaIR": true,
+          "evmVersion": "paris",
           "outputSelection": {
             "*": {
               "*": [
@@ -82,11 +84,12 @@
       "solcConfig": {
         "version": "0.8.28",
         "settings": {
-          "evmVersion": "paris",
           "optimizer": {
-            "enabled": false,
+            "enabled": true,
             "runs": 200
           },
+          "viaIR": true,
+          "evmVersion": "paris",
           "outputSelection": {
             "*": {
               "*": [

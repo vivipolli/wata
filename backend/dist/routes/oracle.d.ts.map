@@ -1,1 +1,1 @@
-{"version":3,"file":"oracle.d.ts","sourceRoot":"","sources":["../../src/routes/oracle.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,QAAQ,EAAE,MAAM,gBAAgB,CAAA;AACzC,OAAO,EAAE,aAAa,EAAE,MAAM,uBAAuB,CAAA;AAkBrD,MAAM,CAAC,OAAO,UAAU,YAAY,CAAC,QAAQ,EAAE,QAAQ,EAAE,aAAa,EAAE,aAAa,8CA2QpF"}
+{"version":3,"file":"oracle.d.ts","sourceRoot":"","sources":["../../src/routes/oracle.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAA;AACtC,OAAO,EAAE,aAAa,EAAE,MAAM,oBAAoB,CAAA;AAkBlD,MAAM,CAAC,OAAO,UAAU,YAAY,CAAC,QAAQ,EAAE,QAAQ,EAAE,aAAa,EAAE,aAAa,8CAiTpF"}

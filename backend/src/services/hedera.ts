@@ -9,7 +9,9 @@ import {
   TransactionResponse,
   ContractId,
   AccountBalanceQuery,
-  TransactionRecord
+  TransactionRecord,
+  TransferTransaction,
+  AccountInfoQuery
 } from '@hashgraph/sdk'
 import { ethers } from 'ethers'
 import crypto from 'crypto'
@@ -44,7 +46,15 @@ export class HederaService {
   async initialize(): Promise<void> {
     try {
       this.accountId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID!)
-      this.privateKey = PrivateKey.fromStringECDSA(process.env.HEDERA_PRIVATE_KEY!)
+      
+      // Handle different private key formats
+      const privateKeyString = process.env.HEDERA_PRIVATE_KEY!
+      if (privateKeyString.startsWith('0x')) {
+        // Remove 0x prefix for Hedera SDK
+        this.privateKey = PrivateKey.fromString(privateKeyString.slice(2))
+      } else {
+        this.privateKey = PrivateKey.fromString(privateKeyString)
+      }
       this.contractAddress = process.env.CONTRACT_ADDRESS!
 
       if (!this.accountId || !this.privateKey || !this.contractAddress) {
@@ -244,6 +254,60 @@ export class HederaService {
       return balance.hbars.toString()
     } catch (error) {
       console.error('Error getting account balance:', error)
+      throw error
+    }
+  }
+
+  async transferHBAR(toAddress: string, amountInTinybars: number): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+    try {
+      if (!this.client) {
+        throw new Error('Hedera service not initialized')
+      }
+
+      const transferTransaction = new TransferTransaction()
+        .addHbarTransfer(AccountId.fromString(process.env.HEDERA_ACCOUNT_ID!), new Hbar(-amountInTinybars / 100000000))
+        .addHbarTransfer(AccountId.fromString(toAddress), new Hbar(amountInTinybars / 100000000))
+        .setMaxTransactionFee(new Hbar(5))
+
+      const response = await transferTransaction.execute(this.client!)
+      const receipt = await response.getReceipt(this.client!)
+      
+      const transactionId = response.transactionId.toString()
+      console.log(`HBAR transfer successful: ${transactionId}`)
+
+      return {
+        success: true,
+        transactionHash: transactionId
+      }
+    } catch (error) {
+      console.error('Error transferring HBAR:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  async getAccountInfo(accountId: string): Promise<any> {
+    try {
+      if (!this.client) {
+        throw new Error('Hedera service not initialized')
+      }
+
+      const accountInfo = await new AccountInfoQuery()
+        .setAccountId(AccountId.fromString(accountId))
+        .execute(this.client!)
+
+      return {
+        accountId: accountInfo.accountId.toString(),
+        balance: accountInfo.balance.toString(),
+        key: accountInfo.key.toString(),
+        isDeleted: accountInfo.isDeleted,
+        proxyAccountId: accountInfo.proxyAccountId?.toString(),
+        proxyReceived: accountInfo.proxyReceived.toString()
+      }
+    } catch (error) {
+      console.error('Error getting account info:', error)
       throw error
     }
   }

@@ -21,6 +21,12 @@ export declare class HederaService {
     getAgreement(agreementId: number): Promise<AgreementData>;
     transferHbar(toAddress: string, amount: number): Promise<string>;
     getAccountBalance(accountId: string): Promise<string>;
+    transferHBAR(toAddress: string, amountInTinybars: number): Promise<{
+        success: boolean;
+        transactionHash?: string;
+        error?: string;
+    }>;
+    getAccountInfo(accountId: string): Promise<any>;
 }
 export {};
 //# sourceMappingURL=hedera.d.ts.map

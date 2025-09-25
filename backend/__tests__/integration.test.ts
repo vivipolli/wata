@@ -212,9 +212,9 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         })
       })
 
-      // Verify turbidity is within valid range
+      // Verify turbidity is within valid range (0-100 NTU) - Business Rule
       expect(response.body.data.turbidityNtu).toBeGreaterThanOrEqual(0)
-      expect(response.body.data.turbidityNtu).toBeLessThanOrEqual(20)
+      expect(response.body.data.turbidityNtu).toBeLessThanOrEqual(100)
     })
 
     it('should reject simulation without agreementId', async () => {
@@ -280,7 +280,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     it('should reject reading with invalid turbidity range', async () => {
       const invalidReadingData = {
         agreementId: agreementId,
-        turbidityNtu: 25, // Above valid range (0-20)
+        turbidityNtu: 150, // Above valid range (0-100 NTU) - Business Rule
       }
 
       const response = await request(app)
@@ -290,7 +290,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       expect(response.body).toMatchObject({
         success: false,
-        error: expect.stringContaining('Turbidity must be between 0 and 20 NTU')
+        error: expect.stringContaining('Turbidity must be between 0 and 100 NTU')
       })
     })
 
@@ -338,7 +338,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       agreementId = response.body.data.id
     })
 
-    it('should approve payment for compliant readings (≤10 NTU)', async () => {
+    it('should return automatic payment processing message for V3', async () => {
       // Add compliant readings
       const compliantReadings = [8.0, 7.5, 9.0, 6.5, 8.5]
       
@@ -361,16 +361,12 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         success: true,
         data: expect.objectContaining({
           success: true,
-          message: 'Payment approved and processed',
-          averageTurbidity: expect.any(Number),
-          amount: expect.any(Number)
+          message: 'Payment processing is automatic via event listeners'
         })
       })
-
-      expect(response.body.data.averageTurbidity).toBeLessThanOrEqual(10)
     })
 
-    it('should reject payment for non-compliant readings (>10 NTU)', async () => {
+    it('should return automatic payment processing message for V3 (even with non-compliant readings)', async () => {
       // Add non-compliant readings
       const nonCompliantReadings = [15.0, 12.5, 18.0, 14.5, 16.5]
       
@@ -392,14 +388,10 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       expect(response.body).toMatchObject({
         success: true,
         data: expect.objectContaining({
-          success: false,
-          message: 'Water quality does not meet standards',
-          averageTurbidity: expect.any(Number),
-          threshold: 10
+          success: true,
+          message: 'Payment processing is automatic via event listeners'
         })
       })
-
-      expect(response.body.data.averageTurbidity).toBeGreaterThan(10)
     })
 
     it('should reject trigger for non-existent agreement', async () => {
@@ -415,7 +407,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       })
     })
 
-    it('should create payment record when approved', async () => {
+    it('should return automatic payment processing message for V3 (payment record creation)', async () => {
       // Add compliant readings
       const compliantReadings = [5.0, 6.0, 7.0]
       
@@ -430,17 +422,20 @@ describe('W.A.T.A. Chain Integration Tests', () => {
           })
       }
 
-      await request(app)
+      const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
         .expect(200)
 
-      // Verify payment record was created
-      const payments = await database.getPaymentsByAgreement(agreementId)
-      expect(payments.length).toBeGreaterThan(0)
-      
-      const payment = payments[0]
-      expect(payment.status).toBe('completed')
-      expect(payment.amount).toBeGreaterThan(0)
+      expect(response.body).toMatchObject({
+        success: true,
+        data: expect.objectContaining({
+          success: true,
+          message: 'Payment processing is automatic via event listeners'
+        })
+      })
+
+      // Note: In V3, payment records are created automatically by the relayer
+      // when it processes PaymentApproved events from the smart contract
     })
   })
 

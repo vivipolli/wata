@@ -63,6 +63,17 @@ interface OracleLogData {
   transactionHash?: string
 }
 
+interface UserData {
+  email: string
+  name: string
+  password: string
+  role: string
+  address?: string
+  isActive: boolean
+  lastLogin?: string
+  createdAt: string
+}
+
 export class Database {
   private dbPath: string
   private db: sqlite3.Database | null = null
@@ -143,7 +154,12 @@ export class Database {
         location_lng REAL,
         duration_days INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        is_active BOOLEAN DEFAULT 1
+        is_active BOOLEAN DEFAULT 1,
+        blockchain_id INTEGER,
+        investor_address TEXT,
+        governance_mode TEXT DEFAULT "AUTO",
+        total_invested REAL DEFAULT 0,
+        total_paid REAL DEFAULT 0
       )
     `
 
@@ -195,6 +211,9 @@ export class Database {
         processed_at DATETIME,
         audit_hash TEXT,
         score REAL,
+        hcs_transaction_id TEXT,
+        hfs_file_id TEXT,
+        investor_address TEXT,
         FOREIGN KEY (agreement_id) REFERENCES agreements (id),
         FOREIGN KEY (batch_id) REFERENCES batches (id)
       )
@@ -213,11 +232,59 @@ export class Database {
       )
     `
 
+    const createInvestmentsTable = `
+      CREATE TABLE IF NOT EXISTS investments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agreement_id INTEGER NOT NULL,
+        investor_address TEXT NOT NULL,
+        amount REAL NOT NULL,
+        transaction_hash TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (agreement_id) REFERENCES agreements (id)
+      )
+    `
+
+    const createAuditRecordsTable = `
+      CREATE TABLE IF NOT EXISTS audit_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agreement_id INTEGER NOT NULL,
+        batch_id INTEGER,
+        audit_hash TEXT NOT NULL,
+        score REAL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        transaction_hash TEXT,
+        producer_address TEXT,
+        investor_address TEXT,
+        hcs_transaction_id TEXT,
+        hfs_file_id TEXT,
+        FOREIGN KEY (agreement_id) REFERENCES agreements (id),
+        FOREIGN KEY (batch_id) REFERENCES batches (id)
+      )
+    `
+
+    const createUsersTable = `
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('PRODUCER', 'INVESTOR', 'MANAGER')),
+        address TEXT,
+        is_active BOOLEAN DEFAULT 1,
+        last_login DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+
     await this.run(createAgreementsTable)
     await this.run(createReadingsTable)
     await this.run(createBatchesTable)
     await this.run(createPaymentsTable)
     await this.run(createOracleLogsTable)
+    await this.run(createInvestmentsTable)
+    await this.run(createAuditRecordsTable)
+    await this.run(createUsersTable)
   }
 
   async createAgreement(agreementData: AgreementData): Promise<number> {
@@ -473,6 +540,134 @@ export class Database {
        WHERE r.timestamp >= datetime('now', '-${days} days')
        AND a.is_active = 1
        ORDER BY a.created_at DESC`
+    )
+  }
+
+  // Investment methods
+  async createInvestment(investmentData: {
+    agreementId: number
+    investorAddress: string
+    amount: number
+    transactionHash?: string
+  }): Promise<number> {
+    const result = await this.run(
+      'INSERT INTO investments (agreement_id, investor_address, amount, transaction_hash) VALUES (?, ?, ?, ?)',
+      [investmentData.agreementId, investmentData.investorAddress, investmentData.amount, investmentData.transactionHash]
+    )
+    return result.lastID
+  }
+
+  async getInvestmentsByAgreement(agreementId: number): Promise<DatabaseRow[]> {
+    return await this.all(
+      'SELECT * FROM investments WHERE agreement_id = ? ORDER BY created_at DESC',
+      [agreementId]
+    )
+  }
+
+  async getInvestment(investmentId: number): Promise<DatabaseRow | undefined> {
+    return await this.get('SELECT * FROM investments WHERE id = ?', [investmentId])
+  }
+
+  // Audit records methods
+  async createAuditRecord(auditData: {
+    agreementId: number
+    batchId?: number
+    auditHash: string
+    score?: number
+    transactionHash?: string
+    producerAddress?: string
+    investorAddress?: string
+    hcsTransactionId?: string
+    hfsFileId?: string
+  }): Promise<number> {
+    const result = await this.run(
+      'INSERT INTO audit_records (agreement_id, batch_id, audit_hash, score, transaction_hash, producer_address, investor_address, hcs_transaction_id, hfs_file_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        auditData.agreementId,
+        auditData.batchId,
+        auditData.auditHash,
+        auditData.score,
+        auditData.transactionHash,
+        auditData.producerAddress,
+        auditData.investorAddress,
+        auditData.hcsTransactionId,
+        auditData.hfsFileId
+      ]
+    )
+    return result.lastID
+  }
+
+  async getAuditRecordsByAgreement(agreementId: number): Promise<DatabaseRow[]> {
+    return await this.all(
+      'SELECT * FROM audit_records WHERE agreement_id = ? ORDER BY timestamp DESC',
+      [agreementId]
+    )
+  }
+
+  async getAuditRecord(auditId: number): Promise<DatabaseRow | undefined> {
+    return await this.get('SELECT * FROM audit_records WHERE id = ?', [auditId])
+  }
+
+  // User management methods
+  async createUser(userData: UserData): Promise<number> {
+    const { email, name, password, role, address, isActive } = userData
+    
+    const result = await this.run(
+      `INSERT INTO users (email, name, password, role, address, is_active)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [email, name, password, role, address, isActive]
+    )
+    return result.lastID
+  }
+
+  async getUserByEmail(email: string): Promise<DatabaseRow | undefined> {
+    return await this.get('SELECT * FROM users WHERE email = ? AND is_active = 1', [email])
+  }
+
+  async getUserById(id: number): Promise<DatabaseRow | undefined> {
+    return await this.get('SELECT * FROM users WHERE id = ? AND is_active = 1', [id])
+  }
+
+  async updateUserLastLogin(id: number): Promise<void> {
+    await this.run('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [id])
+  }
+
+  async updateUserPassword(id: number, hashedPassword: string): Promise<void> {
+    await this.run('UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [hashedPassword, id])
+  }
+
+  async deactivateUser(id: number): Promise<void> {
+    await this.run('UPDATE users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id])
+  }
+
+  async getAllUsers(): Promise<DatabaseRow[]> {
+    return await this.all('SELECT id, email, name, role, address, is_active, last_login, created_at FROM users ORDER BY created_at DESC')
+  }
+
+  async updateUser(id: number, updateData: { name?: string; address?: string }): Promise<void> {
+    const updateFields = []
+    const params = []
+
+    if (updateData.name) {
+      updateFields.push('name = ?')
+      params.push(updateData.name)
+    }
+
+    if (updateData.address) {
+      updateFields.push('address = ?')
+      params.push(updateData.address)
+    }
+
+    if (updateFields.length === 0) {
+      throw new Error('No fields to update')
+    }
+
+    updateFields.push('updated_at = CURRENT_TIMESTAMP')
+    params.push(id)
+
+    await this.run(
+      `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
+      params
     )
   }
 

@@ -57,7 +57,7 @@ describe("PESContract V2", function () {
         pesContract.createAgreement(agreementHash, producer.address, baseValue, hectares)
       )
         .to.emit(pesContract, "AgreementCreated")
-        .withArgs(0, agreementHash, producer.address, baseValue, hectares);
+        .withArgs(0, agreementHash, producer.address, ethers.ZeroAddress, baseValue, hectares, 0); // 0 = AUTO governance mode
 
       expect(await pesContract.agreementCounter()).to.equal(1);
       
@@ -128,7 +128,7 @@ describe("PESContract V2", function () {
         pesContract.connect(oracle).submitValidatedBatch(agreementId, auditHash, score)
       )
         .to.emit(pesContract, "PaymentApproved")
-        .withArgs(agreementId, producer.address, expectedAmount, auditHash, score);
+        .withArgs(agreementId, producer.address, auditHash, ethers.ZeroAddress, expectedAmount, score, "", "");
     });
 
     it("Should NOT emit PaymentApproved when score < threshold", async function () {

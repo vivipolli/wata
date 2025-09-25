@@ -47,6 +47,16 @@ interface OracleLogData {
     oracleAddress?: string;
     transactionHash?: string;
 }
+interface UserData {
+    email: string;
+    name: string;
+    password: string;
+    role: string;
+    address?: string;
+    isActive: boolean;
+    lastLogin?: string;
+    createdAt: string;
+}
 export declare class Database {
     private dbPath;
     private db;
@@ -80,6 +90,38 @@ export declare class Database {
     getRecentOracleLogs(limit?: number): Promise<DatabaseRow[]>;
     getWeeklyReadings(agreementId: number, weekStart: Date, weekEnd: Date): Promise<DatabaseRow[]>;
     getAgreementsWithRecentActivity(days?: number): Promise<DatabaseRow[]>;
+    createInvestment(investmentData: {
+        agreementId: number;
+        investorAddress: string;
+        amount: number;
+        transactionHash?: string;
+    }): Promise<number>;
+    getInvestmentsByAgreement(agreementId: number): Promise<DatabaseRow[]>;
+    getInvestment(investmentId: number): Promise<DatabaseRow | undefined>;
+    createAuditRecord(auditData: {
+        agreementId: number;
+        batchId?: number;
+        auditHash: string;
+        score?: number;
+        transactionHash?: string;
+        producerAddress?: string;
+        investorAddress?: string;
+        hcsTransactionId?: string;
+        hfsFileId?: string;
+    }): Promise<number>;
+    getAuditRecordsByAgreement(agreementId: number): Promise<DatabaseRow[]>;
+    getAuditRecord(auditId: number): Promise<DatabaseRow | undefined>;
+    createUser(userData: UserData): Promise<number>;
+    getUserByEmail(email: string): Promise<DatabaseRow | undefined>;
+    getUserById(id: number): Promise<DatabaseRow | undefined>;
+    updateUserLastLogin(id: number): Promise<void>;
+    updateUserPassword(id: number, hashedPassword: string): Promise<void>;
+    deactivateUser(id: number): Promise<void>;
+    getAllUsers(): Promise<DatabaseRow[]>;
+    updateUser(id: number, updateData: {
+        name?: string;
+        address?: string;
+    }): Promise<void>;
     close(): void;
 }
 export {};

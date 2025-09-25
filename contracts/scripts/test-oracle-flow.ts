@@ -35,7 +35,7 @@ async function main() {
   // Test case 1: Score above threshold (should approve payment)
   console.log("\n✅ Test Case 1: High Score (Should Approve Payment)");
   const auditHash1 = ethers.encodeBytes32String("audit-high-score");
-  const highScore = 85;
+  const highScore = 80; // 0.8 * 100 for precision (above 0.7 = 70% threshold)
 
   const tx1 = await pesContract.connect(oracle).submitValidatedBatch(0, auditHash1, highScore);
   const receipt1 = await tx1.wait();
@@ -60,7 +60,7 @@ async function main() {
   // Test case 2: Score below threshold (should not approve payment)
   console.log("\n❌ Test Case 2: Low Score (Should NOT Approve Payment)");
   const auditHash2 = ethers.encodeBytes32String("audit-low-score");
-  const lowScore = 60;
+  const lowScore = 60; // 0.6 * 100 for precision (below 0.7 = 70% threshold)
 
   const tx2 = await pesContract.connect(oracle).submitValidatedBatch(0, auditHash2, lowScore);
   const receipt2 = await tx2.wait();
@@ -93,7 +93,7 @@ async function main() {
   // Test case 4: Score exactly at threshold
   console.log("\n⚖️ Test Case 4: Score at Threshold (Should Approve Payment)");
   const auditHash3 = ethers.encodeBytes32String("audit-threshold-score");
-  const thresholdScore = 70;
+  const thresholdScore = 70; // 0.7 * 100 for precision (0.7 = 70%)
 
   const tx3 = await pesContract.connect(oracle).submitValidatedBatch(0, auditHash3, thresholdScore);
   const receipt3 = await tx3.wait();

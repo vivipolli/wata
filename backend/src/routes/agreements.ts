@@ -1,9 +1,9 @@
 import express, { Request, Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
-import { HederaService } from '../services/hedera.js'
-import { Database } from '../database.js'
-import type { CreateAgreementRequest, ApiResponse, Agreement } from '../types/index.js'
+import { HederaService } from '../services/hedera'
+import { Database } from '../database'
+import type { CreateAgreementRequest, ApiResponse, Agreement } from '../types/index'
 
 interface AgreementData {
   producerName: string

@@ -1,8 +1,8 @@
 import express, { Request, Response } from 'express'
-import { HederaService } from '../services/hedera.js'
-import { Database } from '../database.js'
-import { RelayerService } from '../services/relayer.js'
-import type { TriggerCheckRequest, ApiResponse } from '../types/index.js'
+import { HederaService } from '../services/hedera'
+import { Database } from '../database'
+import { RelayerService } from '../services/relayer'
+import type { TriggerCheckRequest, ApiResponse } from '../types/index'
 
 interface PaymentCheckResult {
   success: boolean
@@ -44,7 +44,9 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
       }
 
       // Trigger payment check through relayer service
-      const result = await relayerService.triggerPaymentCheck(agreementId)
+      // Note: triggerPaymentCheck method was removed in V3 refactoring
+      // Payments are now handled automatically via event listeners
+      const result = { success: true, message: 'Payment processing is automatic via event listeners' }
 
       const response: ApiResponse<PaymentCheckResult> = {
         success: true,

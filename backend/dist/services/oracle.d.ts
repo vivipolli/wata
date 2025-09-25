@@ -29,6 +29,7 @@ export declare class OracleService {
     collectReadingsForValidation(agreementId: number, hoursBack?: number): Promise<ReadingData[]>;
     private validateReading;
     private calculateScore;
+    calculateWeeklyAverage(agreementId: number): Promise<number>;
     processBatch(agreementId: number): Promise<BatchValidationResult>;
     submitValidatedBatch(agreementId: number, batchResult: BatchValidationResult): Promise<string>;
     private calculateMedian;

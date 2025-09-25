@@ -1,8 +1,8 @@
 import express, { Request, Response } from 'express'
-import { Database } from '../database.js'
-import { HederaService } from '../services/hedera.js'
-import { OracleService } from '../services/oracle.js'
-import type { ApiResponse } from '../types/index.js'
+import { Database } from '../database'
+import { HederaService } from '../services/hedera'
+import { OracleService } from '../services/oracle'
+import type { ApiResponse } from '../types/index'
 
 interface ProcessBatchRequest {
   agreementId: number
@@ -279,6 +279,44 @@ export default function oracleRoutes(database: Database, hederaService: HederaSe
         success: false,
         error: 'Failed to fetch oracle statistics',
         message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
+  // Get weekly average score for an agreement
+  // Business Rule: A média semanal deve ser normalizada em um score entre 0 e 1
+  router.get('/weekly-average/:agreementId', async (req: Request, res: Response) => {
+    try {
+      const agreementId = parseInt(req.params.agreementId)
+      
+      if (isNaN(agreementId)) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Invalid agreement ID'
+        }
+        return res.status(400).json(response)
+      }
+
+      const weeklyScore = await oracleService.calculateWeeklyAverage(agreementId)
+      
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          agreementId,
+          weeklyScore,
+          threshold: 0.7,
+          isEligible: weeklyScore >= 0.7,
+          timestamp: new Date().toISOString()
+        }
+      }
+      
+      res.json(response)
+    } catch (error) {
+      console.error('Error calculating weekly average:', error)
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to calculate weekly average'
       }
       res.status(500).json(response)
     }

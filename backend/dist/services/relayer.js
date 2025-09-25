@@ -1,223 +1,305 @@
+import { hcsService } from './hcs';
+import { hfsService } from './hfs';
+import { ethers } from 'ethers';
 export class RelayerService {
     hederaService;
     database;
     isRunning = false;
-    eventListeners = new Map();
-    intervalId = null;
+    contract = null;
+    provider = null;
     constructor(hederaService, database) {
         this.hederaService = hederaService;
         this.database = database;
+    }
+    async initialize() {
+        try {
+            await this.hederaService.initialize();
+            await hcsService.initialize();
+            this.provider = new ethers.JsonRpcProvider(process.env.HEDERA_RPC_URL || 'https://testnet.hashio.io/api');
+            const contractAddress = process.env.CONTRACT_ADDRESS;
+            if (contractAddress) {
+                this.contract = new ethers.Contract(contractAddress, this.getContractABI(), this.provider);
+            }
+            console.log('RelayerService initialized successfully');
+        }
+        catch (error) {
+            console.error('Failed to initialize RelayerService:', error);
+            throw error;
+        }
     }
     async start() {
         if (this.isRunning) {
             console.log('Relayer service is already running');
             return;
         }
-        this.isRunning = true;
-        console.log('🔄 Relayer service started - listening for payment events');
-        // In a real implementation, you would listen to Hedera events
-        // For this MVP, we'll simulate event processing
-        this.startEventProcessing();
+        try {
+            await this.initialize();
+            this.isRunning = true;
+            console.log('🔄 Relayer service started - listening for payment events');
+            this.setupEventListeners();
+        }
+        catch (error) {
+            console.error('Failed to start RelayerService:', error);
+            this.isRunning = false;
+            throw error;
+        }
     }
     stop() {
         this.isRunning = false;
-        if (this.intervalId) {
-            clearInterval(this.intervalId);
-            this.intervalId = null;
-        }
         console.log('Relayer service stopped');
     }
-    startEventProcessing() {
-        // Simulate listening for PaymentApproved events from the oracle system
-        // In production, this would connect to Hedera's event system
-        this.intervalId = setInterval(async () => {
-            if (!this.isRunning)
-                return;
+    setupEventListeners() {
+        if (!this.contract) {
+            console.warn('No contract available for event listening');
+            return;
+        }
+        // Listen for PaymentApproved events
+        this.contract.on('PaymentApproved', async (...args) => {
             try {
-                await this.processPendingPayments();
-                await this.processApprovedPayments();
+                console.log('PaymentApproved event received:', args);
+                await this.handlePaymentApproved(Number(args[0]), // agreementId
+                args[1], // producer
+                args[2], // investor
+                Number(args[3]), // amount
+                args[4], // auditHash
+                Number(args[5]), // score
+                args[6], // hcsTransactionId
+                args[7], // hfsFileId
+                args[8]?.transactionHash // transactionHash
+                );
             }
             catch (error) {
-                console.error('Error processing payments:', error);
+                console.error('Error handling PaymentApproved event:', error);
             }
-        }, 30000); // Check every 30 seconds
+        });
     }
-    async processPendingPayments() {
+    // Main payment handler - processes PaymentApproved events
+    async handlePaymentApproved(agreementId, producer, investor, amount, auditHash, score, hcsTransactionId, hfsFileId, transactionHash) {
         try {
-            const pendingPayments = await this.database.getPendingPayments();
-            for (const payment of pendingPayments) {
-                await this.processPayment(payment);
-            }
-        }
-        catch (error) {
-            console.error('Error processing pending payments:', error);
-        }
-    }
-    async processApprovedPayments() {
-        try {
-            // Get batches that have been validated and have scores >= 70
-            const approvedBatches = await this.database.all(`
-        SELECT b.*, a.producer_address, a.base_value, a.hectares 
-        FROM batches b
-        JOIN agreements a ON b.agreement_id = a.id
-        WHERE b.score >= 70 
-        AND b.validation_status = 'submitted'
-        AND b.id NOT IN (
-          SELECT DISTINCT batch_id FROM payments WHERE batch_id IS NOT NULL
-        )
-        ORDER BY b.submitted_at ASC
-      `);
-            for (const batch of approvedBatches) {
-                await this.handlePaymentApproved(batch.agreement_id, batch.producer_address, batch.base_value * batch.hectares, batch.audit_hash, batch.score, batch.id);
-            }
-        }
-        catch (error) {
-            console.error('Error processing approved payments:', error);
-        }
-    }
-    async processPayment(payment) {
-        try {
-            console.log(`Processing payment ${payment.id} for agreement ${payment.agreement_id}`);
+            console.log(`Processing payment for agreement ${agreementId}`);
             // Get agreement details
-            const agreement = await this.database.getAgreement(payment.agreement_id);
-            if (!agreement) {
-                console.error(`Agreement ${payment.agreement_id} not found`);
-                return;
-            }
-            // Get the transaction hash from the oracle logs for this batch
-            const oracleLog = await this.database.get('SELECT transaction_hash FROM oracle_logs WHERE batch_id = ? AND action = "batch_submitted" ORDER BY timestamp DESC LIMIT 1', [payment.batch_id]);
-            const transactionHash = oracleLog?.transaction_hash || 'simulated_transfer';
-            // In production, this would use Hedera SDK to transfer HBAR or HTS tokens
-            // For now, we'll use the batch transaction hash as the payment reference
-            console.log(`Processing payment for batch ${payment.batch_id} with tx: ${transactionHash}`);
-            // Update payment status
-            await this.database.updatePaymentStatus(payment.id, 'completed', transactionHash);
-            console.log(`✅ Payment ${payment.id} completed with tx: ${transactionHash}`);
-        }
-        catch (error) {
-            console.error(`Error processing payment ${payment.id}:`, error);
-            // Mark payment as failed
-            await this.database.updatePaymentStatus(payment.id, 'failed');
-        }
-    }
-    async simulateHbarTransfer(toAddress, amount) {
-        // Simulate HBAR transfer
-        // In production, this would use Hedera SDK:
-        // const transaction = new TransferTransaction()
-        //   .addHbarTransfer(this.hederaService.accountId, new Hbar(-amount))
-        //   .addHbarTransfer(AccountId.fromString(toAddress), new Hbar(amount))
-        const transactionHash = `0x${Math.random().toString(16).substr(2, 64)}`;
-        console.log(`Simulated HBAR transfer: ${amount} to ${toAddress}`);
-        console.log(`Transaction hash: ${transactionHash}`);
-        return transactionHash;
-    }
-    async handlePaymentApproved(agreementId, producerAddress, amount, auditHash, score, batchId) {
-        try {
-            console.log(`Payment approved event received:`);
-            console.log(`- Agreement ID: ${agreementId}`);
-            console.log(`- Producer: ${producerAddress}`);
-            console.log(`- Amount: ${amount}`);
-            console.log(`- Score: ${score}`);
-            console.log(`- Audit Hash: ${auditHash}`);
-            // Create payment record in database
-            const paymentId = await this.database.createPayment({
-                agreementId: agreementId,
-                batchId: batchId,
-                amount: amount,
-                status: 'pending',
-                auditHash: auditHash,
-                score: score
-            });
-            console.log(`Payment record created with ID: ${paymentId}`);
-            // Process payment immediately
-            const payment = await this.database.getPayment(paymentId);
-            if (payment) {
-                await this.processPayment(payment);
-                // Record audit on blockchain after successful payment
-                await this.hederaService.recordAudit(auditHash);
-                // Log the successful payment processing
-                await this.database.createOracleLog({
-                    batchId: batchId,
-                    action: 'payment_processed',
-                    details: `Payment of ${amount} processed for score ${score}`,
-                    transactionHash: payment.transaction_hash
-                });
-            }
-        }
-        catch (error) {
-            console.error('Error handling payment approved event:', error);
-        }
-    }
-    async handlePaymentRequested(agreementId, producerAddress, amount, auditHash) {
-        try {
-            console.log(`Payment requested event received:`);
-            console.log(`- Agreement ID: ${agreementId}`);
-            console.log(`- Producer: ${producerAddress}`);
-            console.log(`- Amount: ${amount}`);
-            console.log(`- Audit Hash: ${auditHash}`);
-            // Create payment record in database
-            const paymentId = await this.database.createPayment({
-                agreementId: agreementId,
-                amount: amount,
-                status: 'pending',
-                auditHash: auditHash
-            });
-            console.log(`Payment record created with ID: ${paymentId}`);
-            // Process payment immediately
-            const payment = await this.database.getPayment(paymentId);
-            if (payment) {
-                await this.processPayment(payment);
-            }
-        }
-        catch (error) {
-            console.error('Error handling payment requested event:', error);
-        }
-    }
-    // Method to manually trigger payment processing (for testing)
-    async triggerPaymentCheck(agreementId) {
-        try {
             const agreement = await this.database.getAgreement(agreementId);
             if (!agreement) {
-                throw new Error('Agreement not found');
+                console.error(`Agreement ${agreementId} not found`);
+                return;
             }
-            // Get recent readings for this agreement
-            const readings = await this.database.getReadingsByAgreement(agreementId, 7);
-            if (readings.length === 0) {
-                throw new Error('No readings found for this agreement');
+            // Use HCS/HFS IDs from contract if available, otherwise create new ones
+            let finalHcsTransactionId = hcsTransactionId;
+            let finalHfsFileId = hfsFileId;
+            // Create audit record for HCS if no HCS ID provided
+            if (!finalHcsTransactionId || finalHcsTransactionId === '') {
+                const auditRecord = {
+                    agreementId: agreementId.toString(),
+                    batchId: 0,
+                    auditHash,
+                    score,
+                    timestamp: new Date().toISOString(),
+                    transactionHash,
+                    producerAddress: producer,
+                    investorAddress: investor
+                };
+                finalHcsTransactionId = await hcsService.publishAuditRecord(auditRecord);
             }
-            // Calculate average turbidity for the last 7 readings
-            const avgTurbidity = readings.reduce((sum, reading) => sum + reading.turbidity_ntu, 0) / readings.length;
-            console.log(`Average turbidity for agreement ${agreementId}: ${avgTurbidity.toFixed(2)} NTU`);
-            // Check if water quality meets standards (≤ 10 NTU)
-            if (avgTurbidity <= 10) {
-                const auditHash = `audit_${Date.now()}_${Math.random().toString(16).substr(2, 8)}`;
-                // Record audit on blockchain
-                await this.hederaService.recordAudit(auditHash);
-                // Request payment
-                await this.hederaService.requestPayment(agreementId, auditHash);
-                // Simulate the payment requested event
-                const amount = agreement.base_value * agreement.hectares;
-                await this.handlePaymentRequested(agreementId, agreement.producer_address, amount, auditHash);
+            // Create detailed audit report for HFS if no HFS ID provided
+            if (!finalHfsFileId || finalHfsFileId === '' || finalHfsFileId === '0.0.0') {
+                const batch = await this.getBatchByAuditHash(auditHash);
+                const auditReport = {
+                    agreementId: agreementId.toString(),
+                    batchId: batch?.id || 0,
+                    auditHash,
+                    score,
+                    timestamp: new Date().toISOString(),
+                    transactionHash,
+                    producerAddress: producer,
+                    investorAddress: investor,
+                    readings: batch ? await this.getBatchReadings(batch.id) : [],
+                    validationDetails: {
+                        score,
+                        threshold: 0.7,
+                        passed: score >= 0.7,
+                        governanceMode: agreement.governance_mode || 'AUTO'
+                    },
+                    paymentDetails: {
+                        amount,
+                        currency: 'HBAR',
+                        status: 'APPROVED',
+                        automatic: true
+                    }
+                };
+                finalHfsFileId = await hfsService.createAuditReport(auditReport);
+            }
+            // Execute HBAR payment
+            const paymentResult = await this.executeHBARPayment(agreementId, producer, amount, auditHash, score, finalHcsTransactionId, finalHfsFileId);
+            if (paymentResult.success) {
+                console.log(`Payment executed successfully for agreement ${agreementId}`);
+            }
+            else {
+                console.error(`Payment failed for agreement ${agreementId}:`, paymentResult.message);
+            }
+        }
+        catch (error) {
+            console.error('Error handling payment approval:', error);
+        }
+    }
+    // Execute HBAR payment using HederaService
+    async executeHBARPayment(agreementId, producerAddress, amount, auditHash, score, hcsTransactionId, hfsFileId) {
+        try {
+            // Check if payment already exists for this audit hash
+            const existingPayments = await this.database.getPaymentsByAgreement(agreementId);
+            const existingPayment = existingPayments.find(p => p.audit_hash === auditHash);
+            if (existingPayment) {
+                console.log(`Payment already exists for audit hash ${auditHash}, skipping`);
                 return {
                     success: true,
-                    message: 'Payment approved and processed',
-                    averageTurbidity: avgTurbidity,
-                    amount: amount
+                    message: 'Payment already exists',
+                    amount,
+                    hcsTransactionId,
+                    hfsFileId
+                };
+            }
+            // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
+            const amountInTinybars = Math.floor(amount * 100000000);
+            // Execute HBAR transfer using HederaService
+            const transferResult = await this.hederaService.transferHBAR(producerAddress, amountInTinybars);
+            if (transferResult.success) {
+                // Get batch ID from audit hash
+                const batch = await this.getBatchByAuditHash(auditHash);
+                // Record successful payment with V3 fields if available
+                const paymentData = {
+                    agreementId,
+                    batchId: batch?.id || null,
+                    amount,
+                    status: 'completed',
+                    auditHash,
+                    score,
+                    transactionHash: transferResult.transactionHash
+                };
+                // Add HCS/HFS fields and investor address
+                paymentData.hcsTransactionId = hcsTransactionId;
+                paymentData.hfsFileId = hfsFileId;
+                paymentData.investorAddress = await this.getInvestorAddress(agreementId);
+                await this.database.createPayment(paymentData);
+                return {
+                    success: true,
+                    message: 'Payment executed successfully',
+                    amount,
+                    hcsTransactionId,
+                    hfsFileId
                 };
             }
             else {
                 return {
                     success: false,
-                    message: 'Water quality does not meet standards',
-                    averageTurbidity: avgTurbidity,
-                    threshold: 10
+                    message: transferResult.error || 'Payment execution failed'
                 };
             }
         }
         catch (error) {
-            console.error('Error triggering payment check:', error);
-            throw error;
+            console.error('Error executing HBAR payment:', error);
+            return {
+                success: false,
+                message: `Payment execution error: ${error}`
+            };
         }
+    }
+    // Helper methods
+    async getBatchByAuditHash(auditHash) {
+        try {
+            const batch = await this.database.getBatchByAuditHash(auditHash);
+            return batch;
+        }
+        catch (error) {
+            console.error('Error getting batch by audit hash:', error);
+            return null;
+        }
+    }
+    // Helper method to get investor address from agreement
+    async getInvestorAddress(agreementId) {
+        try {
+            const agreement = await this.database.getAgreement(agreementId);
+            return agreement?.investor_address || null;
+        }
+        catch (error) {
+            console.error('Error getting investor address:', error);
+            return null;
+        }
+    }
+    async getBatchReadings(batchId) {
+        try {
+            // This would need to be implemented in the database service
+            return [];
+        }
+        catch (error) {
+            console.error('Error getting batch readings:', error);
+            return [];
+        }
+    }
+    getContractABI() {
+        return [
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": true,
+                        "internalType": "uint256",
+                        "name": "agreementId",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "producer",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "investor",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "uint256",
+                        "name": "amount",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": true,
+                        "internalType": "bytes32",
+                        "name": "auditHash",
+                        "type": "bytes32"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "uint256",
+                        "name": "score",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string",
+                        "name": "hcsTransactionId",
+                        "type": "string"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string",
+                        "name": "hfsFileId",
+                        "type": "string"
+                    }
+                ],
+                "name": "PaymentApproved",
+                "type": "event"
+            }
+        ];
+    }
+    async getStatus() {
+        return {
+            isRunning: this.isRunning,
+            contractAddress: process.env.CONTRACT_ADDRESS,
+            hcsTopicId: await hcsService.getTopicId(),
+            lastProcessedAt: new Date().toISOString()
+        };
     }
 }
 //# sourceMappingURL=relayer.js.map

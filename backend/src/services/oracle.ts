@@ -123,7 +123,8 @@ export class OracleService {
     return { isValid: true }
   }
 
-  // Aggregator Module - Calculates weekly score
+  // Aggregator Module - Calculates weekly score normalized to 0-1
+  // Business Rule: A média semanal deve ser normalizada em um score entre 0 e 1
   private calculateScore(validReadings: ReadingData[], totalReadings: number): number {
     if (validReadings.length === 0) return 0
 
@@ -134,30 +135,81 @@ export class OracleService {
     // 2. Water quality (lower turbidity = higher score)
     // 3. Consistency (lower variance = higher score)
     
-    const dataAvailabilityScore = (validReadings.length / totalReadings) * 100
+    const dataAvailabilityScore = validReadings.length / totalReadings
     
-    // Water quality score (inverted turbidity, normalized to 0-100)
+    // Water quality score (inverted turbidity, normalized to 0-1)
     // Lower turbidity = better quality = higher score
     const maxTurbidity = 100
-    const qualityScore = Math.max(0, (maxTurbidity - averageTurbidity) / maxTurbidity * 100)
+    const qualityScore = Math.max(0, (maxTurbidity - averageTurbidity) / maxTurbidity)
     
     // Consistency score based on coefficient of variation
     const variance = this.calculateVariance(validReadings.map(r => r.turbidityNtu))
     const stdDev = Math.sqrt(variance)
     const coefficientOfVariation = averageTurbidity > 0 ? stdDev / averageTurbidity : 0
-    const consistencyScore = Math.max(0, 100 - coefficientOfVariation * 100)
+    const consistencyScore = Math.max(0, 1 - coefficientOfVariation)
     
-    // Weighted final score
+    // Weighted final score (normalized to 0-1)
     const finalScore = (
       dataAvailabilityScore * 0.3 +  // 30% weight for data availability
       qualityScore * 0.5 +           // 50% weight for water quality
       consistencyScore * 0.2         // 20% weight for consistency
     )
     
-    return Math.min(100, Math.max(0, finalScore))
+    return Math.min(1, Math.max(0, finalScore))
+  }
+
+  // Calculate weekly average score for a producer
+  // Business Rule: A média semanal deve ser normalizada em um score entre 0 e 1
+  async calculateWeeklyAverage(agreementId: number): Promise<number> {
+    const oneWeekAgo = new Date()
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+    
+    // Get all readings from the past week
+    const weeklyReadings = await this.database.getWeeklyReadings(
+      agreementId, 
+      oneWeekAgo, 
+      new Date()
+    )
+    
+    if (weeklyReadings.length === 0) {
+      return 0 // No readings = 0 score
+    }
+    
+    // Convert database readings to ReadingData format
+    const readings: ReadingData[] = weeklyReadings.map((r: any) => ({
+      id: r.id,
+      agreementId: r.agreement_id,
+      turbidityNtu: r.turbidity_ntu,
+      timestamp: r.timestamp,
+      locationLat: r.location_lat,
+      locationLng: r.location_lng,
+      isSimulated: r.is_simulated,
+      auditHash: r.audit_hash
+    }))
+    
+    // Validate all readings
+    const validReadings: ReadingData[] = []
+    const invalidReadings: ReadingData[] = []
+    
+    for (const reading of readings) {
+      const validation = this.validateReading(reading, readings)
+      if (validation.isValid) {
+        validReadings.push(reading)
+      } else {
+        invalidReadings.push(reading)
+      }
+    }
+    
+    // Calculate weekly score using the same algorithm as batch processing
+    const weeklyScore = this.calculateScore(validReadings, readings.length)
+    
+    console.log(`Weekly average calculated for agreement ${agreementId}: ${weeklyScore.toFixed(3)} (${validReadings.length}/${readings.length} valid readings)`)
+    
+    return weeklyScore
   }
 
   // Process batch validation
+  // Business Rule: O sistema deve calcular a média semanal de cada produtor
   async processBatch(agreementId: number): Promise<BatchValidationResult> {
     console.log(`Processing batch validation for agreement ${agreementId}`)
     
@@ -280,10 +332,11 @@ export class OracleService {
       }
 
       // Submit to smart contract
+      // Business Rule: Score is normalized 0-1, contract expects 0-100 for precision (0.7 = 70%)
       const txRecord = await this.hederaService.submitValidatedBatch(
         agreement.blockchain_id,
         batchResult.auditHash,
-        Math.round(batchResult.score) // Convert to integer for contract
+        Math.round(batchResult.score * 100) // Convert 0-1 to 0-100 for contract precision (0.7 = 70)
       )
 
       // Get the real transaction hash from the receipt

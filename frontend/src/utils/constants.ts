@@ -63,3 +63,29 @@ export const SUCCESS_MESSAGES = {
   PAYMENT_PROCESSED: 'Payment processed successfully!',
   DATA_UPDATED: 'Data updated successfully!'
 } as const
+
+// Score and Governance Constants
+export const SCORE_THRESHOLD = 70
+
+export const GOVERNANCE_MODES = {
+  AUTO: 'AUTO',
+  HYBRID_SIMPLE: 'HYBRID_SIMPLE',
+  HYBRID_FULL: 'HYBRID_FULL'
+} as const
+
+// User Roles
+export const USER_ROLES = {
+  PRODUCER: 'PRODUCER',
+  INVESTOR: 'INVESTOR',
+  // MANAGER: 'MANAGER',
+} as const
+
+// Hedera Configuration
+export const HEDERA_EXPLORER_URLS = {
+  TESTNET: 'https://hashscan.io/testnet',
+  MAINNET: 'https://hashscan.io'
+} as const
+
+export const DEFAULT_NETWORK = 'testnet'
+
+export const HBAR_DECIMALS = 8 // 1 HBAR = 100,000,000 tinybars

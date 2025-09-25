@@ -1,1 +1,1 @@
-{"version":3,"file":"readings.d.ts","sourceRoot":"","sources":["../../src/routes/readings.ts"],"names":[],"mappings":"AAEA,OAAO,EAAE,QAAQ,EAAE,MAAM,gBAAgB,CAAA;AAgCzC,MAAM,CAAC,OAAO,UAAU,aAAa,CAAC,QAAQ,EAAE,QAAQ,8CAoQvD"}
+{"version":3,"file":"readings.d.ts","sourceRoot":"","sources":["../../src/routes/readings.ts"],"names":[],"mappings":"AAEA,OAAO,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAA;AAgCtC,MAAM,CAAC,OAAO,UAAU,aAAa,CAAC,QAAQ,EAAE,QAAQ,8CAoQvD"}

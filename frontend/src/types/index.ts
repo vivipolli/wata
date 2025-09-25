@@ -173,6 +173,11 @@ export interface HeaderProps {
   currentTab: string
   onTabChange: (tab: string) => void
   isHealthy?: boolean
+  accessibleTabs?: Array<{
+    id: string
+    label: string
+    roles: string[]
+  }>
 }
 
 export interface DashboardProps {}

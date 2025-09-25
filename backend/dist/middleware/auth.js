@@ -1,0 +1,155 @@
+import jwt from 'jsonwebtoken';
+export class AuthMiddleware {
+    database;
+    jwtSecret;
+    constructor(database) {
+        this.database = database;
+        this.jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+    }
+    /**
+     * Middleware to authenticate JWT tokens
+     */
+    authenticate = async (req, res, next) => {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                res.status(401).json({
+                    success: false,
+                    error: 'Access token required'
+                });
+                return;
+            }
+            const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+            // Verify JWT token
+            const decoded = jwt.verify(token, this.jwtSecret);
+            // Get user from database to ensure they still exist and are active
+            const user = await this.database.getUserById(decoded.userId);
+            if (!user) {
+                res.status(401).json({
+                    success: false,
+                    error: 'Invalid token - user not found'
+                });
+                return;
+            }
+            // Attach user info to request
+            req.user = {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                address: user.address
+            };
+            next();
+        }
+        catch (error) {
+            if (error instanceof jwt.JsonWebTokenError) {
+                res.status(401).json({
+                    success: false,
+                    error: 'Invalid token'
+                });
+            }
+            else if (error instanceof jwt.TokenExpiredError) {
+                res.status(401).json({
+                    success: false,
+                    error: 'Token expired'
+                });
+            }
+            else {
+                console.error('Auth middleware error:', error);
+                res.status(500).json({
+                    success: false,
+                    error: 'Authentication failed'
+                });
+            }
+        }
+    };
+    /**
+     * Middleware to check if user has required role
+     */
+    requireRole = (requiredRoles) => {
+        return (req, res, next) => {
+            if (!req.user) {
+                res.status(401).json({
+                    success: false,
+                    error: 'Authentication required'
+                });
+                return;
+            }
+            const userRole = req.user.role;
+            const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
+            if (!roles.includes(userRole)) {
+                res.status(403).json({
+                    success: false,
+                    error: 'Insufficient permissions',
+                    required: roles,
+                    current: userRole
+                });
+                return;
+            }
+            next();
+        };
+    };
+    /**
+     * Middleware to check if user is admin
+     */
+    requireAdmin = (req, res, next) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                error: 'Authentication required'
+            });
+            return;
+        }
+        if (req.user.role !== 'ADMIN') {
+            res.status(403).json({
+                success: false,
+                error: 'Admin access required'
+            });
+            return;
+        }
+        next();
+    };
+    /**
+     * Generate JWT token for user
+     */
+    generateToken(user) {
+        const payload = {
+            userId: user.id,
+            email: user.email,
+            role: user.role
+        };
+        return jwt.sign(payload, this.jwtSecret, {
+            expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+            issuer: 'wata-chain',
+            audience: 'wata-users'
+        });
+    }
+    /**
+     * Generate refresh token (longer expiration)
+     */
+    generateRefreshToken(user) {
+        const payload = {
+            userId: user.id,
+            email: user.email,
+            type: 'refresh'
+        };
+        return jwt.sign(payload, this.jwtSecret, {
+            expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+            issuer: 'wata-chain',
+            audience: 'wata-users'
+        });
+    }
+    /**
+     * Verify refresh token
+     */
+    verifyRefreshToken(token) {
+        try {
+            const decoded = jwt.verify(token, this.jwtSecret);
+            return decoded;
+        }
+        catch (error) {
+            return null;
+        }
+    }
+}
+//# sourceMappingURL=auth.js.map

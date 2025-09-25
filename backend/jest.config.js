@@ -4,12 +4,17 @@ export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__', '<rootDir>/src'],
   testMatch: [
-    '**/__tests__/**/*.test.ts',
-    '**/__tests__/**/*.test.js'
+    '**/__tests__/**/*.test.ts'
   ],
   transform: {
-    '^.+\\.ts$': 'ts-jest'
+    '^.+\\.ts$': ['ts-jest', {
+      useESM: true
+    }]
   },
+  moduleNameMapping: {
+    '^(\\.{1,2}/.*)\\.js$': '$1'
+  },
+  extensionsToTreatAsEsm: ['.ts'],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

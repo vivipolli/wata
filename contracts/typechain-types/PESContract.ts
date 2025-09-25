@@ -29,25 +29,42 @@ export interface PESContractInterface extends Interface {
       | "SCORE_THRESHOLD"
       | "agreementCounter"
       | "agreements"
+      | "changeGovernanceMode"
       | "createAgreement"
+      | "createAgreementWithInvestor"
       | "deactivateAgreement"
+      | "executePayment"
+      | "financialManager"
       | "getAgreement"
       | "getAgreementScore"
+      | "getPaymentRecord"
+      | "investInAgreement"
       | "oracleManager"
       | "owner"
+      | "paymentCounter"
+      | "payments"
       | "recordAudit"
+      | "recordAuditV3"
       | "relayer"
       | "requestPayment"
+      | "setFinancialManager"
       | "setOracleManager"
       | "setRelayer"
+      | "setTechnicalManager"
       | "submitValidatedBatch"
+      | "technicalManager"
+      | "withdrawExcessHBAR"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
       | "AgreementCreated"
       | "AuditRecorded"
+      | "AuditRecordedV3"
+      | "GovernanceModeChanged"
+      | "InvestmentReceived"
       | "PaymentApproved"
+      | "PaymentExecuted"
       | "PaymentRequested"
       | "ValidatedBatchSubmitted"
   ): EventFragment;
@@ -65,12 +82,42 @@ export interface PESContractInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "changeGovernanceMode",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "createAgreement",
     values: [BytesLike, AddressLike, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "createAgreementWithInvestor",
+    values: [
+      BytesLike,
+      AddressLike,
+      AddressLike,
+      BigNumberish,
+      BigNumberish,
+      BigNumberish
+    ]
+  ): string;
+  encodeFunctionData(
     functionFragment: "deactivateAgreement",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "executePayment",
+    values: [
+      BigNumberish,
+      BigNumberish,
+      BytesLike,
+      BigNumberish,
+      string,
+      string
+    ]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "financialManager",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getAgreement",
@@ -81,18 +128,42 @@ export interface PESContractInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "getPaymentRecord",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "investInAgreement",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "oracleManager",
     values?: undefined
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
+    functionFragment: "paymentCounter",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "payments",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "recordAudit",
     values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "recordAuditV3",
+    values: [BytesLike, string, string]
   ): string;
   encodeFunctionData(functionFragment: "relayer", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "requestPayment",
     values: [BigNumberish, BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setFinancialManager",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "setOracleManager",
@@ -103,8 +174,20 @@ export interface PESContractInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "setTechnicalManager",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "submitValidatedBatch",
     values: [BigNumberish, BytesLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "technicalManager",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "withdrawExcessHBAR",
+    values: [BigNumberish]
   ): string;
 
   decodeFunctionResult(
@@ -117,11 +200,27 @@ export interface PESContractInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "agreements", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "changeGovernanceMode",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "createAgreement",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "createAgreementWithInvestor",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "deactivateAgreement",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "executePayment",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "financialManager",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -133,12 +232,29 @@ export interface PESContractInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "getPaymentRecord",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "investInAgreement",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "oracleManager",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "paymentCounter",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "payments", data: BytesLike): Result;
+  decodeFunctionResult(
     functionFragment: "recordAudit",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "recordAuditV3",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "relayer", data: BytesLike): Result;
@@ -147,12 +263,28 @@ export interface PESContractInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "setFinancialManager",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "setOracleManager",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setRelayer", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "setTechnicalManager",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "submitValidatedBatch",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "technicalManager",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "withdrawExcessHBAR",
     data: BytesLike
   ): Result;
 }
@@ -162,22 +294,28 @@ export namespace AgreementCreatedEvent {
     agreementId: BigNumberish,
     agreementHash: BytesLike,
     producer: AddressLike,
+    investor: AddressLike,
     baseValue: BigNumberish,
-    hectares: BigNumberish
+    hectares: BigNumberish,
+    governanceMode: BigNumberish
   ];
   export type OutputTuple = [
     agreementId: bigint,
     agreementHash: string,
     producer: string,
+    investor: string,
     baseValue: bigint,
-    hectares: bigint
+    hectares: bigint,
+    governanceMode: bigint
   ];
   export interface OutputObject {
     agreementId: bigint;
     agreementHash: string;
     producer: string;
+    investor: string;
     baseValue: bigint;
     hectares: bigint;
+    governanceMode: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -198,27 +336,139 @@ export namespace AuditRecordedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace AuditRecordedV3Event {
+  export type InputTuple = [
+    auditHash: BytesLike,
+    timestamp: BigNumberish,
+    hcsTransactionId: string,
+    hfsFileId: string
+  ];
+  export type OutputTuple = [
+    auditHash: string,
+    timestamp: bigint,
+    hcsTransactionId: string,
+    hfsFileId: string
+  ];
+  export interface OutputObject {
+    auditHash: string;
+    timestamp: bigint;
+    hcsTransactionId: string;
+    hfsFileId: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace GovernanceModeChangedEvent {
+  export type InputTuple = [
+    agreementId: BigNumberish,
+    oldMode: BigNumberish,
+    newMode: BigNumberish
+  ];
+  export type OutputTuple = [
+    agreementId: bigint,
+    oldMode: bigint,
+    newMode: bigint
+  ];
+  export interface OutputObject {
+    agreementId: bigint;
+    oldMode: bigint;
+    newMode: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace InvestmentReceivedEvent {
+  export type InputTuple = [
+    agreementId: BigNumberish,
+    investor: AddressLike,
+    amount: BigNumberish,
+    totalInvested: BigNumberish
+  ];
+  export type OutputTuple = [
+    agreementId: bigint,
+    investor: string,
+    amount: bigint,
+    totalInvested: bigint
+  ];
+  export interface OutputObject {
+    agreementId: bigint;
+    investor: string;
+    amount: bigint;
+    totalInvested: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace PaymentApprovedEvent {
   export type InputTuple = [
     agreementId: BigNumberish,
     producer: AddressLike,
-    amount: BigNumberish,
     auditHash: BytesLike,
-    score: BigNumberish
+    investor: AddressLike,
+    amount: BigNumberish,
+    score: BigNumberish,
+    hcsTransactionId: string,
+    hfsFileId: string
   ];
   export type OutputTuple = [
     agreementId: bigint,
     producer: string,
-    amount: bigint,
     auditHash: string,
-    score: bigint
+    investor: string,
+    amount: bigint,
+    score: bigint,
+    hcsTransactionId: string,
+    hfsFileId: string
   ];
   export interface OutputObject {
     agreementId: bigint;
     producer: string;
-    amount: bigint;
     auditHash: string;
+    investor: string;
+    amount: bigint;
     score: bigint;
+    hcsTransactionId: string;
+    hfsFileId: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace PaymentExecutedEvent {
+  export type InputTuple = [
+    paymentId: BigNumberish,
+    agreementId: BigNumberish,
+    producer: AddressLike,
+    amount: BigNumberish,
+    hcsTransactionId: string,
+    hfsFileId: string
+  ];
+  export type OutputTuple = [
+    paymentId: bigint,
+    agreementId: bigint,
+    producer: string,
+    amount: bigint,
+    hcsTransactionId: string,
+    hfsFileId: string
+  ];
+  export interface OutputObject {
+    paymentId: bigint;
+    agreementId: bigint;
+    producer: string;
+    amount: bigint;
+    hcsTransactionId: string;
+    hfsFileId: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -332,16 +582,21 @@ export interface PESContract extends BaseContract {
       [
         string,
         string,
+        string,
         bigint,
         bigint,
         boolean,
         bigint,
         bigint,
         string,
+        bigint,
+        bigint,
+        bigint,
         bigint
       ] & {
         agreementHash: string;
         producer: string;
+        investor: string;
         baseValue: bigint;
         hectares: bigint;
         isActive: boolean;
@@ -349,9 +604,18 @@ export interface PESContract extends BaseContract {
         lastScore: bigint;
         lastAuditHash: string;
         lastUpdateTimestamp: bigint;
+        governanceMode: bigint;
+        totalInvested: bigint;
+        totalPaid: bigint;
       }
     ],
     "view"
+  >;
+
+  changeGovernanceMode: TypedContractMethod<
+    [_agreementId: BigNumberish, _newMode: BigNumberish],
+    [void],
+    "nonpayable"
   >;
 
   createAgreement: TypedContractMethod<
@@ -365,16 +629,45 @@ export interface PESContract extends BaseContract {
     "nonpayable"
   >;
 
+  createAgreementWithInvestor: TypedContractMethod<
+    [
+      _agreementHash: BytesLike,
+      _producer: AddressLike,
+      _investor: AddressLike,
+      _baseValue: BigNumberish,
+      _hectares: BigNumberish,
+      _governanceMode: BigNumberish
+    ],
+    [bigint],
+    "nonpayable"
+  >;
+
   deactivateAgreement: TypedContractMethod<
     [_agreementId: BigNumberish],
     [void],
     "nonpayable"
   >;
 
+  executePayment: TypedContractMethod<
+    [
+      _agreementId: BigNumberish,
+      _amount: BigNumberish,
+      _auditHash: BytesLike,
+      _score: BigNumberish,
+      _hcsTransactionId: string,
+      _hfsFileId: string
+    ],
+    [void],
+    "nonpayable"
+  >;
+
+  financialManager: TypedContractMethod<[], [string], "view">;
+
   getAgreement: TypedContractMethod<
     [_agreementId: BigNumberish],
     [
       [
+        string,
         string,
         string,
         bigint,
@@ -383,10 +676,14 @@ export interface PESContract extends BaseContract {
         bigint,
         bigint,
         string,
+        bigint,
+        bigint,
+        bigint,
         bigint
       ] & {
         agreementHash: string;
         producer: string;
+        investor: string;
         baseValue: bigint;
         hectares: bigint;
         isActive: boolean;
@@ -394,6 +691,9 @@ export interface PESContract extends BaseContract {
         lastScore: bigint;
         lastAuditHash: string;
         lastUpdateTimestamp: bigint;
+        governanceMode: bigint;
+        totalInvested: bigint;
+        totalPaid: bigint;
       }
     ],
     "view"
@@ -405,12 +705,82 @@ export interface PESContract extends BaseContract {
     "view"
   >;
 
+  getPaymentRecord: TypedContractMethod<
+    [_paymentId: BigNumberish],
+    [
+      [
+        bigint,
+        string,
+        string,
+        bigint,
+        string,
+        bigint,
+        bigint,
+        string,
+        string
+      ] & {
+        agreementId: bigint;
+        producer: string;
+        investor: string;
+        amount: bigint;
+        auditHash: string;
+        score: bigint;
+        timestamp: bigint;
+        hcsTransactionId: string;
+        hfsFileId: string;
+      }
+    ],
+    "view"
+  >;
+
+  investInAgreement: TypedContractMethod<
+    [_agreementId: BigNumberish],
+    [void],
+    "payable"
+  >;
+
   oracleManager: TypedContractMethod<[], [string], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
 
+  paymentCounter: TypedContractMethod<[], [bigint], "view">;
+
+  payments: TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [
+        bigint,
+        string,
+        string,
+        bigint,
+        string,
+        bigint,
+        bigint,
+        string,
+        string
+      ] & {
+        agreementId: bigint;
+        producer: string;
+        investor: string;
+        amount: bigint;
+        auditHash: string;
+        score: bigint;
+        timestamp: bigint;
+        hcsTransactionId: string;
+        hfsFileId: string;
+      }
+    ],
+    "view"
+  >;
+
   recordAudit: TypedContractMethod<
     [_auditHash: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
+  recordAuditV3: TypedContractMethod<
+    [_auditHash: BytesLike, _hcsTransactionId: string, _hfsFileId: string],
     [void],
     "nonpayable"
   >;
@@ -419,6 +789,12 @@ export interface PESContract extends BaseContract {
 
   requestPayment: TypedContractMethod<
     [_agreementId: BigNumberish, _auditHash: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
+  setFinancialManager: TypedContractMethod<
+    [_financialManager: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -435,8 +811,22 @@ export interface PESContract extends BaseContract {
     "nonpayable"
   >;
 
+  setTechnicalManager: TypedContractMethod<
+    [_technicalManager: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   submitValidatedBatch: TypedContractMethod<
     [_agreementId: BigNumberish, _auditHash: BytesLike, _score: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  technicalManager: TypedContractMethod<[], [string], "view">;
+
+  withdrawExcessHBAR: TypedContractMethod<
+    [_amount: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -459,16 +849,21 @@ export interface PESContract extends BaseContract {
       [
         string,
         string,
+        string,
         bigint,
         bigint,
         boolean,
         bigint,
         bigint,
         string,
+        bigint,
+        bigint,
+        bigint,
         bigint
       ] & {
         agreementHash: string;
         producer: string;
+        investor: string;
         baseValue: bigint;
         hectares: bigint;
         isActive: boolean;
@@ -476,9 +871,19 @@ export interface PESContract extends BaseContract {
         lastScore: bigint;
         lastAuditHash: string;
         lastUpdateTimestamp: bigint;
+        governanceMode: bigint;
+        totalInvested: bigint;
+        totalPaid: bigint;
       }
     ],
     "view"
+  >;
+  getFunction(
+    nameOrSignature: "changeGovernanceMode"
+  ): TypedContractMethod<
+    [_agreementId: BigNumberish, _newMode: BigNumberish],
+    [void],
+    "nonpayable"
   >;
   getFunction(
     nameOrSignature: "createAgreement"
@@ -493,8 +898,39 @@ export interface PESContract extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "createAgreementWithInvestor"
+  ): TypedContractMethod<
+    [
+      _agreementHash: BytesLike,
+      _producer: AddressLike,
+      _investor: AddressLike,
+      _baseValue: BigNumberish,
+      _hectares: BigNumberish,
+      _governanceMode: BigNumberish
+    ],
+    [bigint],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "deactivateAgreement"
   ): TypedContractMethod<[_agreementId: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "executePayment"
+  ): TypedContractMethod<
+    [
+      _agreementId: BigNumberish,
+      _amount: BigNumberish,
+      _auditHash: BytesLike,
+      _score: BigNumberish,
+      _hcsTransactionId: string,
+      _hfsFileId: string
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "financialManager"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getAgreement"
   ): TypedContractMethod<
@@ -503,16 +939,21 @@ export interface PESContract extends BaseContract {
       [
         string,
         string,
+        string,
         bigint,
         bigint,
         boolean,
         bigint,
         bigint,
         string,
+        bigint,
+        bigint,
+        bigint,
         bigint
       ] & {
         agreementHash: string;
         producer: string;
+        investor: string;
         baseValue: bigint;
         hectares: bigint;
         isActive: boolean;
@@ -520,6 +961,9 @@ export interface PESContract extends BaseContract {
         lastScore: bigint;
         lastAuditHash: string;
         lastUpdateTimestamp: bigint;
+        governanceMode: bigint;
+        totalInvested: bigint;
+        totalPaid: bigint;
       }
     ],
     "view"
@@ -528,14 +972,85 @@ export interface PESContract extends BaseContract {
     nameOrSignature: "getAgreementScore"
   ): TypedContractMethod<[_agreementId: BigNumberish], [bigint], "view">;
   getFunction(
+    nameOrSignature: "getPaymentRecord"
+  ): TypedContractMethod<
+    [_paymentId: BigNumberish],
+    [
+      [
+        bigint,
+        string,
+        string,
+        bigint,
+        string,
+        bigint,
+        bigint,
+        string,
+        string
+      ] & {
+        agreementId: bigint;
+        producer: string;
+        investor: string;
+        amount: bigint;
+        auditHash: string;
+        score: bigint;
+        timestamp: bigint;
+        hcsTransactionId: string;
+        hfsFileId: string;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "investInAgreement"
+  ): TypedContractMethod<[_agreementId: BigNumberish], [void], "payable">;
+  getFunction(
     nameOrSignature: "oracleManager"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "paymentCounter"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "payments"
+  ): TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [
+        bigint,
+        string,
+        string,
+        bigint,
+        string,
+        bigint,
+        bigint,
+        string,
+        string
+      ] & {
+        agreementId: bigint;
+        producer: string;
+        investor: string;
+        amount: bigint;
+        auditHash: string;
+        score: bigint;
+        timestamp: bigint;
+        hcsTransactionId: string;
+        hfsFileId: string;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "recordAudit"
   ): TypedContractMethod<[_auditHash: BytesLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "recordAuditV3"
+  ): TypedContractMethod<
+    [_auditHash: BytesLike, _hcsTransactionId: string, _hfsFileId: string],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "relayer"
   ): TypedContractMethod<[], [string], "view">;
@@ -547,11 +1062,25 @@ export interface PESContract extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "setFinancialManager"
+  ): TypedContractMethod<
+    [_financialManager: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "setOracleManager"
   ): TypedContractMethod<[_oracleManager: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setRelayer"
   ): TypedContractMethod<[_relayer: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setTechnicalManager"
+  ): TypedContractMethod<
+    [_technicalManager: AddressLike],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "submitValidatedBatch"
   ): TypedContractMethod<
@@ -559,6 +1088,12 @@ export interface PESContract extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "technicalManager"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "withdrawExcessHBAR"
+  ): TypedContractMethod<[_amount: BigNumberish], [void], "nonpayable">;
 
   getEvent(
     key: "AgreementCreated"
@@ -575,11 +1110,39 @@ export interface PESContract extends BaseContract {
     AuditRecordedEvent.OutputObject
   >;
   getEvent(
+    key: "AuditRecordedV3"
+  ): TypedContractEvent<
+    AuditRecordedV3Event.InputTuple,
+    AuditRecordedV3Event.OutputTuple,
+    AuditRecordedV3Event.OutputObject
+  >;
+  getEvent(
+    key: "GovernanceModeChanged"
+  ): TypedContractEvent<
+    GovernanceModeChangedEvent.InputTuple,
+    GovernanceModeChangedEvent.OutputTuple,
+    GovernanceModeChangedEvent.OutputObject
+  >;
+  getEvent(
+    key: "InvestmentReceived"
+  ): TypedContractEvent<
+    InvestmentReceivedEvent.InputTuple,
+    InvestmentReceivedEvent.OutputTuple,
+    InvestmentReceivedEvent.OutputObject
+  >;
+  getEvent(
     key: "PaymentApproved"
   ): TypedContractEvent<
     PaymentApprovedEvent.InputTuple,
     PaymentApprovedEvent.OutputTuple,
     PaymentApprovedEvent.OutputObject
+  >;
+  getEvent(
+    key: "PaymentExecuted"
+  ): TypedContractEvent<
+    PaymentExecutedEvent.InputTuple,
+    PaymentExecutedEvent.OutputTuple,
+    PaymentExecutedEvent.OutputObject
   >;
   getEvent(
     key: "PaymentRequested"
@@ -597,7 +1160,7 @@ export interface PESContract extends BaseContract {
   >;
 
   filters: {
-    "AgreementCreated(uint256,bytes32,address,uint256,uint256)": TypedContractEvent<
+    "AgreementCreated(uint256,bytes32,address,address,uint256,uint256,uint8)": TypedContractEvent<
       AgreementCreatedEvent.InputTuple,
       AgreementCreatedEvent.OutputTuple,
       AgreementCreatedEvent.OutputObject
@@ -619,7 +1182,40 @@ export interface PESContract extends BaseContract {
       AuditRecordedEvent.OutputObject
     >;
 
-    "PaymentApproved(uint256,address,uint256,bytes32,uint256)": TypedContractEvent<
+    "AuditRecordedV3(bytes32,uint256,string,string)": TypedContractEvent<
+      AuditRecordedV3Event.InputTuple,
+      AuditRecordedV3Event.OutputTuple,
+      AuditRecordedV3Event.OutputObject
+    >;
+    AuditRecordedV3: TypedContractEvent<
+      AuditRecordedV3Event.InputTuple,
+      AuditRecordedV3Event.OutputTuple,
+      AuditRecordedV3Event.OutputObject
+    >;
+
+    "GovernanceModeChanged(uint256,uint8,uint8)": TypedContractEvent<
+      GovernanceModeChangedEvent.InputTuple,
+      GovernanceModeChangedEvent.OutputTuple,
+      GovernanceModeChangedEvent.OutputObject
+    >;
+    GovernanceModeChanged: TypedContractEvent<
+      GovernanceModeChangedEvent.InputTuple,
+      GovernanceModeChangedEvent.OutputTuple,
+      GovernanceModeChangedEvent.OutputObject
+    >;
+
+    "InvestmentReceived(uint256,address,uint256,uint256)": TypedContractEvent<
+      InvestmentReceivedEvent.InputTuple,
+      InvestmentReceivedEvent.OutputTuple,
+      InvestmentReceivedEvent.OutputObject
+    >;
+    InvestmentReceived: TypedContractEvent<
+      InvestmentReceivedEvent.InputTuple,
+      InvestmentReceivedEvent.OutputTuple,
+      InvestmentReceivedEvent.OutputObject
+    >;
+
+    "PaymentApproved(uint256,address,bytes32,address,uint256,uint256,string,string)": TypedContractEvent<
       PaymentApprovedEvent.InputTuple,
       PaymentApprovedEvent.OutputTuple,
       PaymentApprovedEvent.OutputObject
@@ -628,6 +1224,17 @@ export interface PESContract extends BaseContract {
       PaymentApprovedEvent.InputTuple,
       PaymentApprovedEvent.OutputTuple,
       PaymentApprovedEvent.OutputObject
+    >;
+
+    "PaymentExecuted(uint256,uint256,address,uint256,string,string)": TypedContractEvent<
+      PaymentExecutedEvent.InputTuple,
+      PaymentExecutedEvent.OutputTuple,
+      PaymentExecutedEvent.OutputObject
+    >;
+    PaymentExecuted: TypedContractEvent<
+      PaymentExecutedEvent.InputTuple,
+      PaymentExecutedEvent.OutputTuple,
+      PaymentExecutedEvent.OutputObject
     >;
 
     "PaymentRequested(uint256,address,uint256,bytes32)": TypedContractEvent<

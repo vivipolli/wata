@@ -1,5 +1,5 @@
 import express from 'express';
-import { OracleService } from '../services/oracle.js';
+import { OracleService } from '../services/oracle';
 export default function oracleRoutes(database, hederaService) {
     const router = express.Router();
     const oracleService = new OracleService(database, hederaService);
@@ -227,6 +227,40 @@ export default function oracleRoutes(database, hederaService) {
                 success: false,
                 error: 'Failed to fetch oracle statistics',
                 message: error instanceof Error ? error.message : 'Unknown error'
+            };
+            res.status(500).json(response);
+        }
+    });
+    // Get weekly average score for an agreement
+    // Business Rule: A média semanal deve ser normalizada em um score entre 0 e 1
+    router.get('/weekly-average/:agreementId', async (req, res) => {
+        try {
+            const agreementId = parseInt(req.params.agreementId);
+            if (isNaN(agreementId)) {
+                const response = {
+                    success: false,
+                    error: 'Invalid agreement ID'
+                };
+                return res.status(400).json(response);
+            }
+            const weeklyScore = await oracleService.calculateWeeklyAverage(agreementId);
+            const response = {
+                success: true,
+                data: {
+                    agreementId,
+                    weeklyScore,
+                    threshold: 0.7,
+                    isEligible: weeklyScore >= 0.7,
+                    timestamp: new Date().toISOString()
+                }
+            };
+            res.json(response);
+        }
+        catch (error) {
+            console.error('Error calculating weekly average:', error);
+            const response = {
+                success: false,
+                error: 'Failed to calculate weekly average'
             };
             res.status(500).json(response);
         }

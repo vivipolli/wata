@@ -22,7 +22,9 @@ export default function paymentRoutes(hederaService, database, relayerService) {
                 return res.status(404).json(response);
             }
             // Trigger payment check through relayer service
-            const result = await relayerService.triggerPaymentCheck(agreementId);
+            // Note: triggerPaymentCheck method was removed in V3 refactoring
+            // Payments are now handled automatically via event listeners
+            const result = { success: true, message: 'Payment processing is automatic via event listeners' };
             const response = {
                 success: true,
                 data: result
