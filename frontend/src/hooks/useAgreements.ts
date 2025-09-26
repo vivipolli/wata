@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { agreementsService } from '../services'
+import { useAuth } from '../contexts/AuthContext'
+import { USER_ROLES } from '../utils/constants'
 import type { Agreement, CreateAgreementData, Payment, UseAgreementsReturn } from '../types'
 
 /**
  * Custom hook for managing agreements
  */
-export const useAgreements = (): UseAgreementsReturn => {
+export const useAgreements = (autoFetch: boolean = true): UseAgreementsReturn => {
+  const { user, hasRole } = useAuth()
   const [agreements, setAgreements] = useState<Agreement[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
@@ -15,18 +18,25 @@ export const useAgreements = (): UseAgreementsReturn => {
     setError(null)
     
     try {
-      const response = await agreementsService.getAll()
-      if (response.success && response.data) {
-        setAgreements(response.data.agreements || response.data || [])
+      if (hasRole(USER_ROLES.INVESTOR)) {
+        const response = await agreementsService.getAll()
+        if (response.success && response.data) {
+          setAgreements(response.data.agreements || response.data || [])
+        } else {
+          setError('Failed to fetch agreements')
+        }
+      } else if (hasRole(USER_ROLES.PRODUCER)) {
+        setAgreements([])
+        setError('Producers must use specific producer route for security')
       } else {
-        setError('Failed to fetch agreements')
+        setError('Unauthorized to fetch agreements')
       }
     } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [hasRole])
 
   const createAgreement = useCallback(async (agreementData: CreateAgreementData): Promise<Agreement | null> => {
     setLoading(true)
@@ -89,9 +99,27 @@ export const useAgreements = (): UseAgreementsReturn => {
     }
   }, [])
 
-  useEffect(() => {
-    fetchAgreements()
-  }, [fetchAgreements])
+  const getAgreementsByProducer = useCallback(async (producerAddress: string): Promise<Agreement[]> => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const response = await agreementsService.getByProducer(producerAddress)
+      if (response.success && response.data) {
+        const agreements = response.data.agreements || []
+        setAgreements(agreements)
+        return agreements
+      } else {
+        setError('Failed to fetch producer agreements')
+        return []
+      }
+    } catch (err: any) {
+      setError(err.message)
+      return []
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   return {
     agreements,
@@ -100,6 +128,7 @@ export const useAgreements = (): UseAgreementsReturn => {
     fetchAgreements,
     createAgreement,
     getAgreement,
-    getAgreementPayments
+    getAgreementPayments,
+    getAgreementsByProducer
   }
 }

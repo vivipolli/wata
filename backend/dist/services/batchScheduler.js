@@ -72,8 +72,13 @@ export class BatchSchedulerService {
                     const batchResult = await this.oracleService.processBatch(agreement.id);
                     if (batchResult.validReadings.length > 0) {
                         // Submit to smart contract if there are valid readings
-                        await this.oracleService.submitValidatedBatch(agreement.id, batchResult);
-                        console.log(`Batch processed and submitted for agreement ${agreement.id}: score ${batchResult.score.toFixed(3)}`);
+                        const result = await this.oracleService.submitValidatedBatch(agreement.id, batchResult);
+                        if (result === 'skipped') {
+                            console.log(`Batch processed but skipped submission for agreement ${agreement.id}: score ${batchResult.score.toFixed(3)}`);
+                        }
+                        else {
+                            console.log(`Batch processed and submitted for agreement ${agreement.id}: score ${batchResult.score.toFixed(3)}`);
+                        }
                     }
                     else {
                         console.log(`No valid readings to process for agreement ${agreement.id}`);

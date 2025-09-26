@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useAccount, useConnect, useDisconnect, useBalance } from 'wagmi'
 import { hederaService } from '../services/hedera'
+import { useAuth } from './AuthContext'
 
 export interface WalletInfo {
   address: string
@@ -16,6 +17,8 @@ interface WalletContextType {
   disconnectWallet: () => void
   refreshBalance: () => Promise<void>
   transferHBAR: (toAddress: string, amount: number) => Promise<{ success: boolean; transactionHash?: string; error?: string }>
+  isHederaWalletSnapAvailable: () => Promise<boolean>
+  installHederaWalletSnap: () => Promise<boolean>
   isLoading: boolean
   error: string | null
 }
@@ -37,6 +40,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const { data: balance } = useBalance({
     address: address,
   })
+
+  // Auth context
+  const { user, updateUserAddress } = useAuth()
 
   const connectWallet = async (): Promise<void> => {
     try {
@@ -115,10 +121,10 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       // Convert Ethereum address to Hedera format
       const convertEthereumToHedera = async (ethereumAddress: string): Promise<string> => {
         try {
-          // In a real implementation, you would use HashConnect or similar
-          // For now, we'll use a mock conversion
-          const mockHederaAddress = "0.0.5904577"
-          return mockHederaAddress
+          // Use the actual Ethereum address as Hedera address
+          // In a real implementation, you would convert properly
+          // For now, we'll use the Ethereum address directly
+          return ethereumAddress
         } catch (error) {
           console.error('Error converting address:', error)
           throw new Error('Failed to convert Ethereum address to Hedera format')
@@ -141,6 +147,16 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
           setWallet(walletInfo)
           localStorage.setItem('wata_wallet', JSON.stringify(walletInfo))
+
+          // Update user address in backend if user is authenticated
+          if (user && user.address !== hederaAddress) {
+            try {
+              await updateUserAddress(hederaAddress)
+              console.log('User address updated successfully')
+            } catch (err) {
+              console.error('Error updating user address:', err)
+            }
+          }
         } catch (err) {
           console.error('Error updating wallet info:', err)
         }
@@ -151,7 +167,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       setWallet(null)
       localStorage.removeItem('wata_wallet')
     }
-  }, [isConnected, address, chain])
+  }, [isConnected, address, chain, user])
 
   const value: WalletContextType = {
     wallet,
@@ -159,6 +175,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     disconnectWallet,
     refreshBalance,
     transferHBAR,
+    isHederaWalletSnapAvailable: hederaService.isHederaWalletSnapAvailable,
+    installHederaWalletSnap: hederaService.installHederaWalletSnap,
     isLoading: isPending,
     error
   }

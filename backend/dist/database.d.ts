@@ -71,6 +71,7 @@ export declare class Database {
     getAgreementByHash(agreementHash: string): Promise<DatabaseRow | undefined>;
     updateAgreementBlockchainId(id: number, blockchainId: number): Promise<void>;
     getAllAgreements(): Promise<DatabaseRow[]>;
+    getAgreementsByProducer(producerAddress: string): Promise<DatabaseRow[]>;
     createReading(readingData: ReadingData): Promise<number>;
     getReadingsByAgreement(agreementId: number, limit?: number): Promise<DatabaseRow[]>;
     getRecentReadings(limit?: number): Promise<DatabaseRow[]>;
@@ -116,6 +117,7 @@ export declare class Database {
     getUserById(id: number): Promise<DatabaseRow | undefined>;
     updateUserLastLogin(id: number): Promise<void>;
     updateUserPassword(id: number, hashedPassword: string): Promise<void>;
+    updateUserAddress(id: number, address: string): Promise<void>;
     deactivateUser(id: number): Promise<void>;
     getAllUsers(): Promise<DatabaseRow[]>;
     updateUser(id: number, updateData: {

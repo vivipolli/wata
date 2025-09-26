@@ -11,7 +11,8 @@ export default defineConfig({
     cors: true
   },
   define: {
-    'process.env': {}
+    'process.env': {},
+    global: 'globalThis'
   },
   envPrefix: 'VITE_',
   resolve: {
@@ -21,7 +22,11 @@ export default defineConfig({
       '@/services': path.resolve(__dirname, './src/services'),
       '@/hooks': path.resolve(__dirname, './src/hooks'),
       '@/utils': path.resolve(__dirname, './src/utils'),
-      '@/types': path.resolve(__dirname, './src/types')
+      '@/types': path.resolve(__dirname, './src/types'),
+      buffer: 'buffer'
     }
+  },
+  optimizeDeps: {
+    include: ['buffer']
   }
 })

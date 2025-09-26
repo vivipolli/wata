@@ -163,3 +163,134 @@ export const isEmpty = (value: any): boolean => {
   if (typeof value === 'object') return Object.keys(value).length === 0
   return false
 }
+
+/**
+ * Dashboard Statistics Utilities
+ */
+
+/**
+ * Calculate dashboard statistics from user data
+ */
+export const calculateDashboardStats = (
+  userAgreements: any[],
+  userReadings: any[],
+  producerOracleStatus: any,
+  pendingPayments: number
+) => {
+  const activeContracts = (userAgreements || []).filter((a: any) => a.is_active).length
+  
+  const recentReadings = userReadings?.slice(0, 10) || []
+  const lastTurbidity = recentReadings.length > 0 ? recentReadings[0].turbidity_ntu : 0
+  
+  const compliantReadings = recentReadings.filter((r: any) => r.turbidity_ntu <= 10)
+  const complianceRate = recentReadings.length > 0 
+    ? (compliantReadings.length / recentReadings.length) * 100 
+    : 0
+
+  // Calculate average score from user's oracle status
+  const averageScore = producerOracleStatus?.summary?.averageScore || 0
+  
+  // Calculate validation rate from user's oracle status
+  const totalBatches = producerOracleStatus?.summary?.totalBatches || 0
+  const pendingBatches = producerOracleStatus?.summary?.pendingBatches || 0
+  const validationRate = totalBatches > 0 
+    ? ((totalBatches - pendingBatches) / totalBatches) * 100 
+    : 0
+
+  return {
+    activeContracts,
+    pendingPayments,
+    lastTurbidity,
+    complianceRate,
+    averageScore,
+    validationRate
+  }
+}
+
+/**
+ * Calculate producer statistics from user data
+ */
+export const calculateProducerStats = (userAgreements: any[], payments: any[]) => {
+  if (!userAgreements || !payments) return null
+
+  const activeAgreements = userAgreements.filter((agreement: any) => agreement.is_active)
+  
+  const totalReceived = payments
+    .filter((payment: any) => payment.status === 'completed')
+    .reduce((sum: number, payment: any) => sum + payment.amount, 0)
+
+  const scores: number[] = [] // No last_score property in Agreement interface
+
+  const averageScore = scores.length > 0 
+    ? scores.reduce((sum: number, score: number) => sum + score, 0) / scores.length 
+    : 0
+
+  const lastPayment = payments
+    .filter((payment: any) => payment.status === 'completed')
+    .sort((a: any, b: any) => new Date(b.processed_at || '').getTime() - new Date(a.processed_at || '').getTime())[0]
+
+  const totalHectares = userAgreements.reduce((sum: number, agreement: any) => sum + agreement.hectares, 0)
+
+  return {
+    totalAgreements: userAgreements.length,
+    activeAgreements: activeAgreements.length,
+    totalReceived,
+    averageScore,
+    lastPaymentDate: lastPayment?.processed_at,
+    totalHectares
+  }
+}
+
+/**
+ * Get score color based on value
+ */
+export const getScoreColor = (score: number): string => {
+  if (score >= 80) return 'text-green-600'
+  if (score >= 60) return 'text-yellow-600'
+  return 'text-red-600'
+}
+
+/**
+ * Format HBAR amount
+ */
+export const formatHBAR = (amount: number): string => {
+  return `${amount.toFixed(4)} HBAR`
+}
+
+/**
+ * Collect and deduplicate readings from multiple agreements
+ */
+export const collectUserReadings = async (
+  userAgreements: any[],
+  readingsService: any,
+  fetchAgreementReadings: any
+): Promise<any[]> => {
+  if (userAgreements.length === 0) return []
+
+  const allReadings: any[] = []
+  
+  // Fetch readings for each user agreement
+  for (const agreement of userAgreements) {
+    try {
+      // Only call the service directly to avoid duplicate calls
+      const response = await readingsService.getByAgreement(agreement.id, 10)
+      if (response.success && response.data) {
+        const agreementReadings = response.data.readings || response.data || []
+        allReadings.push(...agreementReadings)
+      }
+    } catch (error) {
+      console.error(`Error fetching readings for agreement ${agreement.id}:`, error)
+    }
+  }
+  
+  // Sort by timestamp (most recent first) and remove duplicates
+  const uniqueReadings = allReadings.reduce((unique: any[], reading: any) => {
+    if (!unique.find((r: any) => r.id === reading.id)) {
+      unique.push(reading)
+    }
+    return unique
+  }, [])
+  
+  uniqueReadings.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  return uniqueReadings
+}

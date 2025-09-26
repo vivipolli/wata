@@ -306,6 +306,53 @@ export class AuthService {
   }
 
   /**
+   * Update user wallet address
+   */
+  async updateUserAddress(userId: number, address: string): Promise<AuthResponse> {
+    try {
+      // Validate address format (basic validation)
+      if (!address || address.length < 10) {
+        return {
+          success: false,
+          error: 'Invalid wallet address format'
+        }
+      }
+
+      // Check if user exists
+      const user = await this.database.getUserById(userId)
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        }
+      }
+
+      // Update user address
+      await this.database.updateUserAddress(userId, address)
+
+      // Get updated user
+      const updatedUser = await this.database.getUserById(userId)
+      
+      return {
+        success: true,
+        user: {
+          id: updatedUser!.id,
+          email: updatedUser!.email,
+          name: updatedUser!.name,
+          role: updatedUser!.role,
+          address: updatedUser!.address
+        }
+      }
+    } catch (error) {
+      console.error('Update user address error:', error)
+      return {
+        success: false,
+        error: 'Failed to update wallet address'
+      }
+    }
+  }
+
+  /**
    * Get auth middleware instance
    */
   getAuthMiddleware(): AuthMiddleware {

@@ -8,6 +8,12 @@ import agreementRoutes from '../src/routes/agreements'
 import readingRoutes from '../src/routes/readings'
 import paymentRoutes from '../src/routes/payments'
 
+// Jest types
+declare const jest: any
+declare const expect: any
+declare const beforeAll: any
+declare const afterAll: any
+
 // Mock Hedera SDK to avoid real blockchain calls
 jest.mock('@hashgraph/sdk', () => ({
   Client: {

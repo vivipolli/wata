@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { FaWater, FaCheckCircle, FaTimesCircle, FaPlay } from 'react-icons/fa'
-import { useAgreements, useReadings, usePayments } from '../hooks'
+import { useAgreements, useReadings, usePayments, useContractOracleStatus } from '../hooks'
+import { useAuth } from '../contexts/AuthContext'
 import type { MonitoringProps, Agreement, Reading, ReadingStats } from '../types'
 
 export default function Monitoring({}: MonitoringProps) {
-  const { agreements } = useAgreements()
+  const { user } = useAuth()
+  const { agreements, getAgreementsByProducer } = useAgreements(false) // Don't auto-fetch
   const { readings, simulateReading, fetchAgreementReadings } = useReadings()
   const { triggerPaymentCheck } = usePayments()
   
@@ -12,6 +14,38 @@ export default function Monitoring({}: MonitoringProps) {
   const [agreementReadings, setAgreementReadings] = useState<Reading[]>([])
   const [agreementStats, setAgreementStats] = useState<ReadingStats | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
+
+  // State for user-specific agreements
+  const [userAgreements, setUserAgreements] = useState<any[]>([])
+  const [userAgreementsLoading, setUserAgreementsLoading] = useState(false)
+
+  // Use the new hierarchical hook for contract oracle status
+  const { status: contractOracleStatus, loading: oracleLoading } = useContractOracleStatus(selectedAgreement?.id || null)
+
+  // Fetch user-specific agreements
+  useEffect(() => {
+    const fetchUserAgreements = async () => {
+      if (user?.address && getAgreementsByProducer) {
+        setUserAgreementsLoading(true)
+        try {
+          const userAgreementsData = await getAgreementsByProducer(user.address)
+          setUserAgreements(userAgreementsData)
+          
+          // Auto-select first agreement if none selected
+          if (userAgreementsData.length > 0 && !selectedAgreement) {
+            setSelectedAgreement(userAgreementsData[0])
+          }
+        } catch (error) {
+          console.error('Error fetching user agreements:', error)
+          setUserAgreements([])
+        } finally {
+          setUserAgreementsLoading(false)
+        }
+      }
+    }
+
+    fetchUserAgreements()
+  }, [user?.address, getAgreementsByProducer])
 
   useEffect(() => {
     if (selectedAgreement) {
@@ -88,7 +122,13 @@ export default function Monitoring({}: MonitoringProps) {
                 Select Agreement
               </h3>
               <div className="space-y-3">
-                {agreements.map((agreement) => (
+                {userAgreementsLoading ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                    <p className="text-sm text-gray-500">Loading your agreements...</p>
+                  </div>
+                ) : userAgreements.length > 0 ? (
+                  userAgreements.map((agreement) => (
                   <button
                     key={agreement.id}
                     onClick={() => setSelectedAgreement(agreement)}
@@ -105,7 +145,13 @@ export default function Monitoring({}: MonitoringProps) {
                       {agreement.hectares} hectares • {agreement.base_value} HBAR/ha
                     </div>
                   </button>
-                ))}
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No agreements found for your account</p>
+                    <p className="text-sm mt-1">Create an agreement to start monitoring</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -162,6 +208,62 @@ export default function Monitoring({}: MonitoringProps) {
                         </div>
                         <div className="text-sm text-gray-500">Days</div>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Oracle Status */}
+                  {contractOracleStatus && (
+                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                      <h4 className="text-md font-medium text-gray-900 mb-3">Oracle Status</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <div className="text-xl font-bold text-gray-900">
+                            {contractOracleStatus.oracleStatus.totalBatches}
+                          </div>
+                          <div className="text-sm text-gray-500">Total Batches</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xl font-bold text-orange-600">
+                            {contractOracleStatus.oracleStatus.pendingBatches}
+                          </div>
+                          <div className="text-sm text-gray-500">Pending</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xl font-bold text-green-600">
+                            {contractOracleStatus.oracleStatus.submittedBatches}
+                          </div>
+                          <div className="text-sm text-gray-500">Submitted</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xl font-bold text-blue-600">
+                            {(contractOracleStatus.oracleStatus.averageScore * 100).toFixed(1)}%
+                          </div>
+                          <div className="text-sm text-gray-500">Avg Score</div>
+                        </div>
+                      </div>
+                      
+                      {contractOracleStatus.oracleStatus.recentBatches.length > 0 && (
+                        <div className="mt-4">
+                          <h5 className="text-sm font-medium text-gray-900 mb-2">Recent Batches</h5>
+                          <div className="space-y-2">
+                            {contractOracleStatus.oracleStatus.recentBatches.slice(0, 3).map((batch: any) => (
+                              <div key={batch.id} className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600">Batch #{batch.id}</span>
+                                <div className="flex items-center space-x-2">
+                                  <span className={`px-2 py-1 rounded-full text-xs ${
+                                    batch.status === 'submitted' ? 'bg-green-100 text-green-800' :
+                                    batch.status === 'validated' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-orange-100 text-orange-800'
+                                  }`}>
+                                    {batch.status}
+                                  </span>
+                                  <span className="text-gray-500">{(batch.score * 100).toFixed(1)}%</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

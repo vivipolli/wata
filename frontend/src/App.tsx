@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from './components/Header'
+import Sidebar from './components/layout/Sidebar'
 import Dashboard from './components/Dashboard'
 import ContractRegistration from './components/ContractRegistration'
 import Monitoring from './components/Monitoring'
 import Notifications from './components/Notifications'
 import Audit from './components/Audit'
-import ProducerDashboard from './components/ProducerDashboard'
 import InvestorDashboard from './components/InvestorDashboard'
+import Payments from './components/Payments'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import AuthDemo from './components/auth/AuthDemo'
 import { useHealth } from './hooks'
@@ -19,8 +20,14 @@ import { USER_ROLES } from './utils/constants'
 
 const AppContent: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>('dashboard')
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false)
   const { isHealthy } = useHealth()
   const { getAccessibleTabs } = useAuthGuard()
+
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen)
+  }
 
   const renderTabContent = (): React.JSX.Element => {
     switch (currentTab) {
@@ -34,8 +41,8 @@ const AppContent: React.FC = () => {
         return <Audit />
       case 'notifications':
         return <Notifications />
-      case 'produtor':
-        return <ProducerDashboard />
+      case 'payments':
+        return <Payments />
       case 'investidor':
         return <InvestorDashboard />
       default:
@@ -46,16 +53,28 @@ const AppContent: React.FC = () => {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
-        <Header
+        {/* Sidebar */}
+        <Sidebar
           currentTab={currentTab}
           onTabChange={setCurrentTab}
           isHealthy={isHealthy}
           accessibleTabs={getAccessibleTabs()}
+          isOpen={sidebarOpen}
+          onToggle={toggleSidebar}
         />
-        <main>
-          <AuthDemo />
-          {renderTabContent()}
-        </main>
+        
+        {/* Main content */}
+        <div className="lg:ml-64">
+          <Header
+            currentTab={currentTab}
+            onTabChange={setCurrentTab}
+            isHealthy={isHealthy}
+            onToggleSidebar={toggleSidebar}
+          />
+          <main className="pt-16 p-6">
+            {renderTabContent()}
+          </main>
+        </div>
       </div>
     </ProtectedRoute>
   )

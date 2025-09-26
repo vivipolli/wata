@@ -41,8 +41,8 @@ export const validateUserRegistration = [
         .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
         .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
     body('role')
-        .isIn(['PRODUCER', 'INVESTOR', 'MANAGER'])
-        .withMessage('Role must be one of: PRODUCER, INVESTOR, MANAGER'),
+        .isIn(['PRODUCER', 'INVESTOR'])
+        .withMessage('Role must be one of: PRODUCER, INVESTOR'),
     body('address')
         .optional()
         .matches(/^0\.0\.\d+$/)

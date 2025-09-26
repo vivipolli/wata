@@ -180,7 +180,7 @@ export class Database {
         email TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
         password TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('PRODUCER', 'INVESTOR', 'MANAGER', 'ADMIN')),
+        role TEXT NOT NULL CHECK (role IN ('PRODUCER', 'INVESTOR', 'MANAGER')),
         address TEXT,
         is_active BOOLEAN DEFAULT 1,
         last_login DATETIME,
@@ -221,6 +221,9 @@ export class Database {
     }
     async getAllAgreements() {
         return await this.all('SELECT * FROM agreements WHERE is_active = 1 ORDER BY created_at DESC');
+    }
+    async getAgreementsByProducer(producerAddress) {
+        return await this.all('SELECT * FROM agreements WHERE producer_address = ? AND is_active = 1 ORDER BY created_at DESC', [producerAddress]);
     }
     async createReading(readingData) {
         const { agreementId, turbidityNtu, locationLat, locationLng, isSimulated, auditHash } = readingData;
@@ -387,6 +390,9 @@ export class Database {
     }
     async updateUserPassword(id, hashedPassword) {
         await this.run('UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [hashedPassword, id]);
+    }
+    async updateUserAddress(id, address) {
+        await this.run('UPDATE users SET address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [address, id]);
     }
     async deactivateUser(id) {
         await this.run('UPDATE users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id]);

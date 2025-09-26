@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import rateLimit from 'express-rate-limit'
 import { AuthService } from '../services/auth.js'
 import { Database } from '../database.js'
@@ -16,12 +16,28 @@ import { AuthRequest } from '../middleware/auth.js'
 const router = Router()
 
 // Initialize services
-const database = new Database()
-const authService = new AuthService(database)
-const authMiddleware = authService.getAuthMiddleware()
+let database: Database | null = null
+let authService: AuthService | null = null
+let authMiddleware: any = null
+
+// Initialize database and services
+const initializeServices = async () => {
+  if (!database) {
+    database = new Database()
+    await database.initialize()
+    authService = new AuthService(database)
+    authMiddleware = authService.getAuthMiddleware()
+  }
+}
 
 // Apply rate limiting to auth routes
 const authLimiter = rateLimit(authRateLimit)
+
+// Middleware wrapper to ensure services are initialized
+const ensureAuthenticated = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  await initializeServices()
+  return authMiddleware!.authenticate(req, res, next)
+}
 
 /**
  * POST /api/auth/register
@@ -34,9 +50,11 @@ router.post('/register',
   handleValidationErrors,
   async (req: Request, res: Response) => {
     try {
+      await initializeServices() // Ensure services are initialized
+      
       const { email, name, password, role, address } = req.body
 
-      const result = await authService.register({
+      const result = await authService!.register({
         email,
         name,
         password,
@@ -81,9 +99,11 @@ router.post('/login',
   handleValidationErrors,
   async (req: Request, res: Response) => {
     try {
+      await initializeServices() // Ensure services are initialized
+      
       const { email, password } = req.body
 
-      const result = await authService.login({ email, password })
+      const result = await authService!.login({ email, password })
 
       if (result.success) {
         res.json({
@@ -117,6 +137,8 @@ router.post('/login',
  */
 router.post('/refresh', async (req: Request, res: Response) => {
   try {
+    await initializeServices() // Ensure services are initialized
+    
     const { refreshToken } = req.body
 
     if (!refreshToken) {
@@ -127,7 +149,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return
     }
 
-    const result = await authService.refreshToken(refreshToken)
+    const result = await authService!.refreshToken(refreshToken)
 
     if (result.success) {
       res.json({
@@ -158,11 +180,13 @@ router.post('/refresh', async (req: Request, res: Response) => {
  * Get user profile (requires authentication)
  */
 router.get('/profile',
-  authMiddleware.authenticate,
+  ensureAuthenticated,
   async (req: AuthRequest, res: Response) => {
     try {
+      await initializeServices() // Ensure services are initialized
+      
       const userId = req.user!.id
-      const result = await authService.getUserProfile(userId)
+      const result = await authService!.getUserProfile(userId)
 
       if (result.success) {
         res.json({
@@ -190,7 +214,7 @@ router.get('/profile',
  * Update user profile (requires authentication)
  */
 router.put('/profile',
-  authMiddleware.authenticate,
+  ensureAuthenticated,
   sanitizeInput,
   validateUserProfileUpdate,
   handleValidationErrors,
@@ -225,7 +249,7 @@ router.put('/profile',
  * Change user password (requires authentication)
  */
 router.post('/change-password',
-  authMiddleware.authenticate,
+  ensureAuthenticated,
   sanitizeInput,
   validatePasswordChange,
   handleValidationErrors,
@@ -262,7 +286,7 @@ router.post('/change-password',
  * Logout user (client should discard tokens)
  */
 router.post('/logout',
-  authMiddleware.authenticate,
+  ensureAuthenticated,
   async (req: AuthRequest, res: Response) => {
     try {
       // In a real application, you might want to blacklist the token
@@ -286,7 +310,7 @@ router.post('/logout',
  * Verify if token is valid
  */
 router.get('/verify',
-  authMiddleware.authenticate,
+  ensureAuthenticated,
   async (req: AuthRequest, res: Response) => {
     try {
       res.json({
@@ -298,6 +322,51 @@ router.get('/verify',
       })
     } catch (error) {
       console.error('Token verification error:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      })
+    }
+  }
+)
+
+/**
+ * PUT /api/auth/update-address
+ * Update user wallet address
+ */
+router.put('/update-address',
+  authLimiter,
+  ensureAuthenticated,
+  sanitizeInput,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { address } = req.body
+      const userId = req.user!.id
+
+      if (!address) {
+        res.status(400).json({
+          success: false,
+          error: 'Wallet address is required'
+        })
+        return
+      }
+
+      const result = await authService.updateUserAddress(userId, address)
+
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Wallet address updated successfully',
+          user: result.user
+        })
+      } else {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        })
+      }
+    } catch (error) {
+      console.error('Update address error:', error)
       res.status(500).json({
         success: false,
         error: 'Internal server error'

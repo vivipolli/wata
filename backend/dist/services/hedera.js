@@ -1,4 +1,4 @@
-import { Client, AccountId, PrivateKey, ContractFunctionParameters, ContractCallQuery, ContractExecuteTransaction, Hbar, ContractId, AccountBalanceQuery, TransferTransaction, AccountInfoQuery } from '@hashgraph/sdk';
+import { Client, AccountId, PrivateKey, ContractFunctionParameters, ContractCallQuery, ContractExecuteTransaction, Hbar, ContractId, AccountBalanceQuery, TransferTransaction, AccountInfoQuery, TransactionId, TransactionRecordQuery } from '@hashgraph/sdk';
 import dotenv from 'dotenv';
 dotenv.config();
 // Helper function to format strings as bytes32 for Hedera
@@ -49,21 +49,103 @@ export class HederaService {
             throw error;
         }
     }
+    /**
+     * Execute a transaction with user authorization
+     * The user's signature serves as authorization, but we execute with server's key
+     */
+    async executeSignedTransaction(signedTransaction) {
+        try {
+            console.log('Executing transaction with user authorization:');
+            console.log('- User Signer:', signedTransaction.signer);
+            console.log('- Agreement Hash:', signedTransaction.transactionData.agreementHash);
+            console.log('- Producer Address:', signedTransaction.transactionData.producerAddress);
+            const { transactionData } = signedTransaction;
+            // Convert Hedera address (0.0.123456) to Ethereum format for contract interaction
+            let contractAddress;
+            if (transactionData.producerAddress.startsWith('0.0.')) {
+                // Convert Hedera address to Ethereum format
+                const accountId = AccountId.fromString(transactionData.producerAddress);
+                contractAddress = accountId.toSolidityAddress();
+                console.log('- Converted Address:', contractAddress);
+            }
+            else {
+                contractAddress = transactionData.producerAddress;
+                console.log('- Using Address as-is:', contractAddress);
+            }
+            console.log('Creating transaction with server signature...');
+            const transaction = new ContractExecuteTransaction()
+                .setContractId(this.contractId)
+                .setGas(200000)
+                .setFunction('createAgreement', new ContractFunctionParameters()
+                .addBytes32(formatBytes32String(transactionData.agreementHash))
+                .addAddress(contractAddress)
+                .addUint256(transactionData.baseValue)
+                .addUint256(transactionData.hectares));
+            console.log('Executing transaction with server key (user authorized)...');
+            // Execute the transaction with server's key (user has authorized via signature)
+            const response = await transaction.execute(this.client);
+            // Request the receipt of the transaction
+            const receipt = await response.getReceipt(this.client);
+            // Get the transaction consensus status
+            const transactionStatus = receipt.status;
+            console.log("The transaction consensus status is " + transactionStatus);
+            // Get the record for function result
+            const record = await response.getRecord(this.client);
+            const result = record.contractFunctionResult?.getUint256(0);
+            console.log('Agreement created on Hedera with user authorization:', result);
+            // Get the transaction ID in Hedera format
+            const transactionId = record.transactionId?.toString();
+            console.log('Transaction ID:', transactionId);
+            // Return both the agreement ID and transaction ID
+            return {
+                agreementId: Number(result || 0),
+                transactionId: transactionId
+            };
+        }
+        catch (error) {
+            console.error('Error executing transaction with user authorization:', error);
+            throw error;
+        }
+    }
     async createAgreement(agreementHash, producerAddress, baseValue, hectares) {
         try {
+            // Convert Hedera address (0.0.123456) to Ethereum format for contract interaction
+            let contractAddress;
+            if (producerAddress.startsWith('0.0.')) {
+                // Convert Hedera address to Ethereum format
+                const accountId = AccountId.fromString(producerAddress);
+                contractAddress = accountId.toSolidityAddress();
+            }
+            else {
+                contractAddress = producerAddress;
+            }
             const transaction = new ContractExecuteTransaction()
                 .setContractId(this.contractId)
                 .setGas(200000)
                 .setFunction('createAgreement', new ContractFunctionParameters()
                 .addBytes32(formatBytes32String(agreementHash))
-                .addAddress(producerAddress)
+                .addAddress(contractAddress)
                 .addUint256(baseValue)
                 .addUint256(hectares));
+            // Execute the transaction
             const response = await transaction.execute(this.client);
-            const receipt = await response.getRecord(this.client);
-            const result = receipt.contractFunctionResult?.getUint256(0);
+            // Request the receipt of the transaction
+            const receipt = await response.getReceipt(this.client);
+            // Get the transaction consensus status
+            const transactionStatus = receipt.status;
+            console.log("The transaction consensus status is " + transactionStatus);
+            // Get the record for function result
+            const record = await response.getRecord(this.client);
+            const result = record.contractFunctionResult?.getUint256(0);
             console.log('Agreement created on Hedera:', result);
-            return Number(result || 0);
+            // Get the transaction ID in Hedera format
+            const transactionId = record.transactionId?.toString();
+            console.log('Transaction ID:', transactionId);
+            // Return both the agreement ID and transaction ID
+            return {
+                agreementId: Number(result || 0),
+                transactionId: transactionId
+            };
         }
         catch (error) {
             console.error('Error creating agreement on Hedera:', error);
@@ -79,9 +161,15 @@ export class HederaService {
                 .addUint256(agreementId)
                 .addBytes32(formatBytes32String(auditHash)));
             const response = await transaction.execute(this.client);
-            const receipt = await response.getRecord(this.client);
+            // Request the receipt of the transaction
+            const receipt = await response.getReceipt(this.client);
+            // Get the transaction consensus status
+            const transactionStatus = receipt.status;
+            console.log("The transaction consensus status is " + transactionStatus);
+            // Get the record for return value
+            const record = await response.getRecord(this.client);
             console.log('Payment requested on Hedera for agreement:', agreementId);
-            return receipt;
+            return record;
         }
         catch (error) {
             console.error('Error requesting payment on Hedera:', error);
@@ -98,12 +186,18 @@ export class HederaService {
                 .addBytes32(formatBytes32String(auditHash))
                 .addUint256(score));
             const response = await transaction.execute(this.client);
-            const receipt = await response.getRecord(this.client);
+            // Request the receipt of the transaction
+            const receipt = await response.getReceipt(this.client);
+            // Get the transaction consensus status
+            const transactionStatus = receipt.status;
+            console.log("The transaction consensus status is " + transactionStatus);
+            // Get the record for transaction details
+            const record = await response.getRecord(this.client);
             // Get the transaction ID from the response
             // In Hedera, we use the transaction ID in format: accountId@validStart.nonce
-            const accountId = receipt.transactionId.accountId?.toString();
-            const validStart = receipt.transactionId.validStart;
-            const nonce = receipt.transactionId.nonce;
+            const accountId = record.transactionId.accountId?.toString();
+            const validStart = record.transactionId.validStart;
+            const nonce = record.transactionId.nonce;
             // Construct Transaction ID in the correct format: accountId@validStart.nonce
             const transactionId = `${accountId}@${validStart.seconds}.${validStart.nanos}`;
             console.log('Transaction ID from Hedera:', transactionId);
@@ -129,6 +223,45 @@ export class HederaService {
             throw error;
         }
     }
+    /**
+     * Verify transaction status using transaction hash
+     */
+    async verifyTransaction(transactionHash) {
+        try {
+            console.log('Verifying transaction:', transactionHash);
+            // Parse transaction hash to get transaction ID
+            const transactionId = TransactionId.fromString(transactionHash);
+            // Get transaction record
+            const record = await new TransactionRecordQuery()
+                .setTransactionId(transactionId)
+                .execute(this.client);
+            const status = record.receipt?.status?.toString() || 'UNKNOWN';
+            const success = status === 'SUCCESS';
+            console.log('Transaction verification result:', {
+                hash: transactionHash,
+                status,
+                success,
+                consensusTimestamp: record.consensusTimestamp
+            });
+            return {
+                status,
+                success,
+                details: {
+                    consensusTimestamp: record.consensusTimestamp,
+                    transactionId: record.transactionId,
+                    receipt: record.receipt
+                }
+            };
+        }
+        catch (error) {
+            console.error('Error verifying transaction:', error);
+            return {
+                status: 'ERROR',
+                success: false,
+                details: { error: error instanceof Error ? error.message : 'Unknown error' }
+            };
+        }
+    }
     async recordAudit(auditHash) {
         try {
             const transaction = new ContractExecuteTransaction()
@@ -137,9 +270,15 @@ export class HederaService {
                 .setFunction('recordAudit', new ContractFunctionParameters()
                 .addBytes32(formatBytes32String(auditHash)));
             const response = await transaction.execute(this.client);
-            const receipt = await response.getRecord(this.client);
+            // Request the receipt of the transaction
+            const receipt = await response.getReceipt(this.client);
+            // Get the transaction consensus status
+            const transactionStatus = receipt.status;
+            console.log("The transaction consensus status is " + transactionStatus);
+            // Get the record for return value
+            const record = await response.getRecord(this.client);
             console.log('Audit recorded on Hedera:', auditHash);
-            return receipt;
+            return record;
         }
         catch (error) {
             console.error('Error recording audit on Hedera:', error);

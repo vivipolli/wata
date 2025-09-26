@@ -19,6 +19,10 @@ export interface Agreement {
   duration_days?: number
   created_at: string
   is_active: boolean
+  blockchain_id?: number
+  transaction_id?: string
+  transaction_bytes?: string
+  message?: string
 }
 
 export interface CreateAgreementData {
@@ -132,6 +136,7 @@ export interface UseAgreementsReturn {
   createAgreement: (data: CreateAgreementData) => Promise<Agreement | null>
   getAgreement: (id: number) => Promise<Agreement | null>
   getAgreementPayments: (agreementId: number) => Promise<Payment[]>
+  getAgreementsByProducer: (producerAddress: string) => Promise<Agreement[]>
 }
 
 export interface UseReadingsReturn {

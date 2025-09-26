@@ -32,6 +32,29 @@ export interface Payment {
     createdAt: string;
     processedAt?: string;
 }
+export interface TransactionData {
+    agreementHash: string;
+    producerAddress: string;
+    baseValue: number;
+    hectares: number;
+    timestamp: number;
+}
+export interface SignedTransaction {
+    transactionData: TransactionData;
+    signature: string;
+    signer: string;
+    timestamp: number;
+}
+export interface CreateAgreementWithSignatureRequest {
+    producerName: string;
+    producerAddress: string;
+    baseValue: number;
+    hectares: number;
+    locationLat?: number;
+    locationLng?: number;
+    durationDays?: number;
+    signedTransaction: SignedTransaction;
+}
 export interface DatabaseConfig {
     filename: string;
 }

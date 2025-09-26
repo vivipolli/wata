@@ -168,6 +168,44 @@ export class AuthMiddleware {
   }
 
   /**
+   * Middleware to block producers from accessing all agreements route
+   * Only MANAGER and INVESTOR can access GET /api/agreements
+   */
+  blockProducersFromAllAgreements = (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      })
+      return
+    }
+
+    // Block producers from accessing all agreements
+    if (req.user.role === 'PRODUCER') {
+      res.status(403).json({
+        success: false,
+        error: 'Producers cannot access all agreements. Use specific producer route instead.',
+        message: 'For security reasons, producers can only access their own agreements via /api/agreements/producer/:address'
+      })
+      return
+    }
+
+    // Allow MANAGER and INVESTOR
+    if (req.user.role === 'MANAGER' || req.user.role === 'INVESTOR') {
+      next()
+      return
+    }
+
+    // Block any other roles
+    res.status(403).json({
+      success: false,
+      error: 'Insufficient permissions to access all agreements',
+      required: ['MANAGER', 'INVESTOR'],
+      current: req.user.role
+    })
+  }
+
+  /**
    * Generate JWT token for user
    */
   generateToken(user: { id: number; email: string; role: string }): string {

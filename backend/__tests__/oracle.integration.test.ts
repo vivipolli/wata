@@ -7,6 +7,9 @@ import { HederaService } from '../src/services/hedera'
 import { OracleService } from '../src/services/oracle'
 import oracleRoutes from '../src/routes/oracle'
 
+// Jest types
+declare const jest: any
+
 // Mock Hedera service for testing
 class MockHederaService extends HederaService {
   async initialize(): Promise<void> {
@@ -89,7 +92,7 @@ describe('Oracle Integration Tests', () => {
       })
 
       // Create test readings
-      const readingIds = []
+      const readingIds: number[] = []
       for (let i = 0; i < 10; i++) {
         const readingId = await database.createReading({
           agreementId,
@@ -138,7 +141,7 @@ describe('Oracle Integration Tests', () => {
   describe('POST /api/oracle/process-all', () => {
     it('should process all active agreements', async () => {
       // Create multiple test agreements with readings
-      const agreements = []
+      const agreements: number[] = []
       for (let i = 0; i < 3; i++) {
         const agreementId = await createAgreementWithBlockchainId({
           agreementHash: `test-hash-${i}`,
@@ -146,7 +149,7 @@ describe('Oracle Integration Tests', () => {
           producerAddress: `0.0.12345${i}`,
           baseValue: 100,
           hectares: 50
-        }, i)
+        }, i + 1)
         agreements.push(agreementId)
 
         // Create readings for each agreement

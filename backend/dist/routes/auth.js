@@ -5,17 +5,32 @@ import { Database } from '../database.js';
 import { validateUserRegistration, validateUserLogin, validatePasswordChange, validateUserProfileUpdate, handleValidationErrors, sanitizeInput, authRateLimit } from '../middleware/validation.js';
 const router = Router();
 // Initialize services
-const database = new Database();
-const authService = new AuthService(database);
-const authMiddleware = authService.getAuthMiddleware();
+let database = null;
+let authService = null;
+let authMiddleware = null;
+// Initialize database and services
+const initializeServices = async () => {
+    if (!database) {
+        database = new Database();
+        await database.initialize();
+        authService = new AuthService(database);
+        authMiddleware = authService.getAuthMiddleware();
+    }
+};
 // Apply rate limiting to auth routes
 const authLimiter = rateLimit(authRateLimit);
+// Middleware wrapper to ensure services are initialized
+const ensureAuthenticated = async (req, res, next) => {
+    await initializeServices();
+    return authMiddleware.authenticate(req, res, next);
+};
 /**
  * POST /api/auth/register
  * Register a new user
  */
 router.post('/register', authLimiter, sanitizeInput, validateUserRegistration, handleValidationErrors, async (req, res) => {
     try {
+        await initializeServices(); // Ensure services are initialized
         const { email, name, password, role, address } = req.body;
         const result = await authService.register({
             email,
@@ -56,6 +71,7 @@ router.post('/register', authLimiter, sanitizeInput, validateUserRegistration, h
  */
 router.post('/login', authLimiter, sanitizeInput, validateUserLogin, handleValidationErrors, async (req, res) => {
     try {
+        await initializeServices(); // Ensure services are initialized
         const { email, password } = req.body;
         const result = await authService.login({ email, password });
         if (result.success) {
@@ -90,6 +106,7 @@ router.post('/login', authLimiter, sanitizeInput, validateUserLogin, handleValid
  */
 router.post('/refresh', async (req, res) => {
     try {
+        await initializeServices(); // Ensure services are initialized
         const { refreshToken } = req.body;
         if (!refreshToken) {
             res.status(400).json({
@@ -128,8 +145,9 @@ router.post('/refresh', async (req, res) => {
  * GET /api/auth/profile
  * Get user profile (requires authentication)
  */
-router.get('/profile', authMiddleware.authenticate, async (req, res) => {
+router.get('/profile', ensureAuthenticated, async (req, res) => {
     try {
+        await initializeServices(); // Ensure services are initialized
         const userId = req.user.id;
         const result = await authService.getUserProfile(userId);
         if (result.success) {
@@ -157,7 +175,7 @@ router.get('/profile', authMiddleware.authenticate, async (req, res) => {
  * PUT /api/auth/profile
  * Update user profile (requires authentication)
  */
-router.put('/profile', authMiddleware.authenticate, sanitizeInput, validateUserProfileUpdate, handleValidationErrors, async (req, res) => {
+router.put('/profile', ensureAuthenticated, sanitizeInput, validateUserProfileUpdate, handleValidationErrors, async (req, res) => {
     try {
         const userId = req.user.id;
         const { name, address } = req.body;
@@ -183,7 +201,7 @@ router.put('/profile', authMiddleware.authenticate, sanitizeInput, validateUserP
  * POST /api/auth/change-password
  * Change user password (requires authentication)
  */
-router.post('/change-password', authMiddleware.authenticate, sanitizeInput, validatePasswordChange, handleValidationErrors, async (req, res) => {
+router.post('/change-password', ensureAuthenticated, sanitizeInput, validatePasswordChange, handleValidationErrors, async (req, res) => {
     try {
         const userId = req.user.id;
         const { currentPassword, newPassword } = req.body;
@@ -213,7 +231,7 @@ router.post('/change-password', authMiddleware.authenticate, sanitizeInput, vali
  * POST /api/auth/logout
  * Logout user (client should discard tokens)
  */
-router.post('/logout', authMiddleware.authenticate, async (req, res) => {
+router.post('/logout', ensureAuthenticated, async (req, res) => {
     try {
         // In a real application, you might want to blacklist the token
         // For now, we'll just return success and let the client handle token removal
@@ -234,7 +252,7 @@ router.post('/logout', authMiddleware.authenticate, async (req, res) => {
  * GET /api/auth/verify
  * Verify if token is valid
  */
-router.get('/verify', authMiddleware.authenticate, async (req, res) => {
+router.get('/verify', ensureAuthenticated, async (req, res) => {
     try {
         res.json({
             success: true,
@@ -246,6 +264,44 @@ router.get('/verify', authMiddleware.authenticate, async (req, res) => {
     }
     catch (error) {
         console.error('Token verification error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        });
+    }
+});
+/**
+ * PUT /api/auth/update-address
+ * Update user wallet address
+ */
+router.put('/update-address', authLimiter, ensureAuthenticated, sanitizeInput, async (req, res) => {
+    try {
+        const { address } = req.body;
+        const userId = req.user.id;
+        if (!address) {
+            res.status(400).json({
+                success: false,
+                error: 'Wallet address is required'
+            });
+            return;
+        }
+        const result = await authService.updateUserAddress(userId, address);
+        if (result.success) {
+            res.json({
+                success: true,
+                message: 'Wallet address updated successfully',
+                user: result.user
+            });
+        }
+        else {
+            res.status(400).json({
+                success: false,
+                error: result.error
+            });
+        }
+    }
+    catch (error) {
+        console.error('Update address error:', error);
         res.status(500).json({
             success: false,
             error: 'Internal server error'

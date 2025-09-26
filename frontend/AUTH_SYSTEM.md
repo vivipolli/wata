@@ -154,4 +154,4 @@ yarn dev
 
 ---
 
-**W.A.T.A. Chain** - Water Accountability & Transparency Alliance
+**W.A.T.A. Chain** - Water Accountability Tokenized Agreement

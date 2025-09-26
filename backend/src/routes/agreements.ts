@@ -1,9 +1,9 @@
 import express, { Request, Response } from 'express'
-import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
 import { HederaService } from '../services/hedera'
 import { Database } from '../database'
-import type { CreateAgreementRequest, ApiResponse, Agreement } from '../types/index'
+import { AuthMiddleware } from '../middleware/auth'
+import type { ApiResponse, CreateAgreementWithSignatureRequest } from '../types/index'
 
 interface AgreementData {
   producerName: string
@@ -19,6 +19,7 @@ interface AgreementData {
 interface CreateAgreementResponse {
   id: number
   blockchainId?: number | undefined
+  transactionId?: string | undefined
   agreementHash: string
   producerName: string
   producerAddress: string
@@ -28,12 +29,15 @@ interface CreateAgreementResponse {
   locationLng?: number | undefined
   durationDays?: number | undefined
   createdAt: string
+  // New fields for user signature flow
+  transactionBytes?: string | undefined
+  message?: string | undefined
 }
 
 export default function agreementRoutes(hederaService: HederaService, database: Database) {
   const router = express.Router()
+  const authMiddleware = new AuthMiddleware(database)
 
-  // Create new agreement
   router.post('/', async (req: Request, res: Response) => {
     try {
       const {
@@ -43,10 +47,10 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         hectares,
         locationLat,
         locationLng,
-        durationDays
-      }: CreateAgreementRequest = req.body
+        durationDays,
+        signedTransaction
+      }: CreateAgreementWithSignatureRequest = req.body
 
-      // Validate required fields
       if (!producerName || !producerAddress || !baseValue || !hectares) {
         return res.status(400).json({
           success: false,
@@ -54,7 +58,59 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         } as ApiResponse)
       }
 
-      // Generate agreement hash
+      if (signedTransaction || req.body.blockchainId) {
+        const agreementData: AgreementData = {
+          producerName,
+          producerAddress,
+          baseValue,
+          hectares,
+          locationLat,
+          locationLng,
+          durationDays,
+          timestamp: Date.now()
+        }
+
+        const agreementHash = crypto
+          .createHash('sha256')
+          .update(JSON.stringify(agreementData))
+          .digest('hex')
+
+        const agreementId = await database.createAgreement({
+          agreementHash,
+          producerName,
+          producerAddress,
+          baseValue,
+          hectares,
+          locationLat,
+          locationLng,
+          durationDays
+        })
+
+        const blockchainId = req.body.blockchainId
+        if (blockchainId) {
+          await database.updateAgreementBlockchainId(agreementId, blockchainId)
+        }
+
+        const response: ApiResponse<CreateAgreementResponse> = {
+          success: true,
+          data: {
+            id: agreementId,
+            blockchainId: blockchainId,
+            agreementHash,
+            producerName,
+            producerAddress,
+            baseValue,
+            hectares,
+            locationLat,
+            locationLng,
+            durationDays,
+            createdAt: new Date().toISOString()
+          }
+        }
+
+        return res.status(201).json(response)
+      }
+
       const agreementData: AgreementData = {
         producerName,
         producerAddress,
@@ -71,7 +127,6 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         .update(JSON.stringify(agreementData))
         .digest('hex')
 
-      // Create agreement in database
       const agreementId = await database.createAgreement({
         agreementHash,
         producerName,
@@ -83,24 +138,21 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         durationDays
       })
 
-      // Create agreement on Hedera blockchain
-      const blockchainAgreementId = await hederaService.createAgreement(
+      const result = await hederaService.createAgreementWithSystem(
         agreementHash,
         producerAddress,
         baseValue,
         hectares
       )
 
-      // Update database with blockchain ID
-      if (blockchainAgreementId) {
-        await database.updateAgreementBlockchainId(agreementId, blockchainAgreementId)
-      }
+      await database.updateAgreementBlockchainId(agreementId, result.agreementId)
 
       const response: ApiResponse<CreateAgreementResponse> = {
         success: true,
         data: {
           id: agreementId,
-          blockchainId: blockchainAgreementId,
+          blockchainId: result.agreementId,
+          transactionId: result.transactionId,
           agreementHash,
           producerName,
           producerAddress,
@@ -115,7 +167,6 @@ export default function agreementRoutes(hederaService: HederaService, database: 
 
       res.status(201).json(response)
     } catch (error) {
-      console.error('Error creating agreement:', error)
       const response: ApiResponse = {
         success: false,
         error: 'Failed to create agreement',
@@ -125,8 +176,10 @@ export default function agreementRoutes(hederaService: HederaService, database: 
     }
   })
 
-  // Get all agreements
-  router.get('/', async (req: Request, res: Response) => {
+  router.get('/', 
+    authMiddleware.authenticate,
+    authMiddleware.blockProducersFromAllAgreements,
+    async (req: Request, res: Response) => {
     try {
       const agreements = await database.getAllAgreements()
       const response: ApiResponse = {
@@ -135,7 +188,6 @@ export default function agreementRoutes(hederaService: HederaService, database: 
       }
       res.json(response)
     } catch (error) {
-      console.error('Error fetching agreements:', error)
       const response: ApiResponse = {
         success: false,
         error: 'Failed to fetch agreements',
@@ -145,7 +197,43 @@ export default function agreementRoutes(hederaService: HederaService, database: 
     }
   })
 
-  // Get specific agreement
+  router.get('/producer/:address', async (req: Request, res: Response) => {
+    try {
+      const producerAddress = req.params.address
+      
+      if (!producerAddress) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Producer address is required'
+        }
+        res.status(400).json(response)
+        return
+      }
+
+      const agreements = await database.getAgreementsByProducer(producerAddress)
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          agreements,
+          producerAddress,
+          totalAgreements: agreements.length
+        }
+      }
+      res.json(response)
+    } catch (error) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to fetch agreements for producer',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
+
+
+
+
   router.get('/:id', async (req: Request, res: Response) => {
     try {
       const agreementId = parseInt(req.params.id)
@@ -160,7 +248,6 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         return
       }
 
-      // Get recent readings for this agreement
       const readings = await database.getReadingsByAgreement(agreementId, 10)
 
       const response: ApiResponse = {
@@ -173,7 +260,6 @@ export default function agreementRoutes(hederaService: HederaService, database: 
 
       res.json(response)
     } catch (error) {
-      console.error('Error fetching agreement:', error)
       const response: ApiResponse = {
         success: false,
         error: 'Failed to fetch agreement',
@@ -183,7 +269,6 @@ export default function agreementRoutes(hederaService: HederaService, database: 
     }
   })
 
-  // Get agreement payments
   router.get('/:id/payments', async (req: Request, res: Response) => {
     try {
       const agreementId = parseInt(req.params.id)
@@ -196,10 +281,103 @@ export default function agreementRoutes(hederaService: HederaService, database: 
 
       res.json(response)
     } catch (error) {
-      console.error('Error fetching agreement payments:', error)
       const response: ApiResponse = {
         success: false,
         error: 'Failed to fetch payments',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
+  router.post('/create-agreement', async (req: Request, res: Response) => {
+    try {
+      const { agreementHash, producerAddress, baseValue, hectares, producerName, locationLat, locationLng, durationDays } = req.body
+
+      if (!agreementHash || !producerAddress || !baseValue || !hectares) {
+        return res.status(400).json({
+          success: false,
+          error: 'Agreement hash, producer address, base value, and hectares are required'
+        })
+      }
+
+      const finalAgreementId = await database.createAgreement({
+        agreementHash,
+        producerName: producerName || 'Unknown Producer',
+        producerAddress,
+        baseValue,
+        hectares,
+        locationLat,
+        locationLng,
+        durationDays
+      })
+
+      const result = await hederaService.createAgreementWithSystem(
+        agreementHash,
+        producerAddress,
+        baseValue,
+        hectares
+      )
+
+      await database.updateAgreementBlockchainId(finalAgreementId, result.agreementId)
+
+      const response: ApiResponse<{
+        agreementId: number
+        transactionId: string
+        success: boolean
+      }> = {
+        success: true,
+        data: {
+          agreementId: result.agreementId,
+          transactionId: result.transactionId,
+          success: true
+        }
+      }
+
+      res.json(response)
+    } catch (error) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to create agreement',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
+  router.get('/verify/:transactionHash', async (req: Request, res: Response) => {
+    try {
+      const { transactionHash } = req.params
+
+      if (!transactionHash) {
+        return res.status(400).json({
+          success: false,
+          error: 'Transaction hash is required'
+        })
+      }
+
+      const verification = await hederaService.verifyTransaction(transactionHash)
+
+      const response: ApiResponse<{
+        transactionHash: string
+        status: string
+        success: boolean
+        details?: any
+      }> = {
+        success: true,
+        data: {
+          transactionHash,
+          status: verification.status,
+          success: verification.success,
+          details: verification.details
+        }
+      }
+
+      res.json(response)
+    } catch (error) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to verify transaction',
         message: error instanceof Error ? error.message : 'Unknown error'
       }
       res.status(500).json(response)

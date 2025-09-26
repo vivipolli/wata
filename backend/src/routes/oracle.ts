@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express'
 import { Database } from '../database'
 import { HederaService } from '../services/hedera'
 import { OracleService } from '../services/oracle'
+import { AuthMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types/index'
 
 interface ProcessBatchRequest {
@@ -21,6 +22,320 @@ interface BatchProcessResult {
 export default function oracleRoutes(database: Database, hederaService: HederaService) {
   const router = express.Router()
   const oracleService = new OracleService(database, hederaService)
+  const authMiddleware = new AuthMiddleware(database)
+
+  // ===== NEW HIERARCHICAL ROUTES: User Producer -> Contract -> Oracle Status =====
+
+  /**
+   * GET /api/oracle/producer/:producerAddress/status
+   * Get oracle status for all contracts of a specific producer
+   */
+  router.get('/producer/:producerAddress/status', 
+    authMiddleware.authenticate,
+    async (req: Request, res: Response) => {
+      try {
+        const producerAddress = req.params.producerAddress
+        const user = (req as any).user
+
+        // Security: Only allow producers to see their own data, or managers/investors to see all
+        if (user.role === 'PRODUCER' && user.address !== producerAddress) {
+          return res.status(403).json({
+            success: false,
+            error: 'Access denied: You can only view your own oracle status'
+          })
+        }
+
+        // Get all agreements for this producer
+        const agreements = await database.getAgreementsByProducer(producerAddress)
+        
+        if (agreements.length === 0) {
+          return res.json({
+            success: true,
+            data: {
+              producerAddress,
+              totalAgreements: 0,
+              contracts: [],
+              summary: {
+                totalBatches: 0,
+                pendingBatches: 0,
+                averageScore: 0,
+                lastActivity: null
+              }
+            }
+          })
+        }
+
+        // Get oracle status for each agreement
+        const contractsWithOracleStatus = await Promise.all(
+          agreements.map(async (agreement: any) => {
+            const batches = await database.getBatchesByAgreement(agreement.id, 10)
+            const recentLogs = await database.getOracleLogsByBatch(agreement.id)
+            
+            // Calculate contract-specific oracle metrics
+            const totalBatches = batches.length
+            const pendingBatches = batches.filter((b: any) => b.validation_status === 'pending').length
+            const averageScore = totalBatches > 0 ? 
+              batches.reduce((sum: number, b: any) => sum + b.score, 0) / totalBatches : 0
+            const lastActivity = batches.length > 0 ? batches[0].created_at : null
+
+            return {
+              agreementId: agreement.id,
+              agreementHash: agreement.agreement_hash,
+              producerName: agreement.producer_name,
+              baseValue: agreement.base_value,
+              hectares: agreement.hectares,
+              isActive: agreement.is_active,
+              createdAt: agreement.created_at,
+              oracleStatus: {
+                totalBatches,
+                pendingBatches,
+                averageScore: Math.round(averageScore * 100) / 100,
+                lastActivity,
+                recentBatches: batches.slice(0, 5).map((batch: any) => ({
+                  id: batch.id,
+                  score: batch.score,
+                  status: batch.validation_status,
+                  createdAt: batch.created_at,
+                  transactionHash: batch.transaction_hash
+                }))
+              }
+            }
+          })
+        )
+
+        // Calculate overall summary
+        const allBatches = contractsWithOracleStatus.flatMap(c => c.oracleStatus.recentBatches)
+        const totalBatches = contractsWithOracleStatus.reduce((sum, c) => sum + c.oracleStatus.totalBatches, 0)
+        const pendingBatches = contractsWithOracleStatus.reduce((sum, c) => sum + c.oracleStatus.pendingBatches, 0)
+        const overallAverageScore = totalBatches > 0 ? 
+          contractsWithOracleStatus.reduce((sum, c) => sum + (c.oracleStatus.averageScore * c.oracleStatus.totalBatches), 0) / totalBatches : 0
+
+        const response: ApiResponse = {
+          success: true,
+          data: {
+            producerAddress,
+            totalAgreements: agreements.length,
+            contracts: contractsWithOracleStatus,
+            summary: {
+              totalBatches,
+              pendingBatches,
+              averageScore: Math.round(overallAverageScore * 100) / 100,
+              lastActivity: allBatches.length > 0 ? allBatches[0].createdAt : null
+            }
+          }
+        }
+
+        res.json(response)
+      } catch (error) {
+        console.error('Error fetching producer oracle status:', error)
+        const response: ApiResponse = {
+          success: false,
+          error: 'Failed to fetch producer oracle status',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        }
+        res.status(500).json(response)
+      }
+    }
+  )
+
+  /**
+   * GET /api/oracle/contract/:agreementId/status
+   * Get detailed oracle status for a specific contract
+   */
+  router.get('/contract/:agreementId/status',
+    authMiddleware.authenticate,
+    async (req: Request, res: Response) => {
+      try {
+        const agreementId = parseInt(req.params.agreementId)
+        const user = (req as any).user
+
+        if (isNaN(agreementId)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid agreement ID'
+          })
+        }
+
+        // Get agreement details
+        const agreement = await database.getAgreement(agreementId)
+        if (!agreement) {
+          return res.status(404).json({
+            success: false,
+            error: 'Agreement not found'
+          })
+        }
+
+        // Security: Only allow producers to see their own contracts, or managers/investors to see all
+        if (user.role === 'PRODUCER' && user.address !== agreement.producer_address) {
+          return res.status(403).json({
+            success: false,
+            error: 'Access denied: You can only view your own contract oracle status'
+          })
+        }
+
+        // Get all batches for this agreement
+        const batches = await database.getBatchesByAgreement(agreementId, 50)
+        
+        // Get recent oracle logs
+        const recentLogs = await database.getOracleLogsByBatch(agreementId)
+        
+        // Calculate detailed metrics
+        const totalBatches = batches.length
+        const pendingBatches = batches.filter((b: any) => b.validation_status === 'pending').length
+        const validatedBatches = batches.filter((b: any) => b.validation_status === 'validated').length
+        const submittedBatches = batches.filter((b: any) => b.validation_status === 'submitted').length
+        
+        const averageScore = totalBatches > 0 ? 
+          batches.reduce((sum: number, b: any) => sum + b.score, 0) / totalBatches : 0
+        
+        const lastWeekBatches = batches.filter((b: any) => {
+          const batchDate = new Date(b.created_at)
+          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+          return batchDate >= weekAgo
+        })
+        
+        const weeklyAverageScore = lastWeekBatches.length > 0 ?
+          lastWeekBatches.reduce((sum: number, b: any) => sum + b.score, 0) / lastWeekBatches.length : 0
+
+        const response: ApiResponse = {
+          success: true,
+          data: {
+            agreement: {
+              id: agreement.id,
+              agreementHash: agreement.agreement_hash,
+              producerName: agreement.producer_name,
+              producerAddress: agreement.producer_address,
+              baseValue: agreement.base_value,
+              hectares: agreement.hectares,
+              isActive: agreement.is_active,
+              createdAt: agreement.created_at
+            },
+            oracleStatus: {
+              totalBatches,
+              pendingBatches,
+              validatedBatches,
+              submittedBatches,
+              averageScore: Math.round(averageScore * 100) / 100,
+              weeklyAverageScore: Math.round(weeklyAverageScore * 100) / 100,
+              lastActivity: batches.length > 0 ? batches[0].created_at : null,
+              recentBatches: batches.slice(0, 10).map((batch: any) => ({
+                id: batch.id,
+                score: batch.score,
+                status: batch.validation_status,
+                readingsCount: batch.readings_count,
+                averageTurbidity: batch.average_turbidity,
+                outliersDetected: batch.outliers_detected,
+                createdAt: batch.created_at,
+                submittedAt: batch.submitted_at,
+                transactionHash: batch.transaction_hash,
+                auditHash: batch.audit_hash
+              })),
+              recentLogs: recentLogs.slice(0, 20).map((log: any) => ({
+                id: log.id,
+                action: log.action,
+                details: log.details,
+                timestamp: log.timestamp,
+                transactionHash: log.transaction_hash
+              }))
+            }
+          }
+        }
+
+        res.json(response)
+      } catch (error) {
+        console.error('Error fetching contract oracle status:', error)
+        const response: ApiResponse = {
+          success: false,
+          error: 'Failed to fetch contract oracle status',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        }
+        res.status(500).json(response)
+      }
+    }
+  )
+
+  /**
+   * GET /api/oracle/contract/:agreementId/batches
+   * Get all batches for a specific contract with detailed oracle information
+   */
+  router.get('/contract/:agreementId/batches',
+    authMiddleware.authenticate,
+    async (req: Request, res: Response) => {
+      try {
+        const agreementId = parseInt(req.params.agreementId)
+        const limit = parseInt(req.query.limit as string) || 50
+        const user = (req as any).user
+
+        if (isNaN(agreementId)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid agreement ID'
+          })
+        }
+
+        // Get agreement details for security check
+        const agreement = await database.getAgreement(agreementId)
+        if (!agreement) {
+          return res.status(404).json({
+            success: false,
+            error: 'Agreement not found'
+          })
+        }
+
+        // Security: Only allow producers to see their own contracts, or managers/investors to see all
+        if (user.role === 'PRODUCER' && user.address !== agreement.producer_address) {
+          return res.status(403).json({
+            success: false,
+            error: 'Access denied: You can only view your own contract batches'
+          })
+        }
+
+        // Get batches with transaction hashes
+        const batches = await database.getBatchesByAgreement(agreementId, limit)
+        
+        const batchesWithTxHash = await Promise.all(
+          batches.map(async (batch: any) => {
+            const oracleLog = await (database as any).get(
+              'SELECT transaction_hash FROM oracle_logs WHERE batch_id = ? AND action = "batch_submitted" ORDER BY timestamp DESC LIMIT 1',
+              [batch.id]
+            )
+            
+            let transactionHash = oracleLog?.transaction_hash || null
+            
+            // Convert binary hash to hex string if needed
+            if (transactionHash && typeof transactionHash === 'object' && transactionHash.type === 'Buffer') {
+              transactionHash = '0x' + Buffer.from(transactionHash.data).toString('hex')
+            }
+            
+            return {
+              ...batch,
+              transaction_hash: transactionHash
+            }
+          })
+        )
+
+        const response: ApiResponse = {
+          success: true,
+          data: {
+            agreementId,
+            totalBatches: batchesWithTxHash.length,
+            batches: batchesWithTxHash
+          }
+        }
+
+        res.json(response)
+      } catch (error) {
+        console.error('Error fetching contract batches:', error)
+        const response: ApiResponse = {
+          success: false,
+          error: 'Failed to fetch contract batches',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        }
+        res.status(500).json(response)
+      }
+    }
+  )
+
 
   // Process batch validation for a specific agreement
   router.post('/process', async (req: Request, res: Response) => {

@@ -50,6 +50,10 @@ export declare class AuthService {
      */
     getUserProfile(userId: number): Promise<AuthResponse>;
     /**
+     * Update user wallet address
+     */
+    updateUserAddress(userId: number, address: string): Promise<AuthResponse>;
+    /**
      * Get auth middleware instance
      */
     getAuthMiddleware(): AuthMiddleware;

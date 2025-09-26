@@ -46,7 +46,101 @@ export interface OracleStats {
   lastActivity: string | null
 }
 
+export interface ProducerOracleStatus {
+  producerAddress: string
+  totalAgreements: number
+  contracts: ContractOracleStatus[]
+  summary: {
+    totalBatches: number
+    pendingBatches: number
+    averageScore: number
+    lastActivity: string | null
+  }
+}
+
+export interface ContractOracleStatus {
+  agreementId: number
+  agreementHash: string
+  producerName: string
+  baseValue: number
+  hectares: number
+  isActive: boolean
+  createdAt: string
+  oracleStatus: {
+    totalBatches: number
+    pendingBatches: number
+    averageScore: number
+    lastActivity: string | null
+    recentBatches: {
+      id: number
+      score: number
+      status: string
+      createdAt: string
+      transactionHash?: string
+    }[]
+  }
+}
+
+export interface DetailedContractOracleStatus {
+  agreement: {
+    id: number
+    agreementHash: string
+    producerName: string
+    producerAddress: string
+    baseValue: number
+    hectares: number
+    isActive: boolean
+    createdAt: string
+  }
+  oracleStatus: {
+    totalBatches: number
+    pendingBatches: number
+    validatedBatches: number
+    submittedBatches: number
+    averageScore: number
+    weeklyAverageScore: number
+    lastActivity: string | null
+    recentBatches: {
+      id: number
+      score: number
+      status: string
+      readingsCount: number
+      averageTurbidity: number
+      outliersDetected: number
+      createdAt: string
+      submittedAt: string
+      transactionHash?: string
+      auditHash: string
+    }[]
+    recentLogs: {
+      id: number
+      action: string
+      details: string
+      timestamp: string
+      transactionHash?: string
+    }[]
+  }
+}
+
 export const oracleService = {
+
+  async getProducerOracleStatus(producerAddress: string): Promise<ProducerOracleStatus> {
+    const response = await apiClient.get(`/oracle/producer/${encodeURIComponent(producerAddress)}/status`)
+    return response.data.data
+  },
+
+  async getContractOracleStatus(agreementId: number): Promise<DetailedContractOracleStatus> {
+    const response = await apiClient.get(`/oracle/contract/${agreementId}/status`)
+    return response.data.data
+  },
+
+  async getContractBatches(agreementId: number, limit?: number): Promise<{ agreementId: number; totalBatches: number; batches: BatchInfo[] }> {
+    const params = limit ? { limit } : {}
+    const response = await apiClient.get(`/oracle/contract/${agreementId}/batches`, { params })
+    return response.data.data
+  },
+
+
   async processBatch(agreementId: number, hoursBack?: number): Promise<BatchProcessResult> {
     const response = await apiClient.post('/oracle/process', { agreementId, hoursBack })
     return response.data.data

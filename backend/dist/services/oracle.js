@@ -240,7 +240,8 @@ export class OracleService {
             // Get blockchain ID for the agreement
             const agreement = await this.database.getAgreement(agreementId);
             if (!agreement || !agreement.blockchain_id) {
-                throw new Error(`Agreement ${agreementId} not found or not deployed to blockchain`);
+                console.warn(`Agreement ${agreementId} not found or not deployed to blockchain - skipping batch submission`);
+                return 'skipped';
             }
             // Submit to smart contract
             // Business Rule: Score is normalized 0-1, contract expects 0-100 for precision (0.7 = 70%)

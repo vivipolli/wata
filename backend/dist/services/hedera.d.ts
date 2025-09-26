@@ -14,9 +14,28 @@ export declare class HederaService {
     private contractAddress;
     private contractId;
     initialize(): Promise<void>;
-    createAgreement(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<number | undefined>;
+    /**
+     * Execute a transaction with user authorization
+     * The user's signature serves as authorization, but we execute with server's key
+     */
+    executeSignedTransaction(signedTransaction: any): Promise<{
+        agreementId: number;
+        transactionId: string;
+    } | undefined>;
+    createAgreement(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<{
+        agreementId: number;
+        transactionId: string;
+    } | undefined>;
     requestPayment(agreementId: number, auditHash: string): Promise<TransactionRecord>;
     submitValidatedBatch(agreementId: number, auditHash: string, score: number): Promise<TransactionRecord>;
+    /**
+     * Verify transaction status using transaction hash
+     */
+    verifyTransaction(transactionHash: string): Promise<{
+        status: string;
+        success: boolean;
+        details?: any;
+    }>;
     recordAudit(auditHash: string): Promise<TransactionRecord>;
     getAgreement(agreementId: number): Promise<AgreementData>;
     transferHbar(toAddress: string, amount: number): Promise<string>;

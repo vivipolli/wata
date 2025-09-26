@@ -29,9 +29,18 @@ export declare class AuthMiddleware {
      */
     requireRole: (requiredRoles: string | string[]) => (req: AuthRequest, res: Response, next: NextFunction) => void;
     /**
-     * Middleware to check if user is admin
+     * Middleware to check if user is producer
      */
-    requireAdmin: (req: AuthRequest, res: Response, next: NextFunction) => void;
+    requireProducer: (req: AuthRequest, res: Response, next: NextFunction) => void;
+    /**
+     * Middleware to check if user is investor
+     */
+    requireInvestor: (req: AuthRequest, res: Response, next: NextFunction) => void;
+    /**
+     * Middleware to block producers from accessing all agreements route
+     * Only MANAGER and INVESTOR can access GET /api/agreements
+     */
+    blockProducersFromAllAgreements: (req: AuthRequest, res: Response, next: NextFunction) => void;
     /**
      * Generate JWT token for user
      */

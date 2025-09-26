@@ -6,12 +6,13 @@ import {
   ContractCallQuery,
   ContractExecuteTransaction,
   Hbar,
-  TransactionResponse,
   ContractId,
   AccountBalanceQuery,
   TransactionRecord,
   TransferTransaction,
-  AccountInfoQuery
+  AccountInfoQuery,
+  TransactionId,
+  TransactionRecordQuery
 } from '@hashgraph/sdk'
 import { ethers } from 'ethers'
 import crypto from 'crypto'
@@ -19,7 +20,6 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-// Helper function to format strings as bytes32 for Hedera
 function formatBytes32String(str: string): Uint8Array {
   const hash = Buffer.from(str, 'utf8')
   const padded = Buffer.alloc(32)
@@ -47,62 +47,62 @@ export class HederaService {
     try {
       this.accountId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID!)
       
-      // Handle different private key formats
       const privateKeyString = process.env.HEDERA_PRIVATE_KEY!
       if (privateKeyString.startsWith('0x')) {
-        // Remove 0x prefix for Hedera SDK
-        this.privateKey = PrivateKey.fromString(privateKeyString.slice(2))
+        this.privateKey = PrivateKey.fromStringECDSA(privateKeyString.slice(2))
       } else {
         this.privateKey = PrivateKey.fromString(privateKeyString)
       }
       this.contractAddress = process.env.CONTRACT_ADDRESS!
 
-      if (!this.accountId || !this.privateKey || !this.contractAddress) {
-        throw new Error('Missing required Hedera configuration')
-      }
-
       this.client = Client.forTestnet().setOperator(this.accountId, this.privateKey)
       
-      // Convert Ethereum address to Hedera Contract ID if needed
       if (this.contractAddress.startsWith('0x')) {
-        // For Ethereum-style addresses, we need to use ContractId.fromEvmAddress
         this.contractId = ContractId.fromEvmAddress(0, 0, this.contractAddress)
       } else {
-        // For Hedera-style addresses (0.0.123456)
         this.contractId = ContractId.fromString(this.contractAddress)
       }
-
-      console.log('Hedera service initialized')
-      console.log('Account ID:', this.accountId.toString())
-      console.log('Contract Address:', this.contractAddress)
     } catch (error) {
-      console.error('Failed to initialize Hedera service:', error)
       throw error
     }
   }
 
-  async createAgreement(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<number | undefined> {
+  async createAgreementWithSystem(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<{ agreementId: number, transactionId: string }> {
     try {
+      let contractAddress: string
+      if (producerAddress.startsWith('0.0.')) {
+        const accountId = AccountId.fromString(producerAddress)
+        contractAddress = accountId.toSolidityAddress()
+      } else {
+        contractAddress = producerAddress
+      }
+
       const transaction = new ContractExecuteTransaction()
         .setContractId(this.contractId!)
         .setGas(200000)
         .setFunction(
           'createAgreement',
           new ContractFunctionParameters()
-            .addBytes32(formatBytes32String(agreementHash))
-            .addAddress(producerAddress)
+            .addBytes32(this.formatBytes32String(agreementHash))
+            .addAddress(contractAddress)
             .addUint256(baseValue)
             .addUint256(hectares)
         )
-
+      
+      const serverTransactionId = TransactionId.generate(this.accountId!)
+      transaction.setTransactionId(serverTransactionId)
+      
       const response = await transaction.execute(this.client!)
-      const receipt = await response.getRecord(this.client!)
-
-      const result = receipt.contractFunctionResult?.getUint256(0)
-      console.log('Agreement created on Hedera:', result)
-      return Number(result || 0)
+      const receipt = await response.getReceipt(this.client!)
+      const record = await response.getRecord(this.client!)
+      const result = record.contractFunctionResult?.getUint256(0)
+      const transactionId = record.transactionId?.toString()
+      
+      return {
+        agreementId: Number(result || 0),
+        transactionId: transactionId
+      }
     } catch (error) {
-      console.error('Error creating agreement on Hedera:', error)
       throw error
     }
   }
@@ -120,12 +120,11 @@ export class HederaService {
         )
 
       const response = await transaction.execute(this.client!)
-      const receipt = await response.getRecord(this.client!)
+      const receipt = await response.getReceipt(this.client!)
+      const record = await response.getRecord(this.client!)
 
-      console.log('Payment requested on Hedera for agreement:', agreementId)
-      return receipt
+      return record
     } catch (error) {
-      console.error('Error requesting payment on Hedera:', error)
       throw error
     }
   }
@@ -144,39 +143,51 @@ export class HederaService {
         )
 
       const response = await transaction.execute(this.client!)
-      const receipt = await response.getRecord(this.client!)
+      const receipt = await response.getReceipt(this.client!)
+      const record = await response.getRecord(this.client!)
 
-      // Get the transaction ID from the response
-      // In Hedera, we use the transaction ID in format: accountId@validStart.nonce
-      const accountId = receipt.transactionId.accountId?.toString()
-      const validStart = receipt.transactionId.validStart
-      const nonce = receipt.transactionId.nonce
-      
-      // Construct Transaction ID in the correct format: accountId@validStart.nonce
+      const accountId = record.transactionId.accountId?.toString()
+      const validStart = record.transactionId.validStart
       const transactionId = `${accountId}@${validStart.seconds}.${validStart.nanos}`
       
-      console.log('Transaction ID from Hedera:', transactionId)
-      console.log('Transaction ID parts:', {
-        accountId,
-        validStart: `${validStart.seconds}.${validStart.nanos}`,
-        nonce
-      })
-      
-      console.log('Validated batch submitted to Hedera:', { 
-        agreementId, 
-        auditHash, 
-        score, 
-        transactionId
-      })
-      
-      // Return receipt with transaction ID
       return {
         ...receipt,
         transactionHash: transactionId
       } as any
     } catch (error) {
-      console.error('Error submitting validated batch to Hedera:', error)
       throw error
+    }
+  }
+
+  async verifyTransaction(transactionHash: string): Promise<{
+    status: string
+    success: boolean
+    details?: any
+  }> {
+    try {
+      const transactionId = TransactionId.fromString(transactionHash)
+      const record = await new TransactionRecordQuery()
+        .setTransactionId(transactionId)
+        .execute(this.client!)
+      
+      const status = record.receipt?.status?.toString() || 'UNKNOWN'
+      const success = status === 'SUCCESS'
+      
+      return {
+        status,
+        success,
+        details: {
+          consensusTimestamp: record.consensusTimestamp,
+          transactionId: record.transactionId,
+          receipt: record.receipt
+        }
+      }
+    } catch (error) {
+      return {
+        status: 'ERROR',
+        success: false,
+        details: { error: error instanceof Error ? error.message : 'Unknown error' }
+      }
     }
   }
 
@@ -192,12 +203,11 @@ export class HederaService {
         )
 
       const response = await transaction.execute(this.client!)
-      const receipt = await response.getRecord(this.client!)
+      const receipt = await response.getReceipt(this.client!)
+      const record = await response.getRecord(this.client!)
 
-      console.log('Audit recorded on Hedera:', auditHash)
-      return receipt
+      return record
     } catch (error) {
-      console.error('Error recording audit on Hedera:', error)
       throw error
     }
   }
@@ -229,21 +239,6 @@ export class HederaService {
     }
   }
 
-  async transferHbar(toAddress: string, amount: number): Promise<string> {
-    try {
-      // For MVP, we'll simulate the transfer
-      // In production, this would use Hedera's TransferTransaction
-      const transactionHash = `0x${Math.random().toString(16).substr(2, 64)}`
-      
-      console.log(`Simulated HBAR transfer: ${amount} to ${toAddress}`)
-      console.log(`Transaction hash: ${transactionHash}`)
-      
-      return transactionHash
-    } catch (error) {
-      console.error('Error transferring HBAR:', error)
-      throw error
-    }
-  }
 
   async getAccountBalance(accountId: string): Promise<string> {
     try {
@@ -253,17 +248,12 @@ export class HederaService {
 
       return balance.hbars.toString()
     } catch (error) {
-      console.error('Error getting account balance:', error)
       throw error
     }
   }
 
   async transferHBAR(toAddress: string, amountInTinybars: number): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
     try {
-      if (!this.client) {
-        throw new Error('Hedera service not initialized')
-      }
-
       const transferTransaction = new TransferTransaction()
         .addHbarTransfer(AccountId.fromString(process.env.HEDERA_ACCOUNT_ID!), new Hbar(-amountInTinybars / 100000000))
         .addHbarTransfer(AccountId.fromString(toAddress), new Hbar(amountInTinybars / 100000000))
@@ -273,14 +263,12 @@ export class HederaService {
       const receipt = await response.getReceipt(this.client!)
       
       const transactionId = response.transactionId.toString()
-      console.log(`HBAR transfer successful: ${transactionId}`)
 
       return {
         success: true,
         transactionHash: transactionId
       }
     } catch (error) {
-      console.error('Error transferring HBAR:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -290,10 +278,6 @@ export class HederaService {
 
   async getAccountInfo(accountId: string): Promise<any> {
     try {
-      if (!this.client) {
-        throw new Error('Hedera service not initialized')
-      }
-
       const accountInfo = await new AccountInfoQuery()
         .setAccountId(AccountId.fromString(accountId))
         .execute(this.client!)
@@ -307,8 +291,14 @@ export class HederaService {
         proxyReceived: accountInfo.proxyReceived.toString()
       }
     } catch (error) {
-      console.error('Error getting account info:', error)
       throw error
     }
+  }
+
+  private formatBytes32String(str: string): Uint8Array {
+    const hash = Buffer.from(str, 'utf8')
+    const padded = Buffer.alloc(32)
+    hash.copy(padded, 0, 0, Math.min(hash.length, 32))
+    return new Uint8Array(padded)
   }
 }

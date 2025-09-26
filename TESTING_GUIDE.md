@@ -79,7 +79,6 @@ yarn test
 frontend/src/components/__tests__/
 ├── ProducerDashboard.test.tsx
 ├── InvestorDashboard.test.tsx
-└── WalletWidget.test.tsx
 ```
 
 ### Funcionalidades Testadas
@@ -97,11 +96,6 @@ frontend/src/components/__tests__/
 - ✅ **Histórico**: Investimentos e pagamentos executados
 - ✅ **Links de Auditoria**: HCS/HFS para transparência
 
-#### ✅ WalletWidget
-- ✅ **Saldo HBAR**: Formatação correta (tinybars → HBAR)
-- ✅ **Histórico de Transações**: Entradas e saídas
-- ✅ **Informações da Conta**: Account ID e detalhes
-- ✅ **Estados de Loading**: Carregamento e erro
 
 ### Executar Testes
 ```bash

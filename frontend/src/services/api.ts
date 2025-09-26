@@ -1,10 +1,7 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
+import axios, { AxiosInstance, AxiosResponse } from 'axios'
 
-// API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'
+const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3001/api'
 
-
-// Create axios instance with default config
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
@@ -13,9 +10,12 @@ const apiClient: AxiosInstance = axios.create({
   },
 })
 
-// Request interceptor for auth
 apiClient.interceptors.request.use(
   (config) => {
+    const token = localStorage.getItem('wata_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     return config
   },
   (error) => {
@@ -23,12 +23,47 @@ apiClient.interceptors.request.use(
   }
 )
 
-// Response interceptor for error handling
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
     return response
   },
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true
+
+      const refreshToken = localStorage.getItem('wata_refresh_token')
+      if (refreshToken) {
+        try {
+          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+            refreshToken
+          })
+
+          if (response.data.success) {
+            const { token, refreshToken: newRefreshToken } = response.data.data
+            localStorage.setItem('wata_token', token)
+            if (newRefreshToken) {
+              localStorage.setItem('wata_refresh_token', newRefreshToken)
+            }
+
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            return apiClient(originalRequest)
+          }
+        } catch (refreshError) {
+          localStorage.removeItem('wata_user')
+          localStorage.removeItem('wata_token')
+          localStorage.removeItem('wata_refresh_token')
+          window.location.href = '/login'
+        }
+      } else {
+        localStorage.removeItem('wata_user')
+        localStorage.removeItem('wata_token')
+        localStorage.removeItem('wata_refresh_token')
+        window.location.href = '/login'
+      }
+    }
+
     return Promise.reject(error)
   }
 )

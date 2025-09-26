@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { USER_ROLES } from '../utils/constants'
+import { authService } from '../services/auth'
 
 export interface User {
   id: string
@@ -14,6 +15,7 @@ interface AuthContextType {
   user: User | null
   login: (email: string, password: string) => Promise<void>
   register: (email: string, name: string, password: string, role: string) => Promise<void>
+  updateUserAddress: (address: string) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
   isLoading: boolean
@@ -33,72 +35,135 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     // Check for stored authentication on mount
-    const storedUser = localStorage.getItem('wata_user')
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser)
-        setUser(parsedUser)
-      } catch (error) {
-        console.error('Error parsing stored user:', error)
-        localStorage.removeItem('wata_user')
+    const checkStoredAuth = async () => {
+      const storedUser = localStorage.getItem('wata_user')
+      const storedToken = localStorage.getItem('wata_token')
+      
+      if (storedUser && storedToken) {
+        try {
+          const parsedUser = JSON.parse(storedUser)
+          
+          // Verify token with backend
+          const result = await authService.verifyToken(storedToken)
+          
+          if (result.success && result.user) {
+            const userData: User = {
+              id: result.user.id.toString(),
+              email: result.user.email,
+              name: result.user.name,
+              role: result.user.role,
+              address: result.user.address,
+              isAuthenticated: true
+            }
+            setUser(userData)
+          } else {
+            // Token invalid, clear storage
+            localStorage.removeItem('wata_user')
+            localStorage.removeItem('wata_token')
+            localStorage.removeItem('wata_refresh_token')
+          }
+        } catch (error) {
+          console.error('Error verifying stored auth:', error)
+          localStorage.removeItem('wata_user')
+          localStorage.removeItem('wata_token')
+          localStorage.removeItem('wata_refresh_token')
+        }
       }
+      setIsLoading(false)
     }
-    setIsLoading(false)
+    
+    checkStoredAuth()
   }, [])
 
   const login = async (email: string, password: string): Promise<void> => {
-    // Simulate API call for login
-    // In a real app, this would call your backend API
-    const mockUsers = JSON.parse(localStorage.getItem('wata_users') || '[]')
-    const user = mockUsers.find((u: any) => u.email === email && u.password === password)
-    
-    if (!user) {
-      throw new Error('Invalid email or password')
-    }
+    try {
+      const result = await authService.login({ email, password })
+      
+      if (result.success && result.user && result.token) {
+        const userData: User = {
+          id: result.user.id.toString(),
+          email: result.user.email,
+          name: result.user.name,
+          role: result.user.role,
+          address: result.user.address,
+          isAuthenticated: true
+        }
 
-    const newUser: User = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      address: user.address,
-      isAuthenticated: true
+        setUser(userData)
+        localStorage.setItem('wata_user', JSON.stringify(userData))
+        localStorage.setItem('wata_token', result.token)
+        
+        if (result.refreshToken) {
+          localStorage.setItem('wata_refresh_token', result.refreshToken)
+        }
+      } else {
+        throw new Error(result.error || 'Login failed')
+      }
+    } catch (error) {
+      console.error('Login error:', error)
+      throw error
     }
-
-    setUser(newUser)
-    localStorage.setItem('wata_user', JSON.stringify(newUser))
   }
 
   const register = async (email: string, name: string, password: string, role: string): Promise<void> => {
-    // Simulate API call for registration
-    // In a real app, this would call your backend API
-    const mockUsers = JSON.parse(localStorage.getItem('wata_users') || '[]')
-    
-    // Check if user already exists
-    const existingUser = mockUsers.find((u: any) => u.email === email)
-    if (existingUser) {
-      throw new Error('User with this email already exists')
+    try {
+      const result = await authService.register({ email, name, password, role })
+      
+      if (result.success && result.user && result.token) {
+        const userData: User = {
+          id: result.user.id.toString(),
+          email: result.user.email,
+          name: result.user.name,
+          role: result.user.role,
+          address: result.user.address,
+          isAuthenticated: true
+        }
+
+        setUser(userData)
+        localStorage.setItem('wata_user', JSON.stringify(userData))
+        localStorage.setItem('wata_token', result.token)
+        
+        if (result.refreshToken) {
+          localStorage.setItem('wata_refresh_token', result.refreshToken)
+        }
+      } else {
+        throw new Error(result.error || 'Registration failed')
+      }
+    } catch (error) {
+      console.error('Registration error:', error)
+      throw error
+    }
+  }
+
+  const updateUserAddress = async (address: string): Promise<void> => {
+    if (!user) {
+      throw new Error('User not authenticated')
     }
 
-    const newUser = {
-      id: `user-${Date.now()}`,
-      email,
-      name,
-      password, // In a real app, this would be hashed
-      role,
-      address: `0.0.${Math.floor(Math.random() * 1000000)}` // Generate mock Hedera address
+    try {
+      const result = await authService.updateAddress(address)
+      
+      if (result.success && result.user) {
+        const updatedUser = {
+          ...user,
+          address: result.user.address
+        }
+        setUser(updatedUser)
+        localStorage.setItem('wata_user', JSON.stringify(updatedUser))
+      } else {
+        throw new Error(result.error || 'Failed to update address')
+      }
+    } catch (error) {
+      console.error('Error updating user address:', error)
+      throw error
     }
-
-    mockUsers.push(newUser)
-    localStorage.setItem('wata_users', JSON.stringify(mockUsers))
-
-    // Auto-login after registration
-    await login(email, password)
   }
 
   const logout = (): void => {
     setUser(null)
     localStorage.removeItem('wata_user')
+    localStorage.removeItem('wata_token')
+    localStorage.removeItem('wata_refresh_token')
   }
 
   const hasRole = (role: string): boolean => {
@@ -113,6 +178,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     login,
     register,
+    updateUserAddress,
     logout,
     isAuthenticated: !!user?.isAuthenticated,
     isLoading,

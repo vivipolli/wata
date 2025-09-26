@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { useAgreements, usePayments } from '../hooks'
-import WalletWidget from './WalletWidget'
 import HashDisplay from './HashDisplay'
 import { hederaService } from '../services/hedera'
 
@@ -44,7 +43,6 @@ const InvestorDashboard: React.FC = () => {
   const [investmentAmount, setInvestmentAmount] = useState<string>('')
 
   // Mock investor address - in real app, this would come from authentication
-  const investorAddress = "0.0.5904577"
 
   useEffect(() => {
     if (agreements && payments) {
@@ -58,7 +56,7 @@ const InvestorDashboard: React.FC = () => {
     if (!agreements || !payments) return
 
     const investmentAgreements = agreements.filter(agreement => 
-      agreement.investorAddress === investorAddress
+      agreement.investorAddress === user?.address
     )
 
     const totalInvested = investmentAgreements.reduce((sum, agreement) => 
@@ -217,7 +215,6 @@ const InvestorDashboard: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Investor Dashboard</h1>
           <p className="text-gray-600">Track your environmental impact investments</p>
         </div>
-        <WalletWidget accountId={investorAddress} />
       </div>
 
       {/* Statistics */}

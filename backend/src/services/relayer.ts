@@ -78,6 +78,12 @@ export class RelayerService {
       return
     }
 
+    // Skip event listeners for Hedera (not supported)
+    if (process.env.HEDERA_NETWORK === 'testnet' || process.env.HEDERA_NETWORK === 'mainnet') {
+      console.log('Skipping Ethereum event listeners for Hedera network')
+      return
+    }
+
     // Listen for PaymentApproved events
     this.contract.on('PaymentApproved', async (...args: any[]) => {
       try {

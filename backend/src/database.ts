@@ -331,6 +331,10 @@ export class Database {
     return await this.all('SELECT * FROM agreements WHERE is_active = 1 ORDER BY created_at DESC')
   }
 
+  async getAgreementsByProducer(producerAddress: string): Promise<DatabaseRow[]> {
+    return await this.all('SELECT * FROM agreements WHERE producer_address = ? AND is_active = 1 ORDER BY created_at DESC', [producerAddress])
+  }
+
   async createReading(readingData: ReadingData): Promise<number> {
     const {
       agreementId,
@@ -634,6 +638,10 @@ export class Database {
 
   async updateUserPassword(id: number, hashedPassword: string): Promise<void> {
     await this.run('UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [hashedPassword, id])
+  }
+
+  async updateUserAddress(id: number, address: string): Promise<void> {
+    await this.run('UPDATE users SET address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [address, id])
   }
 
   async deactivateUser(id: number): Promise<void> {

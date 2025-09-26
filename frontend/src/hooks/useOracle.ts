@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
-import { oracleService, type BatchInfo, type OracleLog, type OracleStats } from '../services/oracle'
+import { oracleService, type BatchInfo, type OracleLog, type OracleStats, type ProducerOracleStatus, type DetailedContractOracleStatus } from '../services/oracle'
 
 export const useOracle = () => {
   const [stats, setStats] = useState<OracleStats | null>(null)
@@ -117,5 +117,82 @@ export const useAgreementBatches = (agreementId: number | null) => {
     loading,
     error,
     refresh: fetchBatches
+  }
+}
+
+
+/**
+ * Hook to get oracle status for a specific producer (all their contracts)
+ */
+export const useProducerOracleStatus = (producerAddress: string | null) => {
+  const [status, setStatus] = useState<ProducerOracleStatus | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchStatus = useCallback(async () => {
+    if (!producerAddress) {
+      setStatus(null)
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await oracleService.getProducerOracleStatus(producerAddress)
+      setStatus(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch producer oracle status')
+    } finally {
+      setLoading(false)
+    }
+  }, [producerAddress])
+
+  useEffect(() => {
+    fetchStatus()
+  }, [fetchStatus])
+
+  return {
+    status,
+    loading,
+    error,
+    refresh: fetchStatus
+  }
+}
+
+/**
+ * Hook to get detailed oracle status for a specific contract
+ */
+export const useContractOracleStatus = (agreementId: number | null) => {
+  const [status, setStatus] = useState<DetailedContractOracleStatus | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchStatus = useCallback(async () => {
+    if (!agreementId) {
+      setStatus(null)
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await oracleService.getContractOracleStatus(agreementId)
+      setStatus(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch contract oracle status')
+    } finally {
+      setLoading(false)
+    }
+  }, [agreementId])
+
+  useEffect(() => {
+    fetchStatus()
+  }, [fetchStatus])
+
+  return {
+    status,
+    loading,
+    error,
+    refresh: fetchStatus
   }
 }
