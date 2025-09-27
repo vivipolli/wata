@@ -47,14 +47,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToRegister }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#cdffd8] via-white to-[#94b9ff] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-600 to-green-600 rounded-full flex items-center justify-center mb-4">
-            <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-[#94b9ff] to-[#cdffd8] rounded-full flex items-center justify-center mb-4">
+            <img src="/src/assets/logo.svg" alt="W.A.T.A. Logo" className="h-8 w-8" />
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome to W.A.T.A.
@@ -138,7 +136,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToRegister }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
+              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-gradient-to-r from-[#94b9ff] to-[#cdffd8] hover:from-[#7ba3ff] hover:to-[#b8ffc4] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#94b9ff] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
             >
               {isLoading ? (
                 <>
@@ -182,25 +180,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToRegister }) => {
                 <span>📊 Transparent</span>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Features */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-          <div className="text-center p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-            <div className="text-2xl mb-2">🌱</div>
-            <h3 className="font-semibold text-gray-900 text-sm">Producers</h3>
-            <p className="text-xs text-gray-600">Monitor water quality and receive payments</p>
-          </div>
-          <div className="text-center p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-            <div className="text-2xl mb-2">💰</div>
-            <h3 className="font-semibold text-gray-900 text-sm">Investors</h3>
-            <p className="text-xs text-gray-600">Track environmental impact and returns</p>
-          </div>
-          <div className="text-center p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-            <div className="text-2xl mb-2">📊</div>
-            <h3 className="font-semibold text-gray-900 text-sm">Managers</h3>
-            <p className="text-xs text-gray-600">Oversee operations and governance</p>
           </div>
         </div>
       </div>

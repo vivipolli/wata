@@ -295,6 +295,46 @@ export class HederaService {
     }
   }
 
+  async investInAgreement(agreementId: number, amount: number, investorAddress: string): Promise<{ success: boolean; transactionId?: string; error?: string }> {
+    try {
+      if (!this.client || !this.contractId || !this.accountId || !this.privateKey) {
+        throw new Error('Hedera service not initialized')
+      }
+
+      // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
+      const amountInTinybars = Math.floor(amount * 100000000)
+
+      // Create investment transaction
+      const transaction = new ContractExecuteTransaction()
+        .setContractId(this.contractId)
+        .setGas(1000000)
+        .setFunction('investInAgreement', new ContractFunctionParameters().addUint256(agreementId))
+        .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
+        .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`)
+
+      // Sign and execute transaction
+      const signedTransaction = await transaction.sign(this.privateKey)
+      const txResponse = await signedTransaction.execute(this.client)
+
+      // Get transaction receipt
+      const receipt = await txResponse.getReceipt(this.client)
+      const transactionId = txResponse.transactionId.toString()
+
+      console.log(`Investment successful for agreement ${agreementId}: ${transactionId}`)
+
+      return {
+        success: true,
+        transactionId
+      }
+    } catch (error) {
+      console.error('Error investing in agreement:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
   private formatBytes32String(str: string): Uint8Array {
     const hash = Buffer.from(str, 'utf8')
     const padded = Buffer.alloc(32)

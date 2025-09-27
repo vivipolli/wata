@@ -23,7 +23,7 @@ const SuccessPage: React.FC<SuccessPageProps> = ({
   )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#cdffd8] via-white to-[#94b9ff] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full text-center">
         <div className="mx-auto h-20 w-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
           {icon || defaultIcon}
@@ -35,7 +35,7 @@ const SuccessPage: React.FC<SuccessPageProps> = ({
         {action && (
           <button
             onClick={action.onClick}
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 transform hover:scale-[1.02]"
+            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-gradient-to-r from-[#94b9ff] to-[#cdffd8] hover:from-[#7ba3ff] hover:to-[#b8ffc4] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#94b9ff] transition-all duration-200 transform hover:scale-[1.02]"
           >
             {action.label}
           </button>

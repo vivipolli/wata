@@ -112,7 +112,11 @@ class AuthService {
 
   async verifyToken(token: string): Promise<AuthResponse> {
     try {
-      const response = await apiClient.post<ApiResponse<{ user: User }>>('/auth/verify', { token })
+      const response = await apiClient.get<ApiResponse<{ user: User }>>('/auth/verify', {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
       
       if (response.data.success && response.data.data) {
         return {

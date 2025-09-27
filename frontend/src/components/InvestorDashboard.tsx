@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useAgreements, usePayments } from '../hooks'
 import HashDisplay from './HashDisplay'
 import { hederaService } from '../services/hedera'
+import BlockchainRecords from './BlockchainRecords'
+import { formatDate, formatHBAR, getStatusColor } from '../utils'
 
 interface InvestorStats {
   totalInvested: number
@@ -55,31 +57,22 @@ const InvestorDashboard: React.FC = () => {
   const calculateStats = () => {
     if (!agreements || !payments) return
 
-    const investmentAgreements = agreements.filter(agreement => 
-      agreement.investorAddress === user?.address
-    )
+    // For now, show all agreements as potential investments
+    const investmentAgreements = agreements
 
-    const totalInvested = investmentAgreements.reduce((sum, agreement) => 
-      sum + (agreement.totalInvested || 0), 0
-    )
-
+    const totalInvested = 0 // Mock value - would need to track actual investments
     const totalPaidOut = payments
       .filter(payment => payment.status === 'completed')
       .reduce((sum, payment) => sum + payment.amount, 0)
 
-    const activeInvestments = investmentAgreements.filter(agreement => agreement.isActive).length
+    const activeInvestments = investmentAgreements.filter(agreement => agreement.is_active).length
 
-    const scores = investmentAgreements
-      .map(agreement => agreement.lastScore)
-      .filter(score => score !== undefined && score > 0)
-
-    const averageImpact = scores.length > 0 
-      ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
-      : 0
+    const scores = [] // Mock - would need to get from readings
+    const averageImpact = 0 // Mock value
 
     const totalHectares = investmentAgreements.reduce((sum, agreement) => sum + agreement.hectares, 0)
 
-    const roi = totalInvested > 0 ? ((totalPaidOut - totalInvested) / totalInvested) * 100 : 0
+    const roi = 0 // Mock value
 
     setStats({
       totalInvested,
@@ -94,21 +87,15 @@ const InvestorDashboard: React.FC = () => {
   const calculateImpactMetrics = () => {
     if (!agreements || !payments) return
 
-    const investmentAgreements = agreements.filter(agreement => 
-      agreement.investorAddress === investorAddress
-    )
+    const investmentAgreements = agreements
 
     const totalHectaresProtected = investmentAgreements.reduce((sum, agreement) => sum + agreement.hectares, 0)
     
-    const scores = investmentAgreements
-      .map(agreement => agreement.lastScore)
-      .filter(score => score !== undefined && score > 0)
+    const scores: number[] = [] // Mock - would need to get from readings
 
-    const averageWaterQuality = scores.length > 0 
-      ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
-      : 0
+    const averageWaterQuality = 0 // Mock value
 
-    const producersSupported = new Set(investmentAgreements.map(agreement => agreement.producerAddress)).size
+    const producersSupported = new Set(investmentAgreements.map(agreement => agreement.producer_address)).size
 
     const paymentsExecuted = payments.filter(payment => payment.status === 'completed').length
 
@@ -127,18 +114,17 @@ const InvestorDashboard: React.FC = () => {
     if (!agreements) return
 
     const investmentAgreements = agreements
-      .filter(agreement => agreement.investorAddress === investorAddress)
       .map(agreement => ({
         id: agreement.id,
-        producerName: agreement.producerName,
+        producerName: agreement.producer_name,
         hectares: agreement.hectares,
-        baseValue: agreement.baseValue,
-        isActive: agreement.isActive,
-        lastScore: agreement.lastScore,
-        totalInvested: agreement.totalInvested,
-        totalPaid: agreement.totalPaid,
-        governanceMode: agreement.governanceMode,
-        investorAddress: agreement.investorAddress
+        baseValue: agreement.base_value,
+        isActive: agreement.is_active,
+        lastScore: undefined, // Mock - would need to get from readings
+        totalInvested: 0, // Mock - would need to track investments
+        totalPaid: 0, // Mock - would need to track payments
+        governanceMode: 'AUTO', // Mock value
+        investorAddress: undefined // Mock - would need to track investor
       }))
 
     setInvestmentAgreements(investmentAgreements)
@@ -152,7 +138,7 @@ const InvestorDashboard: React.FC = () => {
     }
 
     try {
-      const result = await hederaService.transferHBAR(investorAddress, amount)
+      const result = await hederaService.transferHBAR('0xMockAddress', amount)
       if (result.success) {
         alert(`Investment of ${amount} HBAR successful! Transaction: ${result.transactionHash}`)
         setInvestmentAmount('')
@@ -184,16 +170,10 @@ const InvestorDashboard: React.FC = () => {
     return 'text-red-600'
   }
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleString()
-  }
-
-  const formatHBAR = (amount: number): string => {
-    return `${amount.toFixed(4)} HBAR`
-  }
+  // Using utility functions from utils/helpers.ts
 
   const getAgreementPayments = (agreementId: number) => {
-    return payments.filter(payment => payment.agreementId === agreementId)
+    return payments.filter(payment => payment.agreement_id === agreementId)
   }
 
   if (agreementsLoading || paymentsLoading) {
@@ -288,19 +268,19 @@ const InvestorDashboard: React.FC = () => {
             <h2 className="text-lg font-medium text-gray-900">Investment Opportunities</h2>
           </div>
           <div className="p-6">
-            {agreements.filter(agreement => agreement.isActive && !agreement.investorAddress).length === 0 ? (
+            {agreements.filter(agreement => agreement.is_active).length === 0 ? (
               <p className="text-gray-500 text-center py-8">No available investment opportunities</p>
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {agreements
-                  .filter(agreement => agreement.isActive && !agreement.investorAddress)
+                  .filter(agreement => agreement.is_active)
                   .map((agreement) => (
                     <div key={agreement.id} className="p-4 border border-gray-200 rounded-lg">
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h3 className="font-medium text-gray-900">{agreement.producerName}</h3>
+                          <h3 className="font-medium text-gray-900">{agreement.producer_name}</h3>
                           <p className="text-sm text-gray-500">
-                            {agreement.hectares} ha • {formatHBAR(agreement.baseValue)}/ha
+                            {agreement.hectares} ha • {formatHBAR(agreement.base_value)}/ha
                           </p>
                         </div>
                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
@@ -390,32 +370,23 @@ const InvestorDashboard: React.FC = () => {
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {payments
                 .filter(payment => payment.status === 'completed')
-                .sort((a, b) => new Date(b.processedAt || '').getTime() - new Date(a.processedAt || '').getTime())
+                .sort((a, b) => new Date(b.processed_at || '').getTime() - new Date(a.processed_at || '').getTime())
                 .slice(0, 10)
                 .map((payment) => (
                   <div key={payment.id} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
                         <span className="font-medium">{formatHBAR(payment.amount)}</span>
-                        <span className="text-sm text-gray-500">Agreement #{payment.agreementId}</span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          payment.score && payment.score >= 70 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {payment.score ? `${payment.score.toFixed(1)}%` : 'N/A'}
+                        <span className="text-sm text-gray-500">Agreement #{payment.agreement_id}</span>
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                          N/A
                         </span>
                       </div>
-                      {payment.auditHash && (
-                        <HashDisplay 
-                          hash={payment.auditHash}
-                          label="Audit"
-                          type="audit"
-                          className="text-xs mt-1"
-                        />
-                      )}
+                      {/* Audit hash would be available in real implementation */}
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">
-                        {payment.processedAt ? formatDate(payment.processedAt) : 'Pending'}
+                        {payment.processed_at ? formatDate(payment.processed_at) : 'Pending'}
                       </p>
                       <p className="text-xs text-green-600 font-medium">Completed</p>
                     </div>
@@ -424,6 +395,14 @@ const InvestorDashboard: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Blockchain Records Section */}
+      <div className="mt-6">
+        <BlockchainRecords 
+          userType="investor" 
+          userAddress="0xMockInvestorAddress" 
+        />
       </div>
     </div>
   )

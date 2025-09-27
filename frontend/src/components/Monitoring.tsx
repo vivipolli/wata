@@ -1,28 +1,27 @@
 import { useState, useEffect } from 'react'
 import { FaWater, FaCheckCircle, FaTimesCircle, FaPlay } from 'react-icons/fa'
-import { useAgreements, useReadings, usePayments, useContractOracleStatus } from '../hooks'
+import { useAgreements, usePayments, useContractOracleStatus } from '../hooks'
 import { useAuth } from '../contexts/AuthContext'
+import { readingsService } from '../services'
+import PrimaryButton from './common/PrimaryButton'
+import SecondaryButton from './common/SecondaryButton'
 import type { MonitoringProps, Agreement, Reading, ReadingStats } from '../types'
 
 export default function Monitoring({}: MonitoringProps) {
   const { user } = useAuth()
-  const { agreements, getAgreementsByProducer } = useAgreements(false) // Don't auto-fetch
-  const { readings, simulateReading, fetchAgreementReadings } = useReadings()
+  const { agreements, getAgreementsByProducer } = useAgreements(false)
   const { triggerPaymentCheck } = usePayments()
   
   const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null)
+  const [loading, setLoading] = useState<boolean>(false)
   const [agreementReadings, setAgreementReadings] = useState<Reading[]>([])
   const [agreementStats, setAgreementStats] = useState<ReadingStats | null>(null)
-  const [loading, setLoading] = useState<boolean>(false)
 
-  // State for user-specific agreements
   const [userAgreements, setUserAgreements] = useState<any[]>([])
   const [userAgreementsLoading, setUserAgreementsLoading] = useState(false)
 
-  // Use the new hierarchical hook for contract oracle status
   const { status: contractOracleStatus, loading: oracleLoading } = useContractOracleStatus(selectedAgreement?.id || null)
 
-  // Fetch user-specific agreements
   useEffect(() => {
     const fetchUserAgreements = async () => {
       if (user?.address && getAgreementsByProducer) {
@@ -31,7 +30,6 @@ export default function Monitoring({}: MonitoringProps) {
           const userAgreementsData = await getAgreementsByProducer(user.address)
           setUserAgreements(userAgreementsData)
           
-          // Auto-select first agreement if none selected
           if (userAgreementsData.length > 0 && !selectedAgreement) {
             setSelectedAgreement(userAgreementsData[0])
           }
@@ -51,28 +49,23 @@ export default function Monitoring({}: MonitoringProps) {
     if (selectedAgreement) {
       fetchAgreementData(selectedAgreement.id)
     }
-  }, [selectedAgreement])
+  }, [selectedAgreement?.id])
 
   const fetchAgreementData = async (agreementId: number): Promise<void> => {
     setLoading(true)
     try {
-      // Fetch readings for this agreement
-      await fetchAgreementReadings(agreementId)
+      // Fetch readings
+      const readingsResponse = await readingsService.getByAgreement(agreementId, 50)
+      if (readingsResponse.success && readingsResponse.data) {
+        const readings = readingsResponse.data.readings || readingsResponse.data || []
+        setAgreementReadings(readings)
+      }
       
-      // For now, we'll use a placeholder for stats
-      // In a real app, you'd have a separate API call for stats
-      setAgreementStats({
-        totalReadings: readings.length,
-        averageTurbidity: readings.length > 0 ? 
-          readings.reduce((sum, r) => sum + r.turbidity_ntu, 0) / readings.length : 0,
-        minTurbidity: readings.length > 0 ? Math.min(...readings.map(r => r.turbidity_ntu)) : 0,
-        maxTurbidity: readings.length > 0 ? Math.max(...readings.map(r => r.turbidity_ntu)) : 0,
-        complianceRate: readings.length > 0 ? 
-          (readings.filter(r => r.turbidity_ntu <= 10).length / readings.length) * 100 : 0,
-        days: 7
-      })
-      
-      setAgreementReadings(readings)
+      // Fetch stats
+      const statsResponse = await readingsService.getStats(agreementId, 7)
+      if (statsResponse.success && statsResponse.data?.stats) {
+        setAgreementStats(statsResponse.data.stats)
+      }
     } catch (error) {
       console.error('Error fetching agreement data:', error)
     } finally {
@@ -93,15 +86,32 @@ export default function Monitoring({}: MonitoringProps) {
     }
   }
 
-  const handleSimulateReading = async (agreementId: number): Promise<void> => {
+  const handleSimulateReading = async (): Promise<void> => {
+    if (!selectedAgreement) return
+    
+    setLoading(true)
     try {
-      await simulateReading(agreementId, { lat: -23.5505, lng: -46.6333 })
+      const simulationData = {
+        agreementId: selectedAgreement.id,
+        locationLat: selectedAgreement.location_lat,
+        locationLng: selectedAgreement.location_lng
+      }
       
-      if (selectedAgreement && selectedAgreement.id === agreementId) {
-        fetchAgreementData(agreementId)
+      const response = await readingsService.simulate(simulationData)
+      if (response.success && response.data?.reading) {
+        const newReading = response.data.reading
+        setAgreementReadings(prev => [newReading, ...prev])
+        
+        // Refresh stats for the selected agreement
+        const statsResponse = await readingsService.getStats(selectedAgreement.id, 7)
+        if (statsResponse.success && statsResponse.data?.stats) {
+          setAgreementStats(statsResponse.data.stats)
+        }
       }
     } catch (error) {
       console.error('Error simulating reading:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -165,20 +175,21 @@ export default function Monitoring({}: MonitoringProps) {
                       {selectedAgreement.producer_name}
                     </h3>
                     <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleSimulateReading(selectedAgreement.id)}
-                        className="bg-green-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-green-700"
-                      >
-                        <FaWater className="inline h-4 w-4 mr-1" />
-                        Simulate Reading
-                      </button>
-                      <button
+                          <PrimaryButton
+                            onClick={handleSimulateReading}
+                            size="sm"
+                            disabled={loading}
+                          >
+                            <FaWater className="inline h-4 w-4 mr-1" />
+                            {loading ? 'Simulating...' : 'Simulate Reading'}
+                          </PrimaryButton>
+                      <SecondaryButton
                         onClick={() => handleTriggerPaymentCheck(selectedAgreement.id)}
-                        className="bg-blue-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+                        size="sm"
                       >
                         <FaPlay className="inline h-4 w-4 mr-1" />
                         Check Payment
-                      </button>
+                      </SecondaryButton>
                     </div>
                   </div>
 

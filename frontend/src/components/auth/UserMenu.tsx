@@ -17,9 +17,9 @@ const UserMenu: React.FC = () => {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-white hover:bg-white/10 transition-all duration-200 backdrop-blur-sm"
+        className="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all duration-200 border border-gray-200 hover:border-[#94b9ff]"
       >
-        <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+        <div className="w-8 h-8 bg-[#94b9ff] rounded-full flex items-center justify-center">
           <span className="text-white font-medium text-sm">
             {user.name.charAt(0).toUpperCase()}
           </span>
@@ -31,10 +31,10 @@ const UserMenu: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur-sm rounded-xl shadow-xl border border-white/20 py-2 z-50">
+        <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
           <div className="px-4 py-3 border-b border-gray-100">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-green-500 rounded-full flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-r from-[#94b9ff] to-[#cdffd8] rounded-full flex items-center justify-center">
                 <span className="text-white font-semibold text-sm">
                   {user.name.charAt(0).toUpperCase()}
                 </span>
@@ -43,7 +43,7 @@ const UserMenu: React.FC = () => {
                 <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
                 <div className="flex items-center mt-1">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#94b9ff]/10 text-[#94b9ff] capitalize">
                     {user.role}
                   </span>
                 </div>

@@ -121,6 +121,28 @@ export const useAgreements = (autoFetch: boolean = true): UseAgreementsReturn =>
     }
   }, [])
 
+  const getAllAgreements = useCallback(async (): Promise<Agreement[]> => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const response = await agreementsService.getAll()
+      if (response.success && response.data) {
+        const agreements = response.data.agreements || response.data || []
+        setAgreements(agreements)
+        return agreements
+      } else {
+        setError('Failed to fetch all agreements')
+        return []
+      }
+    } catch (err: any) {
+      setError(err.message)
+      return []
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   return {
     agreements,
     loading,
@@ -129,6 +151,7 @@ export const useAgreements = (autoFetch: boolean = true): UseAgreementsReturn =>
     createAgreement,
     getAgreement,
     getAgreementPayments,
-    getAgreementsByProducer
+    getAgreementsByProducer,
+    getAllAgreements
   }
 }

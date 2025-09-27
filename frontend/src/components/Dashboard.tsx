@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useAgreements, useReadings, usePayments, useProducerOracleStatus } from '../hooks'
+import { useAgreements, usePayments, useProducerOracleStatus } from '../hooks'
 import { useAuth } from '../contexts/AuthContext'
+import { useReadingsStore, useReadings, useReadingsLoading } from '../stores'
 import { readingsService } from '../services'
 import { 
   calculateDashboardStats, 
@@ -37,7 +38,9 @@ interface ProducerStats {
 export default function Dashboard({}: DashboardProps) {
   const { user } = useAuth()
   const { agreements, loading: agreementsLoading, getAgreementsByProducer } = useAgreements(false) // Don't auto-fetch
-  const { readings, loading: readingsLoading, simulateReading, fetchAgreementReadings } = useReadings()
+  const { simulateReading, startAutoRefresh, stopAutoRefresh } = useReadingsStore()
+  const readings = useReadings()
+  const readingsLoading = useReadingsLoading()
   const { payments, getPaymentStats } = usePayments()
   
   // Use the new hierarchical hook for oracle status
@@ -92,7 +95,7 @@ export default function Dashboard({}: DashboardProps) {
           const uniqueReadings = await collectUserReadings(
             userAgreements, 
             readingsService, 
-            fetchAgreementReadings
+            useReadingsStore.getState().fetchAgreementReadings
           )
           setUserReadings(uniqueReadings)
         } catch (error) {
@@ -114,7 +117,18 @@ export default function Dashboard({}: DashboardProps) {
     if (userAgreements && payments) {
       calculateProducerStatsLocal()
     }
-  }, [userAgreements, userReadings, payments, producerOracleStatus])
+  }, [userAgreements, readings, payments, producerOracleStatus])
+
+  // Start auto-refresh for recent readings
+  useEffect(() => {
+    if (userAgreements.length > 0) {
+      startAutoRefresh(undefined, 30000)
+    }
+    
+    return () => {
+      stopAutoRefresh()
+    }
+  }, [userAgreements.length])
 
   const calculateStats = async (): Promise<void> => {
     // Get payment stats
@@ -151,8 +165,9 @@ export default function Dashboard({}: DashboardProps) {
   const handleSimulateReading = async (): Promise<void> => {
     setLoading(true)
     try {
-      const agreementId = agreements[0]?.id || 1
+      const agreementId = userAgreements[0]?.id || 1
       await simulateReading(agreementId, { lat: -23.5505, lng: -46.6333 })
+      // Auto-refresh will handle updating the readings
     } catch (error) {
       console.error('Error simulating reading:', error)
     } finally {

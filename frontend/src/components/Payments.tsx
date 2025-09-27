@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { FaDollarSign, FaWallet, FaHistory, FaCheckCircle, FaClock, FaExclamationTriangle, FaFileContract } from 'react-icons/fa'
 import { useAccount } from 'wagmi'
 import { usePayments, useAgreements } from '../hooks'
-import { formatNumber } from '../utils'
+import { formatNumber, formatDate, formatHBAR, getStatusColor } from '../utils'
 import HashDisplay from './HashDisplay'
+import BlockchainRecords from './BlockchainRecords'
 
 interface PaymentStats {
   totalReceived: number
@@ -93,7 +94,7 @@ const Payments: React.FC = () => {
         auditHash: undefined, // Not available in Payment interface
         processedAt: payment.processed_at,
         createdAt: payment.created_at,
-        producerAddress: producerAddress, // Use mock address
+        producerAddress: producerAddress || 'Unknown', // Use mock address
         agreementDetails: agreement ? {
           producerName: agreement.producer_name,
           hectares: agreement.hectares,
@@ -131,13 +132,7 @@ const Payments: React.FC = () => {
     }
   }
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleString()
-  }
-
-  const formatHBAR = (amount: number): string => {
-    return `${amount.toFixed(4)} HBAR`
-  }
+  // Using utility functions from utils/helpers.ts
 
   const filteredPayments = selectedStatus === 'all' 
     ? paymentDetails 
@@ -332,6 +327,12 @@ const Payments: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Blockchain Records Section */}
+      <BlockchainRecords 
+        userType="producer" 
+        userAddress={producerAddress} 
+      />
     </div>
   )
 }

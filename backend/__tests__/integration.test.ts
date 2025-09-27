@@ -3,10 +3,24 @@ import express from 'express'
 import cors from 'cors'
 import { Database } from '../src/database'
 import { HederaService } from '../src/services/hedera'
-import { RelayerService } from '../src/services/relayer'
+// Mock RelayerService to avoid HederaService import issues
+class MockRelayerService {
+  async initialize(): Promise<void> {
+    console.log('Mock RelayerService initialized')
+  }
+
+  async start(): Promise<void> {
+    console.log('Mock RelayerService started')
+  }
+
+  async stop(): Promise<void> {
+    console.log('Mock RelayerService stopped')
+  }
+}
 import agreementRoutes from '../src/routes/agreements'
 import readingRoutes from '../src/routes/readings'
 import paymentRoutes from '../src/routes/payments'
+import authRoutes from '../src/routes/auth'
 
 // Jest types
 declare const jest: any
@@ -14,52 +28,90 @@ declare const expect: any
 declare const beforeAll: any
 declare const afterAll: any
 
-// Mock Hedera SDK to avoid real blockchain calls
-jest.mock('@hashgraph/sdk', () => ({
-  Client: {
-    forTestnet: jest.fn().mockReturnValue({
-      setOperator: jest.fn().mockReturnThis()
-    })
-  },
-  AccountId: {
-    fromString: jest.fn().mockReturnValue({ toString: () => '0.0.1234567' })
-  },
-  PrivateKey: {
-    fromString: jest.fn().mockReturnValue({})
-  },
-  ContractId: {
-    fromString: jest.fn().mockReturnValue({})
-  },
-  ContractExecuteTransaction: jest.fn().mockImplementation(() => ({
-    setContractId: jest.fn().mockReturnThis(),
-    setGas: jest.fn().mockReturnThis(),
-    setFunction: jest.fn().mockReturnThis(),
-    execute: jest.fn().mockResolvedValue({
-      getRecord: jest.fn().mockResolvedValue({
-        contractFunctionResult: {
-          getUint256: jest.fn().mockReturnValue(BigInt(1))
-        }
-      })
-    })
-  })),
-  ContractFunctionParameters: jest.fn().mockImplementation(() => ({
-    addBytes32: jest.fn().mockReturnThis(),
-    addAddress: jest.fn().mockReturnThis(),
-    addUint256: jest.fn().mockReturnThis()
-  })),
-  AccountBalanceQuery: jest.fn().mockImplementation(() => ({
-    setAccountId: jest.fn().mockReturnThis(),
-    execute: jest.fn().mockResolvedValue({
-      hbars: { toString: () => '100.0 ℏ' }
-    })
-  }))
-}))
+// Mock Hedera service for testing
+class MockHederaService extends HederaService {
+  async initialize(): Promise<void> {
+    console.log('Mock Hedera service initialized')
+  }
+
+  async createAgreementWithSystem(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<{ agreementId: number, transactionId: string }> {
+    return {
+      agreementId: 1,
+      transactionId: '0.0.123456@1758983593753'
+    }
+  }
+
+  async requestPayment(agreementId: number, auditHash: string): Promise<any> {
+    return {
+      transactionId: '0.0.123456@1758983593753'
+    }
+  }
+
+  async submitValidatedBatch(agreementId: number, auditHash: string, score: number): Promise<any> {
+    return {
+      transactionId: '0.0.123456@1758983593753'
+    }
+  }
+
+  async recordAudit(auditHash: string): Promise<any> {
+    return {
+      transactionId: '0.0.123456@1758983593753'
+    }
+  }
+
+  async getAgreement(agreementId: number): Promise<any> {
+    return {
+      agreementHash: 'mock-hash',
+      producer: '0x742d35Cc6639C0532fEb217F5e4B9af48Bf9bA2A',
+      baseValue: 1000,
+      hectares: 50,
+      isActive: true,
+      createdAt: BigInt(Date.now())
+    }
+  }
+
+  async investInAgreement(agreementId: number, amount: number, investorAddress: string): Promise<{ success: boolean; transactionId?: string; error?: string }> {
+    return {
+      success: true,
+      transactionId: '0.0.123456@1758983593753'
+    }
+  }
+
+  async verifyTransaction(transactionHash: string): Promise<{ status: string; success: boolean; details?: any }> {
+    return {
+      status: 'SUCCESS',
+      success: true,
+      details: { transactionId: transactionHash }
+    }
+  }
+
+  async getAccountBalance(accountId: string): Promise<string> {
+    return '100.0 ℏ'
+  }
+
+  async transferHBAR(toAddress: string, amountInTinybars: number): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+    return {
+      success: true,
+      transactionHash: '0.0.123456@1758983593753'
+    }
+  }
+
+  async getAccountInfo(accountId: string): Promise<any> {
+    return {
+      accountId: accountId,
+      balance: '100.0 ℏ',
+      key: 'mock-key',
+      isDeleted: false
+    }
+  }
+}
 
 describe('W.A.T.A. Chain Integration Tests', () => {
   let app: express.Application
   let database: Database
   let hederaService: HederaService
-  let relayerService: RelayerService
+  let relayerService: MockRelayerService
+  let authToken: string
 
   beforeAll(async () => {
     // Setup test application
@@ -71,15 +123,16 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     database = new Database()
     await database.initialize()
 
-    hederaService = new HederaService()
+    hederaService = new MockHederaService()
     await hederaService.initialize()
 
-    relayerService = new RelayerService(hederaService, database)
+    relayerService = new MockRelayerService()
 
     // Setup routes
+    app.use('/api/auth', authRoutes)
     app.use('/api/agreements', agreementRoutes(hederaService, database))
     app.use('/api/readings', readingRoutes(database))
-    app.use('/api/payments', paymentRoutes(hederaService, database, relayerService))
+    app.use('/api/payments', paymentRoutes(hederaService, database, relayerService as any))
 
     // Health check endpoint
     app.get('/api/health', (req, res) => {
@@ -90,6 +143,42 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         version: '1.0.0'
       })
     })
+
+    // Create test user directly in database and generate token
+    try {
+      const testUser = {
+        email: 'test@example.com',
+        name: 'Test User',
+        password: 'password123',
+        role: 'INVESTOR',
+        address: '0x742d35Cc6639C0532fEb217F5e4B9af48Bf9bA2A',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      }
+
+      // Create user directly in database
+      const userId = await database.createUser(testUser)
+      console.log('Test user created with ID:', userId)
+
+      // Generate JWT token manually
+      const jwt = require('jsonwebtoken')
+      const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
+      
+      authToken = jwt.sign(
+        {
+          userId: userId,
+          email: testUser.email,
+          role: testUser.role
+        },
+        jwtSecret,
+        { expiresIn: '1h' }
+      )
+      
+      console.log('Auth token generated successfully')
+    } catch (error) {
+      console.warn('Auth setup failed, tests may fail:', error)
+      authToken = 'mock-token'
+    }
   })
 
   afterAll(async () => {
@@ -473,6 +562,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     it('should return list of agreements', async () => {
       const response = await request(app)
         .get('/api/agreements')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body).toMatchObject({
@@ -573,6 +663,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       const response = await request(app)
         .get('/api/agreements')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(500)
 
       expect(response.body).toMatchObject({

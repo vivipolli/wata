@@ -9,10 +9,9 @@ import Audit from './components/Audit'
 import InvestorDashboard from './components/InvestorDashboard'
 import Payments from './components/Payments'
 import ProtectedRoute from './components/auth/ProtectedRoute'
-import AuthDemo from './components/auth/AuthDemo'
 import { useHealth } from './hooks'
 import { useAuthGuard } from './hooks/useAuthGuard'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { WalletProvider } from './contexts/WalletContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { WagmiProviderWrapper } from './providers/WagmiProvider'
@@ -22,7 +21,18 @@ const AppContent: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false)
   const { isHealthy } = useHealth()
-  const { getAccessibleTabs } = useAuthGuard()
+  const { user, hasRole } = useAuth()
+
+  // Set default dashboard based on user role
+  useEffect(() => {
+    if (user) {
+      if (hasRole(USER_ROLES.INVESTOR)) {
+        setCurrentTab('investidor_dashboard')
+      } else if (hasRole(USER_ROLES.PRODUCER)) {
+        setCurrentTab('producer_dashboard')
+      }
+    }
+  }, [user, hasRole])
 
 
   const toggleSidebar = () => {
@@ -31,8 +41,10 @@ const AppContent: React.FC = () => {
 
   const renderTabContent = (): React.JSX.Element => {
     switch (currentTab) {
-      case 'dashboard':
+      case 'producer_dashboard':
         return <Dashboard />
+      case 'investidor_dashboard':
+        return <InvestorDashboard />
       case 'contracts':
         return <ContractRegistration />
       case 'monitoring':
@@ -43,8 +55,6 @@ const AppContent: React.FC = () => {
         return <Notifications />
       case 'payments':
         return <Payments />
-      case 'investidor':
-        return <InvestorDashboard />
       default:
         return <Dashboard />
     }
@@ -58,7 +68,6 @@ const AppContent: React.FC = () => {
           currentTab={currentTab}
           onTabChange={setCurrentTab}
           isHealthy={isHealthy}
-          accessibleTabs={getAccessibleTabs()}
           isOpen={sidebarOpen}
           onToggle={toggleSidebar}
         />

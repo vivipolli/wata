@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt'
-import { Database } from '../database.js'
-import { AuthMiddleware } from '../middleware/auth.js'
+import { Database } from '../database'
+import { AuthMiddleware } from '../middleware/auth'
 
 export interface LoginCredentials {
   email: string

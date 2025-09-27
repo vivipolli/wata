@@ -8,6 +8,7 @@ import readingsService from './readings'
 import paymentsService from './payments'
 import healthService from './health'
 import { oracleService } from './oracle'
+import { blockchainRecordsService } from './blockchainRecords'
 import apiClient from './api'
 
 // Export individual services
@@ -17,6 +18,7 @@ export {
   paymentsService,
   healthService,
   oracleService,
+  blockchainRecordsService,
   apiClient
 }
 
@@ -27,5 +29,6 @@ export default {
   payments: paymentsService,
   health: healthService,
   oracle: oracleService,
+  blockchainRecords: blockchainRecordsService,
   api: apiClient
 }

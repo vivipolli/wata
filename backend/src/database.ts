@@ -568,6 +568,20 @@ export class Database {
     )
   }
 
+  async updateInvestmentTransactionHash(investmentId: number, transactionHash: string): Promise<void> {
+    await this.run(
+      'UPDATE investments SET transaction_hash = ? WHERE id = ?',
+      [transactionHash, investmentId]
+    )
+  }
+
+  async deleteInvestment(investmentId: number): Promise<void> {
+    await this.run(
+      'DELETE FROM investments WHERE id = ?',
+      [investmentId]
+    )
+  }
+
   async getInvestment(investmentId: number): Promise<DatabaseRow | undefined> {
     return await this.get('SELECT * FROM investments WHERE id = ?', [investmentId])
   }
@@ -681,7 +695,12 @@ export class Database {
 
   close(): void {
     if (this.db) {
-      this.db.close()
+      try {
+        this.db.close()
+        this.db = null
+      } catch (error) {
+        console.warn('Database was already closed:', error)
+      }
     }
   }
 }

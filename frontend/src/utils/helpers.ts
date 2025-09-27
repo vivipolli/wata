@@ -294,3 +294,63 @@ export const collectUserReadings = async (
   uniqueReadings.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
   return uniqueReadings
 }
+
+/**
+ * Blockchain Records Utilities
+ */
+
+/**
+ * Get Hedera explorer URL for transaction
+ */
+export const getHederaExplorerUrl = (transactionId: string): string => {
+  return `https://hashscan.io/testnet/transaction/${transactionId}`
+}
+
+/**
+ * Get Hedera explorer URL for file
+ */
+export const getHederaFileUrl = (fileId: string): string => {
+  return `https://hashscan.io/testnet/file/${fileId}`
+}
+
+/**
+ * Get validation status based on score
+ */
+export const getValidationStatus = (score: number): { status: string; color: string } => {
+  if (score >= 90) return { status: 'Excellent', color: 'text-green-600' }
+  if (score >= 80) return { status: 'Good', color: 'text-blue-600' }
+  if (score >= 70) return { status: 'Fair', color: 'text-yellow-600' }
+  return { status: 'Poor', color: 'text-red-600' }
+}
+
+/**
+ * Get status icon for blockchain records
+ */
+export const getStatusIcon = (status: string): string => {
+  switch (status) {
+    case 'completed':
+      return '✅'
+    case 'pending':
+      return '⏳'
+    case 'failed':
+      return '❌'
+    default:
+      return '❓'
+  }
+}
+
+/**
+ * Get status color classes for blockchain records
+ */
+export const getBlockchainStatusColor = (status: string): string => {
+  switch (status) {
+    case 'completed':
+      return 'bg-green-100 text-green-800'
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'failed':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}

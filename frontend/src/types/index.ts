@@ -137,6 +137,7 @@ export interface UseAgreementsReturn {
   getAgreement: (id: number) => Promise<Agreement | null>
   getAgreementPayments: (agreementId: number) => Promise<Payment[]>
   getAgreementsByProducer: (producerAddress: string) => Promise<Agreement[]>
+  getAllAgreements: () => Promise<Agreement[]>
 }
 
 export interface UseReadingsReturn {

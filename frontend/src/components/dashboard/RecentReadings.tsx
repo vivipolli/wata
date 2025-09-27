@@ -1,10 +1,12 @@
 import React from 'react'
 import { FaWater } from 'react-icons/fa'
 import { formatNumber } from '../../utils'
+import PrimaryButton from '../common/PrimaryButton'
 
 interface Reading {
   id: number
-  producer_name: string
+  agreement_id: number
+  producer_name?: string
   timestamp: string
   turbidity_ntu: number
   is_simulated: boolean
@@ -29,20 +31,21 @@ const RecentReadings: React.FC<RecentReadingsProps> = ({
         <h3 className="text-lg font-medium text-gray-900">
           Recent Turbidity Readings
         </h3>
-        <button
+        <PrimaryButton
           onClick={onSimulateReading}
           disabled={loading || userReadingsLoading}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          size="sm"
         >
-          {loading || userReadingsLoading ? 'Loading...' : 'Simulate Reading'}
-        </button>
+          <FaWater className="inline h-4 w-4 mr-1" />
+          {loading || userReadingsLoading ? 'Simulating...' : 'Simulate Reading'}
+        </PrimaryButton>
       </div>
       <div className="space-y-3 max-h-80 overflow-y-auto">
         {(readings || []).slice(0, 5).map((reading) => (
           <div key={reading.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">
-                {reading.producer_name || 'Unknown Producer'}
+                Contract #{reading.agreement_id}
               </p>
               <p className="text-xs text-gray-500">
                 {new Date(reading.timestamp).toLocaleString()}

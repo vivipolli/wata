@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import rateLimit from 'express-rate-limit'
-import { AuthService } from '../services/auth.js'
-import { Database } from '../database.js'
+import { AuthService } from '../services/auth'
+import { Database } from '../database'
 import { 
   validateUserRegistration, 
   validateUserLogin, 
@@ -10,8 +10,8 @@ import {
   handleValidationErrors,
   sanitizeInput,
   authRateLimit
-} from '../middleware/validation.js'
-import { AuthRequest } from '../middleware/auth.js'
+} from '../middleware/validation'
+import { AuthRequest } from '../middleware/auth'
 
 const router = Router()
 

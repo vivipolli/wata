@@ -62,11 +62,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             localStorage.removeItem('wata_token')
             localStorage.removeItem('wata_refresh_token')
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error verifying stored auth:', error)
-          localStorage.removeItem('wata_user')
-          localStorage.removeItem('wata_token')
-          localStorage.removeItem('wata_refresh_token')
+          
+          // Check if it's a network error or server unavailable
+          if (error.message?.includes('Network Error') || 
+              error.message?.includes('timeout') ||
+              error.response?.status >= 500) {
+            // If backend is unavailable, use stored user data as fallback
+            try {
+              const parsedUser = JSON.parse(storedUser)
+              const userData: User = {
+                id: parsedUser.id,
+                email: parsedUser.email,
+                name: parsedUser.name,
+                role: parsedUser.role,
+                address: parsedUser.address,
+                isAuthenticated: true
+              }
+              setUser(userData)
+              console.warn('Backend unavailable, using cached user data')
+            } catch (parseError) {
+              // If stored data is corrupted, clear everything
+              localStorage.removeItem('wata_user')
+              localStorage.removeItem('wata_token')
+              localStorage.removeItem('wata_refresh_token')
+            }
+          } else {
+            // For other errors (401, 403, etc.), clear storage
+            localStorage.removeItem('wata_user')
+            localStorage.removeItem('wata_token')
+            localStorage.removeItem('wata_refresh_token')
+          }
         }
       }
       setIsLoading(false)
