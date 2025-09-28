@@ -1,7 +1,11 @@
-import sqlite3 from 'sqlite3';
-import path from 'path';
-import fs from 'fs';
-export class Database {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Database = void 0;
+const tslib_1 = require("tslib");
+const sqlite3_1 = tslib_1.__importDefault(require("sqlite3"));
+const path_1 = tslib_1.__importDefault(require("path"));
+const fs_1 = tslib_1.__importDefault(require("fs"));
+class Database {
     dbPath;
     db = null;
     run;
@@ -12,11 +16,11 @@ export class Database {
     }
     async initialize() {
         // Ensure data directory exists
-        const dataDir = path.dirname(this.dbPath);
-        if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir, { recursive: true });
+        const dataDir = path_1.default.dirname(this.dbPath);
+        if (!fs_1.default.existsSync(dataDir)) {
+            fs_1.default.mkdirSync(dataDir, { recursive: true });
         }
-        this.db = new sqlite3.Database(this.dbPath);
+        this.db = new sqlite3_1.default.Database(this.dbPath);
         // Manual Promise wrappers for database methods
         this.run = (sql, params = []) => {
             return new Promise((resolve, reject) => {
@@ -439,4 +443,5 @@ export class Database {
         }
     }
 }
+exports.Database = Database;
 //# sourceMappingURL=database.js.map

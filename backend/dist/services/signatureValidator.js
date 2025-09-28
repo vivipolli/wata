@@ -1,4 +1,7 @@
-export class SignatureValidator {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SignatureValidator = void 0;
+class SignatureValidator {
     /**
      * Validate a signed transaction
      */
@@ -117,4 +120,5 @@ Nonce: ${Math.random().toString(36).substring(2, 15)}`;
         };
     }
 }
+exports.SignatureValidator = SignatureValidator;
 //# sourceMappingURL=signatureValidator.js.map

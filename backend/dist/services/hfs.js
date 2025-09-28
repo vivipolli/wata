@@ -1,22 +1,25 @@
-import { Client, FileCreateTransaction, FileAppendTransaction, FileId, PrivateKey, AccountId, Hbar, } from '@hashgraph/sdk';
-import { config } from 'dotenv';
-config();
-export class HederaFileService {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.hfsService = exports.HederaFileService = void 0;
+const sdk_1 = require("@hashgraph/sdk");
+const dotenv_1 = require("dotenv");
+(0, dotenv_1.config)();
+class HederaFileService {
     client;
     operatorId;
     operatorKey;
     constructor() {
-        this.operatorId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
+        this.operatorId = sdk_1.AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
         // Handle different private key formats
         const privateKeyString = process.env.HEDERA_PRIVATE_KEY;
         if (privateKeyString.startsWith('0x')) {
             // Remove 0x prefix for Hedera SDK
-            this.operatorKey = PrivateKey.fromString(privateKeyString.slice(2));
+            this.operatorKey = sdk_1.PrivateKey.fromString(privateKeyString.slice(2));
         }
         else {
-            this.operatorKey = PrivateKey.fromString(privateKeyString);
+            this.operatorKey = sdk_1.PrivateKey.fromString(privateKeyString);
         }
-        this.client = Client.forTestnet();
+        this.client = sdk_1.Client.forTestnet();
         this.client.setOperator(this.operatorId, this.operatorKey);
         // Set default max transaction fee - skip for now to avoid constructor issues
         // this.client.setDefaultMaxTransactionFee(new Hbar(10))
@@ -26,9 +29,9 @@ export class HederaFileService {
             // Generate report content
             const reportContent = this.generateReportContent(report);
             // Create file on Hedera
-            const createFileTx = new FileCreateTransaction()
+            const createFileTx = new sdk_1.FileCreateTransaction()
                 .setContents(reportContent)
-                .setMaxTransactionFee(new Hbar(5));
+                .setMaxTransactionFee(new sdk_1.Hbar(5));
             const createFileResponse = await createFileTx.execute(this.client);
             const createFileReceipt = await createFileResponse.getReceipt(this.client);
             const fileId = createFileReceipt.fileId;
@@ -42,12 +45,12 @@ export class HederaFileService {
     }
     async appendToReport(fileId, additionalData) {
         try {
-            const fileIdObj = FileId.fromString(fileId);
+            const fileIdObj = sdk_1.FileId.fromString(fileId);
             const content = JSON.stringify(additionalData, null, 2);
-            const appendTx = new FileAppendTransaction()
+            const appendTx = new sdk_1.FileAppendTransaction()
                 .setFileId(fileIdObj)
                 .setContents(content)
-                .setMaxTransactionFee(new Hbar(2));
+                .setMaxTransactionFee(new sdk_1.Hbar(2));
             await appendTx.execute(this.client);
             console.log(`Data appended to HFS file: ${fileId}`);
         }
@@ -93,5 +96,6 @@ export class HederaFileService {
         this.client.close();
     }
 }
-export const hfsService = new HederaFileService();
+exports.HederaFileService = HederaFileService;
+exports.hfsService = new HederaFileService();
 //# sourceMappingURL=hfs.js.map

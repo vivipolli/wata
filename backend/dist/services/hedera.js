@@ -1,13 +1,17 @@
-import { Client, AccountId, PrivateKey, ContractFunctionParameters, ContractCallQuery, ContractExecuteTransaction, Hbar, ContractId, AccountBalanceQuery, TransferTransaction, AccountInfoQuery, TransactionId, TransactionRecordQuery } from '@hashgraph/sdk';
-import dotenv from 'dotenv';
-dotenv.config();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.HederaService = void 0;
+const tslib_1 = require("tslib");
+const sdk_1 = require("@hashgraph/sdk");
+const dotenv_1 = tslib_1.__importDefault(require("dotenv"));
+dotenv_1.default.config();
 function formatBytes32String(str) {
     const hash = Buffer.from(str, 'utf8');
     const padded = Buffer.alloc(32);
     hash.copy(padded, 0, 0, Math.min(hash.length, 32));
     return new Uint8Array(padded);
 }
-export class HederaService {
+class HederaService {
     client = null;
     accountId = null;
     privateKey = null;
@@ -15,21 +19,21 @@ export class HederaService {
     contractId = null;
     async initialize() {
         try {
-            this.accountId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
+            this.accountId = sdk_1.AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
             const privateKeyString = process.env.HEDERA_PRIVATE_KEY;
             if (privateKeyString.startsWith('0x')) {
-                this.privateKey = PrivateKey.fromStringECDSA(privateKeyString.slice(2));
+                this.privateKey = sdk_1.PrivateKey.fromStringECDSA(privateKeyString.slice(2));
             }
             else {
-                this.privateKey = PrivateKey.fromString(privateKeyString);
+                this.privateKey = sdk_1.PrivateKey.fromString(privateKeyString);
             }
             this.contractAddress = process.env.CONTRACT_ADDRESS;
-            this.client = Client.forTestnet().setOperator(this.accountId, this.privateKey);
+            this.client = sdk_1.Client.forTestnet().setOperator(this.accountId, this.privateKey);
             if (this.contractAddress.startsWith('0x')) {
-                this.contractId = ContractId.fromEvmAddress(0, 0, this.contractAddress);
+                this.contractId = sdk_1.ContractId.fromEvmAddress(0, 0, this.contractAddress);
             }
             else {
-                this.contractId = ContractId.fromString(this.contractAddress);
+                this.contractId = sdk_1.ContractId.fromString(this.contractAddress);
             }
         }
         catch (error) {
@@ -40,21 +44,21 @@ export class HederaService {
         try {
             let contractAddress;
             if (producerAddress.startsWith('0.0.')) {
-                const accountId = AccountId.fromString(producerAddress);
+                const accountId = sdk_1.AccountId.fromString(producerAddress);
                 contractAddress = accountId.toSolidityAddress();
             }
             else {
                 contractAddress = producerAddress;
             }
-            const transaction = new ContractExecuteTransaction()
+            const transaction = new sdk_1.ContractExecuteTransaction()
                 .setContractId(this.contractId)
                 .setGas(200000)
-                .setFunction('createAgreement', new ContractFunctionParameters()
+                .setFunction('createAgreement', new sdk_1.ContractFunctionParameters()
                 .addBytes32(this.formatBytes32String(agreementHash))
                 .addAddress(contractAddress)
                 .addUint256(baseValue)
                 .addUint256(hectares));
-            const serverTransactionId = TransactionId.generate(this.accountId);
+            const serverTransactionId = sdk_1.TransactionId.generate(this.accountId);
             transaction.setTransactionId(serverTransactionId);
             const response = await transaction.execute(this.client);
             const receipt = await response.getReceipt(this.client);
@@ -72,10 +76,10 @@ export class HederaService {
     }
     async requestPayment(agreementId, auditHash) {
         try {
-            const transaction = new ContractExecuteTransaction()
+            const transaction = new sdk_1.ContractExecuteTransaction()
                 .setContractId(this.contractId)
                 .setGas(200000)
-                .setFunction('requestPayment', new ContractFunctionParameters()
+                .setFunction('requestPayment', new sdk_1.ContractFunctionParameters()
                 .addUint256(agreementId)
                 .addBytes32(formatBytes32String(auditHash)));
             const frozenTransaction = await transaction.freezeWith(this.client);
@@ -90,10 +94,10 @@ export class HederaService {
     }
     async submitValidatedBatch(agreementId, auditHash, score) {
         try {
-            const transaction = new ContractExecuteTransaction()
+            const transaction = new sdk_1.ContractExecuteTransaction()
                 .setContractId(this.contractId)
                 .setGas(200000)
-                .setFunction('submitValidatedBatch', new ContractFunctionParameters()
+                .setFunction('submitValidatedBatch', new sdk_1.ContractFunctionParameters()
                 .addUint256(agreementId)
                 .addBytes32(formatBytes32String(auditHash))
                 .addUint256(score));
@@ -115,8 +119,8 @@ export class HederaService {
     }
     async verifyTransaction(transactionHash) {
         try {
-            const transactionId = TransactionId.fromString(transactionHash);
-            const record = await new TransactionRecordQuery()
+            const transactionId = sdk_1.TransactionId.fromString(transactionHash);
+            const record = await new sdk_1.TransactionRecordQuery()
                 .setTransactionId(transactionId)
                 .execute(this.client);
             const status = record.receipt?.status?.toString() || 'UNKNOWN';
@@ -141,10 +145,10 @@ export class HederaService {
     }
     async recordAudit(auditHash) {
         try {
-            const transaction = new ContractExecuteTransaction()
+            const transaction = new sdk_1.ContractExecuteTransaction()
                 .setContractId(this.contractId)
                 .setGas(200000)
-                .setFunction('recordAudit', new ContractFunctionParameters()
+                .setFunction('recordAudit', new sdk_1.ContractFunctionParameters()
                 .addBytes32(formatBytes32String(auditHash)));
             const frozenTransaction = await transaction.freezeWith(this.client);
             const response = await frozenTransaction.execute(this.client);
@@ -158,10 +162,10 @@ export class HederaService {
     }
     async getAgreement(agreementId) {
         try {
-            const query = new ContractCallQuery()
+            const query = new sdk_1.ContractCallQuery()
                 .setContractId(this.contractId)
                 .setGas(200000)
-                .setFunction('getAgreement', new ContractFunctionParameters().addUint256(agreementId));
+                .setFunction('getAgreement', new sdk_1.ContractFunctionParameters().addUint256(agreementId));
             const response = await query.execute(this.client);
             const result = response.getContractFunctionResult();
             return {
@@ -180,8 +184,8 @@ export class HederaService {
     }
     async getAccountBalance(accountId) {
         try {
-            const balance = await new AccountBalanceQuery()
-                .setAccountId(AccountId.fromString(accountId))
+            const balance = await new sdk_1.AccountBalanceQuery()
+                .setAccountId(sdk_1.AccountId.fromString(accountId))
                 .execute(this.client);
             return balance.hbars.toString();
         }
@@ -191,10 +195,10 @@ export class HederaService {
     }
     async transferHBAR(toAddress, amountInTinybars) {
         try {
-            const transferTransaction = new TransferTransaction()
-                .addHbarTransfer(AccountId.fromString(process.env.HEDERA_ACCOUNT_ID), new Hbar(-amountInTinybars / 100000000))
-                .addHbarTransfer(AccountId.fromString(toAddress), new Hbar(amountInTinybars / 100000000))
-                .setMaxTransactionFee(new Hbar(5));
+            const transferTransaction = new sdk_1.TransferTransaction()
+                .addHbarTransfer(sdk_1.AccountId.fromString(process.env.HEDERA_ACCOUNT_ID), new sdk_1.Hbar(-amountInTinybars / 100000000))
+                .addHbarTransfer(sdk_1.AccountId.fromString(toAddress), new sdk_1.Hbar(amountInTinybars / 100000000))
+                .setMaxTransactionFee(new sdk_1.Hbar(5));
             const frozenTransaction = await transferTransaction.freezeWith(this.client);
             const response = await frozenTransaction.execute(this.client);
             const receipt = await response.getReceipt(this.client);
@@ -213,8 +217,8 @@ export class HederaService {
     }
     async getAccountInfo(accountId) {
         try {
-            const accountInfo = await new AccountInfoQuery()
-                .setAccountId(AccountId.fromString(accountId))
+            const accountInfo = await new sdk_1.AccountInfoQuery()
+                .setAccountId(sdk_1.AccountId.fromString(accountId))
                 .execute(this.client);
             return {
                 accountId: accountInfo.accountId.toString(),
@@ -237,11 +241,11 @@ export class HederaService {
             // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
             const amountInTinybars = Math.floor(amount * 100000000);
             // Create investment transaction
-            const transaction = new ContractExecuteTransaction()
+            const transaction = new sdk_1.ContractExecuteTransaction()
                 .setContractId(this.contractId)
                 .setGas(1000000)
-                .setFunction('investInAgreement', new ContractFunctionParameters().addUint256(agreementId))
-                .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
+                .setFunction('investInAgreement', new sdk_1.ContractFunctionParameters().addUint256(agreementId))
+                .setPayableAmount(sdk_1.Hbar.fromTinybars(amountInTinybars))
                 .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`);
             // Freeze, sign and execute transaction
             const frozenTransaction = await transaction.freezeWith(this.client);
@@ -274,11 +278,11 @@ export class HederaService {
             // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
             const amountInTinybars = Math.floor(amount * 100000000);
             // Create investment transaction
-            const transaction = new ContractExecuteTransaction()
+            const transaction = new sdk_1.ContractExecuteTransaction()
                 .setContractId(this.contractId)
                 .setGas(1000000)
-                .setFunction('investInAgreement', new ContractFunctionParameters().addUint256(agreementId))
-                .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
+                .setFunction('investInAgreement', new sdk_1.ContractFunctionParameters().addUint256(agreementId))
+                .setPayableAmount(sdk_1.Hbar.fromTinybars(amountInTinybars))
                 .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`);
             // Freeze transaction for investor to sign
             const frozenTransaction = await transaction.freezeWith(this.client);
@@ -304,4 +308,5 @@ export class HederaService {
         return new Uint8Array(padded);
     }
 }
+exports.HederaService = HederaService;
 //# sourceMappingURL=hedera.js.map

@@ -1,7 +1,10 @@
-import { hcsService } from './hcs';
-import { hfsService } from './hfs';
-import { ethers } from 'ethers';
-export class RelayerService {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.RelayerService = void 0;
+const hcs_1 = require("./hcs");
+const hfs_1 = require("./hfs");
+const ethers_1 = require("ethers");
+class RelayerService {
     hederaService;
     database;
     isRunning = false;
@@ -14,11 +17,11 @@ export class RelayerService {
     async initialize() {
         try {
             await this.hederaService.initialize();
-            await hcsService.initialize();
-            this.provider = new ethers.JsonRpcProvider(process.env.HEDERA_RPC_URL || 'https://testnet.hashio.io/api');
+            await hcs_1.hcsService.initialize();
+            this.provider = new ethers_1.ethers.JsonRpcProvider(process.env.HEDERA_RPC_URL || 'https://testnet.hashio.io/api');
             const contractAddress = process.env.CONTRACT_ADDRESS;
             if (contractAddress) {
-                this.contract = new ethers.Contract(contractAddress, this.getContractABI(), this.provider);
+                this.contract = new ethers_1.ethers.Contract(contractAddress, this.getContractABI(), this.provider);
             }
             console.log('RelayerService initialized successfully');
         }
@@ -103,7 +106,7 @@ export class RelayerService {
                     producerAddress: producer,
                     investorAddress: investor
                 };
-                finalHcsTransactionId = await hcsService.publishAuditRecord(auditRecord);
+                finalHcsTransactionId = await hcs_1.hcsService.publishAuditRecord(auditRecord);
             }
             // Create detailed audit report for HFS if no HFS ID provided
             if (!finalHfsFileId || finalHfsFileId === '' || finalHfsFileId === '0.0.0') {
@@ -131,7 +134,7 @@ export class RelayerService {
                         automatic: true
                     }
                 };
-                finalHfsFileId = await hfsService.createAuditReport(auditReport);
+                finalHfsFileId = await hfs_1.hfsService.createAuditReport(auditReport);
             }
             // Execute HBAR payment
             const paymentResult = await this.executeHBARPayment(agreementId, producer, amount, auditHash, score, finalHcsTransactionId, finalHfsFileId);
@@ -302,9 +305,10 @@ export class RelayerService {
         return {
             isRunning: this.isRunning,
             contractAddress: process.env.CONTRACT_ADDRESS,
-            hcsTopicId: await hcsService.getTopicId(),
+            hcsTopicId: await hcs_1.hcsService.getTopicId(),
             lastProcessedAt: new Date().toISOString()
         };
     }
 }
+exports.RelayerService = RelayerService;
 //# sourceMappingURL=relayer.js.map

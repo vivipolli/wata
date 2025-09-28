@@ -1,7 +1,11 @@
-import express from 'express';
-import crypto from 'crypto';
-export default function readingRoutes(database) {
-    const router = express.Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = readingRoutes;
+const tslib_1 = require("tslib");
+const express_1 = tslib_1.__importDefault(require("express"));
+const crypto_1 = tslib_1.__importDefault(require("crypto"));
+function readingRoutes(database) {
+    const router = express_1.default.Router();
     // Submit a new reading
     router.post('/submit', async (req, res) => {
         try {
@@ -31,7 +35,7 @@ export default function readingRoutes(database) {
                 timestamp: Date.now(),
                 isSimulated
             };
-            const auditHash = crypto
+            const auditHash = crypto_1.default
                 .createHash('sha256')
                 .update(JSON.stringify(auditData))
                 .digest('hex');
@@ -95,7 +99,7 @@ export default function readingRoutes(database) {
                 ...readingData,
                 timestamp: Date.now()
             };
-            const auditHash = crypto
+            const auditHash = crypto_1.default
                 .createHash('sha256')
                 .update(JSON.stringify(auditData))
                 .digest('hex');

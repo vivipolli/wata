@@ -1,6 +1,9 @@
-import { Router } from 'express';
-export default function batchSchedulerRoutes(batchSchedulerService) {
-    const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = batchSchedulerRoutes;
+const express_1 = require("express");
+function batchSchedulerRoutes(batchSchedulerService) {
+    const router = (0, express_1.Router)();
     // Start batch scheduler
     router.post('/start', async (req, res) => {
         try {

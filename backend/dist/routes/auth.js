@@ -1,9 +1,12 @@
-import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
-import { AuthService } from '../services/auth';
-import { Database } from '../database';
-import { validateUserRegistration, validateUserLogin, validatePasswordChange, validateUserProfileUpdate, handleValidationErrors, sanitizeInput, authRateLimit } from '../middleware/validation';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const tslib_1 = require("tslib");
+const express_1 = require("express");
+const express_rate_limit_1 = tslib_1.__importDefault(require("express-rate-limit"));
+const auth_1 = require("../services/auth");
+const database_1 = require("../database");
+const validation_1 = require("../middleware/validation");
+const router = (0, express_1.Router)();
 // Initialize services
 let database = null;
 let authService = null;
@@ -11,14 +14,14 @@ let authMiddleware = null;
 // Initialize database and services
 const initializeServices = async () => {
     if (!database) {
-        database = new Database();
+        database = new database_1.Database();
         await database.initialize();
-        authService = new AuthService(database);
+        authService = new auth_1.AuthService(database);
         authMiddleware = authService.getAuthMiddleware();
     }
 };
 // Apply rate limiting to auth routes
-const authLimiter = rateLimit(authRateLimit);
+const authLimiter = (0, express_rate_limit_1.default)(validation_1.authRateLimit);
 // Middleware wrapper to ensure services are initialized
 const ensureAuthenticated = async (req, res, next) => {
     await initializeServices();
@@ -28,7 +31,7 @@ const ensureAuthenticated = async (req, res, next) => {
  * POST /api/auth/register
  * Register a new user
  */
-router.post('/register', authLimiter, sanitizeInput, validateUserRegistration, handleValidationErrors, async (req, res) => {
+router.post('/register', authLimiter, validation_1.sanitizeInput, validation_1.validateUserRegistration, validation_1.handleValidationErrors, async (req, res) => {
     try {
         await initializeServices(); // Ensure services are initialized
         const { email, name, password, role, address } = req.body;
@@ -69,7 +72,7 @@ router.post('/register', authLimiter, sanitizeInput, validateUserRegistration, h
  * POST /api/auth/login
  * Login user
  */
-router.post('/login', authLimiter, sanitizeInput, validateUserLogin, handleValidationErrors, async (req, res) => {
+router.post('/login', authLimiter, validation_1.sanitizeInput, validation_1.validateUserLogin, validation_1.handleValidationErrors, async (req, res) => {
     try {
         await initializeServices(); // Ensure services are initialized
         const { email, password } = req.body;
@@ -175,7 +178,7 @@ router.get('/profile', ensureAuthenticated, async (req, res) => {
  * PUT /api/auth/profile
  * Update user profile (requires authentication)
  */
-router.put('/profile', ensureAuthenticated, sanitizeInput, validateUserProfileUpdate, handleValidationErrors, async (req, res) => {
+router.put('/profile', ensureAuthenticated, validation_1.sanitizeInput, validation_1.validateUserProfileUpdate, validation_1.handleValidationErrors, async (req, res) => {
     try {
         const userId = req.user.id;
         const { name, address } = req.body;
@@ -201,7 +204,7 @@ router.put('/profile', ensureAuthenticated, sanitizeInput, validateUserProfileUp
  * POST /api/auth/change-password
  * Change user password (requires authentication)
  */
-router.post('/change-password', ensureAuthenticated, sanitizeInput, validatePasswordChange, handleValidationErrors, async (req, res) => {
+router.post('/change-password', ensureAuthenticated, validation_1.sanitizeInput, validation_1.validatePasswordChange, validation_1.handleValidationErrors, async (req, res) => {
     try {
         const userId = req.user.id;
         const { currentPassword, newPassword } = req.body;
@@ -274,7 +277,7 @@ router.get('/verify', ensureAuthenticated, async (req, res) => {
  * PUT /api/auth/update-address
  * Update user wallet address
  */
-router.put('/update-address', authLimiter, ensureAuthenticated, sanitizeInput, async (req, res) => {
+router.put('/update-address', authLimiter, ensureAuthenticated, validation_1.sanitizeInput, async (req, res) => {
     try {
         const { address } = req.body;
         const userId = req.user.id;
@@ -308,5 +311,5 @@ router.put('/update-address', authLimiter, ensureAuthenticated, sanitizeInput, a
         });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=auth.js.map

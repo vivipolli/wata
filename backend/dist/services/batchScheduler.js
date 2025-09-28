@@ -1,8 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.BatchSchedulerService = void 0;
 /**
  * Batch Scheduler Service
  * Business Rule: Leituras válidas devem ser agregadas em batches (ex.: a cada 6h)
  */
-export class BatchSchedulerService {
+class BatchSchedulerService {
     database;
     oracleService;
     intervalId = null;
@@ -139,4 +142,5 @@ export class BatchSchedulerService {
         };
     }
 }
+exports.BatchSchedulerService = BatchSchedulerService;
 //# sourceMappingURL=batchScheduler.js.map

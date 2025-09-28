@@ -1,21 +1,24 @@
-import { Client, TopicCreateTransaction, TopicMessageSubmitTransaction, PrivateKey, AccountId, Hbar, } from '@hashgraph/sdk';
-import { config } from 'dotenv';
-config();
-export class HederaConsensusService {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.hcsService = exports.HederaConsensusService = void 0;
+const sdk_1 = require("@hashgraph/sdk");
+const dotenv_1 = require("dotenv");
+(0, dotenv_1.config)();
+class HederaConsensusService {
     client;
     topicId = null;
     operatorId;
     operatorKey;
     constructor() {
-        this.operatorId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
+        this.operatorId = sdk_1.AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
         const privateKeyString = process.env.HEDERA_PRIVATE_KEY;
         if (privateKeyString.startsWith('0x')) {
-            this.operatorKey = PrivateKey.fromString(privateKeyString.slice(2));
+            this.operatorKey = sdk_1.PrivateKey.fromString(privateKeyString.slice(2));
         }
         else {
-            this.operatorKey = PrivateKey.fromString(privateKeyString);
+            this.operatorKey = sdk_1.PrivateKey.fromString(privateKeyString);
         }
-        this.client = Client.forTestnet();
+        this.client = sdk_1.Client.forTestnet();
         this.client.setOperator(this.operatorId, this.operatorKey);
     }
     async initialize() {
@@ -30,9 +33,9 @@ export class HederaConsensusService {
     async publishAuditRecord(record) {
         if (!this.topicId) {
             try {
-                const createTopicTx = new TopicCreateTransaction()
+                const createTopicTx = new sdk_1.TopicCreateTransaction()
                     .setTopicMemo('WATA Audit Records')
-                    .setMaxTransactionFee(new Hbar(5));
+                    .setMaxTransactionFee(new sdk_1.Hbar(5));
                 const createTopicResponse = await createTopicTx.execute(this.client);
                 const createTopicReceipt = await createTopicResponse.getReceipt(this.client);
                 this.topicId = createTopicReceipt.topicId;
@@ -51,10 +54,10 @@ export class HederaConsensusService {
                 timestamp: new Date().toISOString(),
                 version: '1.0'
             });
-            const submitTx = new TopicMessageSubmitTransaction()
+            const submitTx = new sdk_1.TopicMessageSubmitTransaction()
                 .setTopicId(this.topicId)
                 .setMessage(message)
-                .setMaxTransactionFee(new Hbar(2));
+                .setMaxTransactionFee(new sdk_1.Hbar(2));
             const submitResponse = await submitTx.execute(this.client);
             const submitReceipt = await submitResponse.getReceipt(this.client);
             const transactionId = submitResponse.transactionId.toString();
@@ -76,5 +79,6 @@ export class HederaConsensusService {
         this.client.close();
     }
 }
-export const hcsService = new HederaConsensusService();
+exports.HederaConsensusService = HederaConsensusService;
+exports.hcsService = new HederaConsensusService();
 //# sourceMappingURL=hcs.js.map

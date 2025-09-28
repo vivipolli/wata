@@ -1,10 +1,14 @@
-import express from 'express';
-import { OracleService } from '../services/oracle';
-import { AuthMiddleware } from '../middleware/auth';
-export default function oracleRoutes(database, hederaService) {
-    const router = express.Router();
-    const oracleService = new OracleService(database, hederaService);
-    const authMiddleware = new AuthMiddleware(database);
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = oracleRoutes;
+const tslib_1 = require("tslib");
+const express_1 = tslib_1.__importDefault(require("express"));
+const oracle_1 = require("../services/oracle");
+const auth_1 = require("../middleware/auth");
+function oracleRoutes(database, hederaService) {
+    const router = express_1.default.Router();
+    const oracleService = new oracle_1.OracleService(database, hederaService);
+    const authMiddleware = new auth_1.AuthMiddleware(database);
     // ===== NEW HIERARCHICAL ROUTES: User Producer -> Contract -> Oracle Status =====
     /**
      * GET /api/oracle/producer/:producerAddress/status

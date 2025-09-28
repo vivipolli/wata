@@ -1,6 +1,10 @@
-import express from 'express';
-export default function paymentRoutes(hederaService, database, relayerService) {
-    const router = express.Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = paymentRoutes;
+const tslib_1 = require("tslib");
+const express_1 = tslib_1.__importDefault(require("express"));
+function paymentRoutes(hederaService, database, relayerService) {
+    const router = express_1.default.Router();
     // Trigger payment check for an agreement
     router.post('/trigger-check/:agreementId', async (req, res) => {
         try {

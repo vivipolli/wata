@@ -1,11 +1,15 @@
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.notFoundHandler = exports.errorHandler = exports.requestLogger = exports.sensitiveOperationRateLimit = exports.passwordResetRateLimit = exports.authRateLimit = exports.securityMiddleware = void 0;
+const tslib_1 = require("tslib");
+const helmet_1 = tslib_1.__importDefault(require("helmet"));
+const express_rate_limit_1 = tslib_1.__importDefault(require("express-rate-limit"));
 /**
  * Security middleware configuration
  */
-export const securityMiddleware = [
+exports.securityMiddleware = [
     // Helmet for security headers
-    helmet({
+    (0, helmet_1.default)({
         contentSecurityPolicy: {
             directives: {
                 defaultSrc: ["'self'"],
@@ -27,7 +31,7 @@ export const securityMiddleware = [
         }
     }),
     // Rate limiting for API endpoints
-    rateLimit({
+    (0, express_rate_limit_1.default)({
         windowMs: 15 * 60 * 1000, // 15 minutes
         max: process.env.NODE_ENV === 'development' ? 1000 : 500, // More generous in development
         message: {
@@ -75,7 +79,7 @@ export const securityMiddleware = [
 /**
  * Rate limiting for authentication endpoints
  */
-export const authRateLimit = rateLimit({
+exports.authRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: process.env.NODE_ENV === 'development' ? 50 : 5, // More generous in development
     message: {
@@ -93,7 +97,7 @@ export const authRateLimit = rateLimit({
 /**
  * Rate limiting for password reset endpoints
  */
-export const passwordResetRateLimit = rateLimit({
+exports.passwordResetRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 60 * 60 * 1000, // 1 hour
     max: process.env.NODE_ENV === 'development' ? 20 : 3,
     message: {
@@ -110,7 +114,7 @@ export const passwordResetRateLimit = rateLimit({
 /**
  * Rate limiting for sensitive operations
  */
-export const sensitiveOperationRateLimit = rateLimit({
+exports.sensitiveOperationRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 60 * 60 * 1000, // 1 hour
     max: process.env.NODE_ENV === 'development' ? 100 : 10, // More generous in development
     message: {
@@ -127,7 +131,7 @@ export const sensitiveOperationRateLimit = rateLimit({
 /**
  * Request logging middleware
  */
-export const requestLogger = (req, res, next) => {
+const requestLogger = (req, res, next) => {
     const start = Date.now();
     res.on('finish', () => {
         const duration = Date.now() - start;
@@ -147,10 +151,11 @@ export const requestLogger = (req, res, next) => {
     });
     next();
 };
+exports.requestLogger = requestLogger;
 /**
  * Error handling middleware
  */
-export const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, next) => {
     console.error('Error:', err);
     // Don't leak error details in production
     const isDevelopment = process.env.NODE_ENV === 'development';
@@ -160,10 +165,11 @@ export const errorHandler = (err, req, res, next) => {
         ...(isDevelopment && { stack: err.stack })
     });
 };
+exports.errorHandler = errorHandler;
 /**
  * 404 handler
  */
-export const notFoundHandler = (req, res) => {
+const notFoundHandler = (req, res) => {
     res.status(404).json({
         success: false,
         error: 'Endpoint not found',
@@ -171,4 +177,5 @@ export const notFoundHandler = (req, res) => {
         method: req.method
     });
 };
+exports.notFoundHandler = notFoundHandler;
 //# sourceMappingURL=security.js.map

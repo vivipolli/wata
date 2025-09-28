@@ -1,5 +1,9 @@
-import jwt from 'jsonwebtoken';
-export class AuthMiddleware {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AuthMiddleware = void 0;
+const tslib_1 = require("tslib");
+const jsonwebtoken_1 = tslib_1.__importDefault(require("jsonwebtoken"));
+class AuthMiddleware {
     database;
     jwtSecret;
     constructor(database) {
@@ -21,7 +25,7 @@ export class AuthMiddleware {
             }
             const token = authHeader.substring(7); // Remove 'Bearer ' prefix
             // Verify JWT token
-            const decoded = jwt.verify(token, this.jwtSecret);
+            const decoded = jsonwebtoken_1.default.verify(token, this.jwtSecret);
             // Get user from database to ensure they still exist and are active
             const user = await this.database.getUserById(decoded.userId);
             if (!user) {
@@ -42,13 +46,13 @@ export class AuthMiddleware {
             next();
         }
         catch (error) {
-            if (error instanceof jwt.JsonWebTokenError) {
+            if (error instanceof jsonwebtoken_1.default.JsonWebTokenError) {
                 res.status(401).json({
                     success: false,
                     error: 'Invalid token'
                 });
             }
-            else if (error instanceof jwt.TokenExpiredError) {
+            else if (error instanceof jsonwebtoken_1.default.TokenExpiredError) {
                 res.status(401).json({
                     success: false,
                     error: 'Token expired'
@@ -172,7 +176,7 @@ export class AuthMiddleware {
             email: user.email,
             role: user.role
         };
-        return jwt.sign(payload, this.jwtSecret, {
+        return jsonwebtoken_1.default.sign(payload, this.jwtSecret, {
             expiresIn: process.env.JWT_EXPIRES_IN || '24h',
             issuer: 'wata-chain',
             audience: 'wata-users'
@@ -187,7 +191,7 @@ export class AuthMiddleware {
             email: user.email,
             type: 'refresh'
         };
-        return jwt.sign(payload, this.jwtSecret, {
+        return jsonwebtoken_1.default.sign(payload, this.jwtSecret, {
             expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
             issuer: 'wata-chain',
             audience: 'wata-users'
@@ -198,7 +202,7 @@ export class AuthMiddleware {
      */
     verifyRefreshToken(token) {
         try {
-            const decoded = jwt.verify(token, this.jwtSecret);
+            const decoded = jsonwebtoken_1.default.verify(token, this.jwtSecret);
             return decoded;
         }
         catch (error) {
@@ -206,4 +210,5 @@ export class AuthMiddleware {
         }
     }
 }
+exports.AuthMiddleware = AuthMiddleware;
 //# sourceMappingURL=auth.js.map

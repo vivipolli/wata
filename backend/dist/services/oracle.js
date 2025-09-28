@@ -1,5 +1,9 @@
-import crypto from 'crypto';
-export class OracleService {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.OracleService = void 0;
+const tslib_1 = require("tslib");
+const crypto_1 = tslib_1.__importDefault(require("crypto"));
+class OracleService {
     database;
     hederaService;
     oraclePrivateKey;
@@ -309,7 +313,7 @@ export class OracleService {
     }
     generateAuditHash(data) {
         const serialized = JSON.stringify(data, Object.keys(data).sort());
-        return crypto.createHash('sha256').update(serialized).digest('hex');
+        return crypto_1.default.createHash('sha256').update(serialized).digest('hex');
     }
     signBatch(auditHash) {
         if (!this.oraclePrivateKey) {
@@ -317,7 +321,8 @@ export class OracleService {
         }
         // Simple signature using HMAC for MVP
         // In production, would use proper digital signatures
-        return crypto.createHmac('sha256', this.oraclePrivateKey).update(auditHash).digest('hex');
+        return crypto_1.default.createHmac('sha256', this.oraclePrivateKey).update(auditHash).digest('hex');
     }
 }
+exports.OracleService = OracleService;
 //# sourceMappingURL=oracle.js.map

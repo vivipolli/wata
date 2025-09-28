@@ -1,14 +1,16 @@
-import { Router } from 'express';
-import { HederaService } from '../services/hedera';
-import { hcsService } from '../services/hcs';
-import { hfsService } from '../services/hfs';
-const router = Router();
-const hederaService = new HederaService();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const hedera_1 = require("../services/hedera");
+const hcs_1 = require("../services/hcs");
+const hfs_1 = require("../services/hfs");
+const router = (0, express_1.Router)();
+const hederaService = new hedera_1.HederaService();
 // Initialize services
 router.use(async (req, res, next) => {
     try {
         await hederaService.initialize();
-        await hcsService.initialize();
+        await hcs_1.hcsService.initialize();
         next();
     }
     catch (error) {
@@ -101,7 +103,7 @@ router.get('/transaction/:transactionId', async (req, res) => {
 // HCS endpoints
 router.get('/hcs/topic', async (req, res) => {
     try {
-        const topicId = await hcsService.getTopicId();
+        const topicId = await hcs_1.hcsService.getTopicId();
         res.json({
             success: true,
             topicId,
@@ -125,11 +127,11 @@ router.post('/hcs/publish', async (req, res) => {
                 error: 'agreementId and auditHash are required'
             });
         }
-        const transactionId = await hcsService.publishAuditRecord(auditRecord);
+        const transactionId = await hcs_1.hcsService.publishAuditRecord(auditRecord);
         res.json({
             success: true,
             transactionId,
-            explorerUrl: await hcsService.getHederaExplorerUrl(transactionId)
+            explorerUrl: await hcs_1.hcsService.getHederaExplorerUrl(transactionId)
         });
     }
     catch (error) {
@@ -150,11 +152,11 @@ router.post('/hfs/report', async (req, res) => {
                 error: 'agreementId and auditHash are required'
             });
         }
-        const fileId = await hfsService.createAuditReport(auditReport);
+        const fileId = await hfs_1.hfsService.createAuditReport(auditReport);
         res.json({
             success: true,
             fileId,
-            explorerUrl: await hfsService.getHederaExplorerUrl(fileId)
+            explorerUrl: await hfs_1.hfsService.getHederaExplorerUrl(fileId)
         });
     }
     catch (error) {
@@ -169,11 +171,11 @@ router.post('/hfs/append/:fileId', async (req, res) => {
     try {
         const { fileId } = req.params;
         const additionalData = req.body;
-        await hfsService.appendToReport(fileId, additionalData);
+        await hfs_1.hfsService.appendToReport(fileId, additionalData);
         res.json({
             success: true,
             fileId,
-            explorerUrl: await hfsService.getHederaExplorerUrl(fileId)
+            explorerUrl: await hfs_1.hfsService.getHederaExplorerUrl(fileId)
         });
     }
     catch (error) {
@@ -184,5 +186,5 @@ router.post('/hfs/append/:fileId', async (req, res) => {
         });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=hedera.js.map

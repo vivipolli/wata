@@ -1,9 +1,13 @@
-import express from 'express';
-import crypto from 'crypto';
-import { AuthMiddleware } from '../middleware/auth';
-export default function agreementRoutes(hederaService, database) {
-    const router = express.Router();
-    const authMiddleware = new AuthMiddleware(database);
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = agreementRoutes;
+const tslib_1 = require("tslib");
+const express_1 = tslib_1.__importDefault(require("express"));
+const crypto_1 = tslib_1.__importDefault(require("crypto"));
+const auth_1 = require("../middleware/auth");
+function agreementRoutes(hederaService, database) {
+    const router = express_1.default.Router();
+    const authMiddleware = new auth_1.AuthMiddleware(database);
     router.post('/', async (req, res) => {
         try {
             const { producerName, producerAddress, baseValue, hectares, locationLat, locationLng, durationDays, signedTransaction } = req.body;
@@ -24,7 +28,7 @@ export default function agreementRoutes(hederaService, database) {
                     durationDays,
                     timestamp: Date.now()
                 };
-                const agreementHash = crypto
+                const agreementHash = crypto_1.default
                     .createHash('sha256')
                     .update(JSON.stringify(agreementData))
                     .digest('hex');
@@ -70,7 +74,7 @@ export default function agreementRoutes(hederaService, database) {
                 durationDays,
                 timestamp: Date.now()
             };
-            const agreementHash = crypto
+            const agreementHash = crypto_1.default
                 .createHash('sha256')
                 .update(JSON.stringify(agreementData))
                 .digest('hex');

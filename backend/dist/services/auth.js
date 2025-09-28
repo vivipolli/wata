@@ -1,12 +1,16 @@
-import bcrypt from 'bcrypt';
-import { AuthMiddleware } from '../middleware/auth';
-export class AuthService {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AuthService = void 0;
+const tslib_1 = require("tslib");
+const bcrypt_1 = tslib_1.__importDefault(require("bcrypt"));
+const auth_1 = require("../middleware/auth");
+class AuthService {
     database;
     authMiddleware;
     saltRounds;
     constructor(database) {
         this.database = database;
-        this.authMiddleware = new AuthMiddleware(database);
+        this.authMiddleware = new auth_1.AuthMiddleware(database);
         this.saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12');
     }
     /**
@@ -23,7 +27,7 @@ export class AuthService {
                 };
             }
             // Hash password
-            const hashedPassword = await bcrypt.hash(userData.password, this.saltRounds);
+            const hashedPassword = await bcrypt_1.default.hash(userData.password, this.saltRounds);
             // Create user in database
             const userId = await this.database.createUser({
                 email: userData.email,
@@ -94,7 +98,7 @@ export class AuthService {
                 };
             }
             // Verify password
-            const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
+            const isPasswordValid = await bcrypt_1.default.compare(credentials.password, user.password);
             if (!isPasswordValid) {
                 return {
                     success: false,
@@ -199,7 +203,7 @@ export class AuthService {
                 };
             }
             // Verify current password
-            const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+            const isCurrentPasswordValid = await bcrypt_1.default.compare(currentPassword, user.password);
             if (!isCurrentPasswordValid) {
                 return {
                     success: false,
@@ -207,7 +211,7 @@ export class AuthService {
                 };
             }
             // Hash new password
-            const hashedNewPassword = await bcrypt.hash(newPassword, this.saltRounds);
+            const hashedNewPassword = await bcrypt_1.default.hash(newPassword, this.saltRounds);
             // Update password in database
             await this.database.updateUserPassword(userId, hashedNewPassword);
             return {
@@ -303,4 +307,5 @@ export class AuthService {
         return this.authMiddleware;
     }
 }
+exports.AuthService = AuthService;
 //# sourceMappingURL=auth.js.map
