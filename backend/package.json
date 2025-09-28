@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "W.A.T.A. Chain Backend - Hedera Integration",
   "main": "dist/server.js",
-  "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
