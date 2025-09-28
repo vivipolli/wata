@@ -19,6 +19,8 @@ const security_js_1 = require("./middleware/security.js");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
+// Trust proxy for Railway deployment
+app.set('trust proxy', true);
 // Security middleware
 app.use(security_js_1.securityMiddleware);
 // Request logging

@@ -52,6 +52,7 @@ export const securityMiddleware = [
       'http://localhost:5173',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:5173',
+      'https://wata-mu.vercel.app',
       process.env.CORS_ORIGIN
     ]
     
@@ -63,7 +64,12 @@ export const securityMiddleware = [
       (origin as string).includes('.ngrok-free.app')
     )
     
-    if (allowedOrigins.includes(origin as string) || isNgrokUrl) {
+    const isVercelUrl = origin && (
+      (origin as string).includes('.vercel.app') ||
+      (origin as string).includes('wata-mu.vercel.app')
+    )
+    
+    if (allowedOrigins.includes(origin as string) || isNgrokUrl || isVercelUrl) {
       res.header('Access-Control-Allow-Origin', origin)
     } else if (process.env.NODE_ENV === 'development') {
       res.header('Access-Control-Allow-Origin', '*')

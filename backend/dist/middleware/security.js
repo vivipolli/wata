@@ -52,13 +52,16 @@ exports.securityMiddleware = [
             'http://localhost:5173',
             'http://127.0.0.1:3000',
             'http://127.0.0.1:5173',
+            'https://wata-mu.vercel.app',
             process.env.CORS_ORIGIN
         ];
         const origin = req.headers.origin;
-        // Allow ngrok URLs in development
+        // Allow ngrok URLs in development and Vercel URLs
         const isNgrokUrl = origin && (origin.includes('.ngrok.io') ||
             origin.includes('.ngrok-free.app'));
-        if (allowedOrigins.includes(origin) || isNgrokUrl) {
+        const isVercelUrl = origin && (origin.includes('.vercel.app') ||
+            origin.includes('wata-mu.vercel.app'));
+        if (allowedOrigins.includes(origin) || isNgrokUrl || isVercelUrl) {
             res.header('Access-Control-Allow-Origin', origin);
         }
         else if (process.env.NODE_ENV === 'development') {
