@@ -18,6 +18,33 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onSwitchToLogin }) => {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([])
+
+  const validatePassword = (password: string): string[] => {
+    const errors: string[] = []
+    
+    if (!/[A-Z]/.test(password)) {
+      errors.push('At least one uppercase letter')
+    }
+    
+    if (!/[a-z]/.test(password)) {
+      errors.push('At least one lowercase letter')
+    }
+    
+    if (!/[0-9]/.test(password)) {
+      errors.push('At least one number')
+    }
+    
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+      errors.push('At least one special character')
+    }
+    
+    if (password.length < 8) {
+      errors.push('At least 8 characters long')
+    }
+    
+    return errors
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,8 +57,9 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onSwitchToLogin }) => {
         throw new Error('Passwords do not match')
       }
 
-      if (formData.password.length < 6) {
-        throw new Error('Password must be at least 6 characters')
+      const passwordValidationErrors = validatePassword(formData.password)
+      if (passwordValidationErrors.length > 0) {
+        throw new Error('Password does not meet requirements')
       }
 
       if (!formData.email.includes('@')) {
@@ -52,6 +80,12 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onSwitchToLogin }) => {
       ...prev,
       [name]: value
     }))
+    
+    // Validate password in real-time
+    if (name === 'password') {
+      const errors = validatePassword(value)
+      setPasswordErrors(errors)
+    }
   }
 
   return (
@@ -143,9 +177,31 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onSwitchToLogin }) => {
                   required
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Must be at least 6 characters long
-              </p>
+              <div className="mt-2">
+                <p className="text-xs text-gray-600 mb-2">Password must contain:</p>
+                <div className="grid grid-cols-1 gap-1 text-xs">
+                  <div className={`flex items-center ${/[A-Z]/.test(formData.password) ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span className="mr-2">{/[A-Z]/.test(formData.password) ? '✓' : '○'}</span>
+                    At least one uppercase letter
+                  </div>
+                  <div className={`flex items-center ${/[a-z]/.test(formData.password) ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span className="mr-2">{/[a-z]/.test(formData.password) ? '✓' : '○'}</span>
+                    At least one lowercase letter
+                  </div>
+                  <div className={`flex items-center ${/[0-9]/.test(formData.password) ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span className="mr-2">{/[0-9]/.test(formData.password) ? '✓' : '○'}</span>
+                    At least one number
+                  </div>
+                  <div className={`flex items-center ${/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password) ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span className="mr-2">{/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password) ? '✓' : '○'}</span>
+                    At least one special character
+                  </div>
+                  <div className={`flex items-center ${formData.password.length >= 8 ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span className="mr-2">{formData.password.length >= 8 ? '✓' : '○'}</span>
+                    At least 8 characters long
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Confirm Password */}

@@ -32,7 +32,7 @@ export const securityMiddleware = [
   // Rate limiting for API endpoints
   rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    max: process.env.NODE_ENV === 'development' ? 1000 : 500, // More generous in development
     message: {
       success: false,
       error: 'Too many requests, please try again later'
@@ -40,8 +40,8 @@ export const securityMiddleware = [
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => {
-      // Skip rate limiting for health checks
-      return req.path === '/api/health'
+      // Skip rate limiting for health checks and development
+      return req.path === '/api/health' || process.env.NODE_ENV === 'development'
     }
   }),
 
@@ -51,11 +51,19 @@ export const securityMiddleware = [
       'http://localhost:3000',
       'http://localhost:5173',
       'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173'
+      'http://127.0.0.1:5173',
+      process.env.CORS_ORIGIN
     ]
     
     const origin = req.headers.origin
-    if (allowedOrigins.includes(origin as string)) {
+    
+    // Allow ngrok URLs in development
+    const isNgrokUrl = origin && (
+      (origin as string).includes('.ngrok.io') || 
+      (origin as string).includes('.ngrok-free.app')
+    )
+    
+    if (allowedOrigins.includes(origin as string) || isNgrokUrl) {
       res.header('Access-Control-Allow-Origin', origin)
     } else if (process.env.NODE_ENV === 'development') {
       res.header('Access-Control-Allow-Origin', '*')
@@ -79,14 +87,18 @@ export const securityMiddleware = [
  */
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 auth requests per windowMs
+  max: process.env.NODE_ENV === 'development' ? 50 : 5, // More generous in development
   message: {
     success: false,
     error: 'Too many authentication attempts, please try again later'
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true
+  skipSuccessfulRequests: true,
+  skip: (req) => {
+    // Skip rate limiting in development
+    return process.env.NODE_ENV === 'development'
+  }
 })
 
 /**
@@ -94,13 +106,17 @@ export const authRateLimit = rateLimit({
  */
 export const passwordResetRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // Limit each IP to 3 password reset attempts per hour
+  max: process.env.NODE_ENV === 'development' ? 20 : 3,
   message: {
     success: false,
     error: 'Too many password reset attempts, please try again later'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development
+    return process.env.NODE_ENV === 'development'
+  }
 })
 
 /**
@@ -108,13 +124,17 @@ export const passwordResetRateLimit = rateLimit({
  */
 export const sensitiveOperationRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Limit each IP to 10 sensitive operations per hour
+  max: process.env.NODE_ENV === 'development' ? 100 : 10, // More generous in development
   message: {
     success: false,
     error: 'Too many sensitive operations, please try again later'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development
+    return process.env.NODE_ENV === 'development'
+  }
 })
 
 /**

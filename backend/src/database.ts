@@ -82,7 +82,7 @@ export class Database {
   private all!: (sql: string, params?: any[]) => Promise<DatabaseRow[]>
 
   constructor() {
-    this.dbPath = process.env.DB_PATH || './data/wata.db'
+    this.dbPath = process.env.DATABASE_PATH || process.env.DB_PATH || './data/wata.db'
   }
 
   async initialize(): Promise<void> {
@@ -565,6 +565,13 @@ export class Database {
     return await this.all(
       'SELECT * FROM investments WHERE agreement_id = ? ORDER BY created_at DESC',
       [agreementId]
+    )
+  }
+
+  async getInvestmentsByUser(userAddress: string): Promise<DatabaseRow[]> {
+    return await this.all(
+      'SELECT i.*, a.producer_name, a.base_value, a.hectares FROM investments i JOIN agreements a ON i.agreement_id = a.id WHERE i.investor_address = ? ORDER BY i.created_at DESC',
+      [userAddress]
     )
   }
 

@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { AuthMiddleware } from '../middleware/auth.js';
+import { AuthMiddleware } from '../middleware/auth';
 export class AuthService {
     database;
     authMiddleware;

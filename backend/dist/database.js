@@ -8,7 +8,7 @@ export class Database {
     get;
     all;
     constructor() {
-        this.dbPath = process.env.DB_PATH || './data/wata.db';
+        this.dbPath = process.env.DATABASE_PATH || process.env.DB_PATH || './data/wata.db';
     }
     async initialize() {
         // Ensure data directory exists
@@ -348,6 +348,15 @@ export class Database {
     async getInvestmentsByAgreement(agreementId) {
         return await this.all('SELECT * FROM investments WHERE agreement_id = ? ORDER BY created_at DESC', [agreementId]);
     }
+    async getInvestmentsByUser(userAddress) {
+        return await this.all('SELECT i.*, a.producer_name, a.base_value, a.hectares FROM investments i JOIN agreements a ON i.agreement_id = a.id WHERE i.investor_address = ? ORDER BY i.created_at DESC', [userAddress]);
+    }
+    async updateInvestmentTransactionHash(investmentId, transactionHash) {
+        await this.run('UPDATE investments SET transaction_hash = ? WHERE id = ?', [transactionHash, investmentId]);
+    }
+    async deleteInvestment(investmentId) {
+        await this.run('DELETE FROM investments WHERE id = ?', [investmentId]);
+    }
     async getInvestment(investmentId) {
         return await this.get('SELECT * FROM investments WHERE id = ?', [investmentId]);
     }
@@ -420,7 +429,13 @@ export class Database {
     }
     close() {
         if (this.db) {
-            this.db.close();
+            try {
+                this.db.close();
+                this.db = null;
+            }
+            catch (error) {
+                console.warn('Database was already closed:', error);
+            }
         }
     }
 }

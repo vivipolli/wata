@@ -14,23 +14,12 @@ export declare class HederaService {
     private contractAddress;
     private contractId;
     initialize(): Promise<void>;
-    /**
-     * Execute a transaction with user authorization
-     * The user's signature serves as authorization, but we execute with server's key
-     */
-    executeSignedTransaction(signedTransaction: any): Promise<{
+    createAgreementWithSystem(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<{
         agreementId: number;
         transactionId: string;
-    } | undefined>;
-    createAgreement(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<{
-        agreementId: number;
-        transactionId: string;
-    } | undefined>;
+    }>;
     requestPayment(agreementId: number, auditHash: string): Promise<TransactionRecord>;
     submitValidatedBatch(agreementId: number, auditHash: string, score: number): Promise<TransactionRecord>;
-    /**
-     * Verify transaction status using transaction hash
-     */
     verifyTransaction(transactionHash: string): Promise<{
         status: string;
         success: boolean;
@@ -38,7 +27,6 @@ export declare class HederaService {
     }>;
     recordAudit(auditHash: string): Promise<TransactionRecord>;
     getAgreement(agreementId: number): Promise<AgreementData>;
-    transferHbar(toAddress: string, amount: number): Promise<string>;
     getAccountBalance(accountId: string): Promise<string>;
     transferHBAR(toAddress: string, amountInTinybars: number): Promise<{
         success: boolean;
@@ -46,6 +34,17 @@ export declare class HederaService {
         error?: string;
     }>;
     getAccountInfo(accountId: string): Promise<any>;
+    investInAgreement(agreementId: number, amount: number, investorAddress: string): Promise<{
+        success: boolean;
+        transactionId?: string;
+        error?: string;
+    }>;
+    createInvestmentTransaction(agreementId: number, amount: number, investorAddress: string): Promise<{
+        success: boolean;
+        transactionBytes?: string;
+        error?: string;
+    }>;
+    private formatBytes32String;
 }
 export {};
 //# sourceMappingURL=hedera.d.ts.map

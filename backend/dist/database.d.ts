@@ -98,6 +98,9 @@ export declare class Database {
         transactionHash?: string;
     }): Promise<number>;
     getInvestmentsByAgreement(agreementId: number): Promise<DatabaseRow[]>;
+    getInvestmentsByUser(userAddress: string): Promise<DatabaseRow[]>;
+    updateInvestmentTransactionHash(investmentId: number, transactionHash: string): Promise<void>;
+    deleteInvestment(investmentId: number): Promise<void>;
     getInvestment(investmentId: number): Promise<DatabaseRow | undefined>;
     createAuditRecord(auditData: {
         agreementId: number;

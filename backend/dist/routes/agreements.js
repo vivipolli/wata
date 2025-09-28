@@ -4,21 +4,16 @@ import { AuthMiddleware } from '../middleware/auth';
 export default function agreementRoutes(hederaService, database) {
     const router = express.Router();
     const authMiddleware = new AuthMiddleware(database);
-    // Create new agreement with user signature
     router.post('/', async (req, res) => {
         try {
             const { producerName, producerAddress, baseValue, hectares, locationLat, locationLng, durationDays, signedTransaction } = req.body;
-            // Validate required fields
             if (!producerName || !producerAddress || !baseValue || !hectares) {
                 return res.status(400).json({
                     success: false,
                     error: 'Missing required fields: producerName, producerAddress, baseValue, hectares'
                 });
             }
-            // Handle blockchain-signed transaction (frontend already executed on Hedera)
             if (signedTransaction || req.body.blockchainId) {
-                console.log('Processing blockchain-signed transaction...');
-                // Generate agreement hash
                 const agreementData = {
                     producerName,
                     producerAddress,
@@ -33,7 +28,6 @@ export default function agreementRoutes(hederaService, database) {
                     .createHash('sha256')
                     .update(JSON.stringify(agreementData))
                     .digest('hex');
-                // Create agreement in database
                 const agreementId = await database.createAgreement({
                     agreementHash,
                     producerName,
@@ -44,7 +38,6 @@ export default function agreementRoutes(hederaService, database) {
                     locationLng,
                     durationDays
                 });
-                // Update database with blockchain ID (transaction already executed on Hedera)
                 const blockchainId = req.body.blockchainId;
                 if (blockchainId) {
                     await database.updateAgreementBlockchainId(agreementId, blockchainId);
@@ -67,9 +60,6 @@ export default function agreementRoutes(hederaService, database) {
                 };
                 return res.status(201).json(response);
             }
-            // Fallback to server-signed transaction (legacy)
-            console.log('No signed transaction provided, using server-signed transaction (legacy)');
-            // Generate agreement hash
             const agreementData = {
                 producerName,
                 producerAddress,
@@ -84,7 +74,6 @@ export default function agreementRoutes(hederaService, database) {
                 .createHash('sha256')
                 .update(JSON.stringify(agreementData))
                 .digest('hex');
-            // Create agreement in database
             const agreementId = await database.createAgreement({
                 agreementHash,
                 producerName,
@@ -95,18 +84,14 @@ export default function agreementRoutes(hederaService, database) {
                 locationLng,
                 durationDays
             });
-            // Create agreement on Hedera blockchain (server-signed)
-            const blockchainResult = await hederaService.createAgreement(agreementHash, producerAddress, baseValue, hectares);
-            // Update database with blockchain ID and transaction ID
-            if (blockchainResult && blockchainResult.agreementId) {
-                await database.updateAgreementBlockchainId(agreementId, blockchainResult.agreementId);
-            }
+            const result = await hederaService.createAgreementWithSystem(agreementHash, producerAddress, baseValue, hectares);
+            await database.updateAgreementBlockchainId(agreementId, result.agreementId);
             const response = {
                 success: true,
                 data: {
                     id: agreementId,
-                    blockchainId: blockchainResult?.agreementId || null,
-                    transactionId: blockchainResult?.transactionId || null,
+                    blockchainId: result.agreementId,
+                    transactionId: result.transactionId,
                     agreementHash,
                     producerName,
                     producerAddress,
@@ -121,7 +106,6 @@ export default function agreementRoutes(hederaService, database) {
             res.status(201).json(response);
         }
         catch (error) {
-            console.error('Error creating agreement:', error);
             const response = {
                 success: false,
                 error: 'Failed to create agreement',
@@ -130,7 +114,6 @@ export default function agreementRoutes(hederaService, database) {
             res.status(500).json(response);
         }
     });
-    // Get all agreements - Only MANAGER and INVESTOR can access
     router.get('/', authMiddleware.authenticate, authMiddleware.blockProducersFromAllAgreements, async (req, res) => {
         try {
             const agreements = await database.getAllAgreements();
@@ -141,7 +124,6 @@ export default function agreementRoutes(hederaService, database) {
             res.json(response);
         }
         catch (error) {
-            console.error('Error fetching agreements:', error);
             const response = {
                 success: false,
                 error: 'Failed to fetch agreements',
@@ -150,7 +132,6 @@ export default function agreementRoutes(hederaService, database) {
             res.status(500).json(response);
         }
     });
-    // Get agreements by producer address
     router.get('/producer/:address', async (req, res) => {
         try {
             const producerAddress = req.params.address;
@@ -174,7 +155,6 @@ export default function agreementRoutes(hederaService, database) {
             res.json(response);
         }
         catch (error) {
-            console.error('Error fetching agreements by producer:', error);
             const response = {
                 success: false,
                 error: 'Failed to fetch agreements for producer',
@@ -183,7 +163,6 @@ export default function agreementRoutes(hederaService, database) {
             res.status(500).json(response);
         }
     });
-    // Get specific agreement
     router.get('/:id', async (req, res) => {
         try {
             const agreementId = parseInt(req.params.id);
@@ -196,7 +175,6 @@ export default function agreementRoutes(hederaService, database) {
                 res.status(404).json(response);
                 return;
             }
-            // Get recent readings for this agreement
             const readings = await database.getReadingsByAgreement(agreementId, 10);
             const response = {
                 success: true,
@@ -208,7 +186,6 @@ export default function agreementRoutes(hederaService, database) {
             res.json(response);
         }
         catch (error) {
-            console.error('Error fetching agreement:', error);
             const response = {
                 success: false,
                 error: 'Failed to fetch agreement',
@@ -217,7 +194,6 @@ export default function agreementRoutes(hederaService, database) {
             res.status(500).json(response);
         }
     });
-    // Get agreement payments
     router.get('/:id/payments', async (req, res) => {
         try {
             const agreementId = parseInt(req.params.id);
@@ -229,7 +205,6 @@ export default function agreementRoutes(hederaService, database) {
             res.json(response);
         }
         catch (error) {
-            console.error('Error fetching agreement payments:', error);
             const response = {
                 success: false,
                 error: 'Failed to fetch payments',
@@ -238,7 +213,46 @@ export default function agreementRoutes(hederaService, database) {
             res.status(500).json(response);
         }
     });
-    // Verify transaction status
+    router.post('/create-agreement', async (req, res) => {
+        try {
+            const { agreementHash, producerAddress, baseValue, hectares, producerName, locationLat, locationLng, durationDays } = req.body;
+            if (!agreementHash || !producerAddress || !baseValue || !hectares) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Agreement hash, producer address, base value, and hectares are required'
+                });
+            }
+            const finalAgreementId = await database.createAgreement({
+                agreementHash,
+                producerName: producerName || 'Unknown Producer',
+                producerAddress,
+                baseValue,
+                hectares,
+                locationLat,
+                locationLng,
+                durationDays
+            });
+            const result = await hederaService.createAgreementWithSystem(agreementHash, producerAddress, baseValue, hectares);
+            await database.updateAgreementBlockchainId(finalAgreementId, result.agreementId);
+            const response = {
+                success: true,
+                data: {
+                    agreementId: result.agreementId,
+                    transactionId: result.transactionId,
+                    success: true
+                }
+            };
+            res.json(response);
+        }
+        catch (error) {
+            const response = {
+                success: false,
+                error: 'Failed to create agreement',
+                message: error instanceof Error ? error.message : 'Unknown error'
+            };
+            res.status(500).json(response);
+        }
+    });
     router.get('/verify/:transactionHash', async (req, res) => {
         try {
             const { transactionHash } = req.params;
@@ -261,7 +275,6 @@ export default function agreementRoutes(hederaService, database) {
             res.json(response);
         }
         catch (error) {
-            console.error('Error verifying transaction:', error);
             const response = {
                 success: false,
                 error: 'Failed to verify transaction',

@@ -123,6 +123,25 @@ export const paymentsService = {
   },
 
   /**
+   * Get payments by user address (for producers)
+   */
+  async getUserPayments(userAddress: string, filters?: PaymentFilters): Promise<Payment[]> {
+    try {
+      const params = new URLSearchParams()
+      
+      if (filters?.status) params.append('status', filters.status)
+      if (filters?.startDate) params.append('startDate', filters.startDate)
+      if (filters?.endDate) params.append('endDate', filters.endDate)
+      if (filters?.limit) params.append('limit', filters.limit.toString())
+      
+      const response = await apiClient.get<ApiResponse<{ payments: Payment[] }>>(`/payments/user-payments/${userAddress}?${params.toString()}`)
+      return response.data?.payments || []
+    } catch (error: any) {
+      throw new Error(`Failed to fetch user payments: ${error.message}`)
+    }
+  },
+
+  /**
    * Get payments for an agreement (alias for getByAgreement)
    */
   async getAgreementPayments(agreementId: number): Promise<Payment[]> {

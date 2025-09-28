@@ -79,10 +79,10 @@ curl http://localhost:3001/api/payments/stats
 - [x] Status "Active" no banco de dados
 
 #### 2.2. Teste de Múltiplos Acordos
-- [ ] Criar 3 acordos diferentes
-- [ ] Verificar isolamento entre acordos
-- [ ] Validar contadores incrementais
-- [ ] Testar diferentes valores e hectares
+- [x] Criar 3 acordos diferentes
+- [x] Verificar isolamento entre acordos
+- [x] Validar contadores incrementais
+- [x] Testar diferentes valores e hectares
 
 #### 2.3. Teste de Validação de Dados
 ```json
@@ -117,8 +117,8 @@ curl http://localhost:3001/api/payments/stats
   "isSimulated": true
 }
 ```
-- [ ] Criar 10 leituras com turbidez 5-15 NTU
-- [ ] Validar timestamps corretos
+- [x] Criar 10 leituras com turbidez 5-15 NTU
+- [x] Validar timestamps corretos
 - [ ] Verificar geolocalização
 
 ##### **Cenário B: Leituras de Qualidade Média**

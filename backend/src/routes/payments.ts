@@ -189,6 +189,51 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
     }
   })
 
+  // Get payments by user address (for producers)
+  router.get('/user-payments/:userAddress', async (req: Request, res: Response) => {
+    try {
+      const userAddress = req.params.userAddress
+      const limit = parseInt(req.query.limit as string) || 50
+      const status = req.query.status as string
+
+      if (!userAddress) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'User address is required'
+        }
+        return res.status(400).json(response)
+      }
+
+      let payments
+      if (status) {
+        payments = await (database as any).all(
+          'SELECT p.*, a.producer_name FROM payments p JOIN agreements a ON p.agreement_id = a.id WHERE a.producer_address = ? AND p.status = ? ORDER BY p.created_at DESC LIMIT ?',
+          [userAddress, status, limit]
+        )
+      } else {
+        payments = await (database as any).all(
+          'SELECT p.*, a.producer_name FROM payments p JOIN agreements a ON p.agreement_id = a.id WHERE a.producer_address = ? ORDER BY p.created_at DESC LIMIT ?',
+          [userAddress, limit]
+        )
+      }
+
+      const response: ApiResponse = {
+        success: true,
+        data: { payments }
+      }
+
+      res.json(response)
+    } catch (error) {
+      console.error('Error fetching user payments:', error)
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to fetch user payments',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
   // Get payment statistics
   router.get('/stats', async (req: Request, res: Response) => {
     try {
@@ -218,7 +263,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
     }
   })
 
-  // Investor contribution to agreement
+  // Investor contribution to agreement (legacy - uses owner wallet)
   router.post('/contribute/:agreementId', async (req: Request, res: Response) => {
     try {
       const agreementId = parseInt(req.params.agreementId)
@@ -320,6 +365,93 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
     }
   })
 
+  // Create investment transaction for investor to sign
+  router.post('/create-investment-transaction/:agreementId', async (req: Request, res: Response) => {
+    try {
+      const agreementId = parseInt(req.params.agreementId)
+      const { amount, investorAddress } = req.body
+
+      if (isNaN(agreementId) || agreementId < 0) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Invalid agreement ID'
+        }
+        return res.status(400).json(response)
+      }
+
+      if (!amount || amount <= 0) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Investment amount must be greater than 0'
+        }
+        return res.status(400).json(response)
+      }
+
+      if (!investorAddress) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Investor address is required'
+        }
+        return res.status(400).json(response)
+      }
+
+      // Check if agreement exists and is active
+      const agreement = await database.getAgreement(agreementId)
+      if (!agreement) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Agreement not found'
+        }
+        return res.status(404).json(response)
+      }
+
+      if (!agreement.is_active) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Agreement is not active'
+        }
+        return res.status(400).json(response)
+      }
+
+      // Create investment transaction for investor to sign
+      const transactionResult = await hederaService.createInvestmentTransaction(
+        agreementId,
+        amount,
+        investorAddress
+      )
+
+      if (transactionResult.success) {
+        const response: ApiResponse = {
+          success: true,
+          data: {
+            agreementId,
+            amount,
+            investorAddress,
+            transactionBytes: transactionResult.transactionBytes,
+            message: 'Transaction created for investor signature'
+          }
+        }
+
+        res.json(response)
+      } else {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Failed to create investment transaction',
+          message: transactionResult.error
+        }
+        res.status(500).json(response)
+      }
+    } catch (error) {
+      console.error('Error creating investment transaction:', error)
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to create investment transaction',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
   // Get investments for an agreement
   router.get('/investments/:agreementId', async (req: Request, res: Response) => {
     try {
@@ -346,6 +478,38 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
       const response: ApiResponse = {
         success: false,
         error: 'Failed to fetch investments',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
+  // Get investments by user address
+  router.get('/user-investments/:userAddress', async (req: Request, res: Response) => {
+    try {
+      const userAddress = req.params.userAddress
+
+      if (!userAddress) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'User address is required'
+        }
+        return res.status(400).json(response)
+      }
+
+      const investments = await database.getInvestmentsByUser(userAddress)
+
+      const response: ApiResponse = {
+        success: true,
+        data: investments
+      }
+
+      res.json(response)
+    } catch (error) {
+      console.error('Error fetching user investments:', error)
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to fetch user investments',
         message: error instanceof Error ? error.message : 'Unknown error'
       }
       res.status(500).json(response)

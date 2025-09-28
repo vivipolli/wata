@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { AuthService } from '../services/auth.js';
-import { Database } from '../database.js';
-import { validateUserRegistration, validateUserLogin, validatePasswordChange, validateUserProfileUpdate, handleValidationErrors, sanitizeInput, authRateLimit } from '../middleware/validation.js';
+import { AuthService } from '../services/auth';
+import { Database } from '../database';
+import { validateUserRegistration, validateUserLogin, validatePasswordChange, validateUserProfileUpdate, handleValidationErrors, sanitizeInput, authRateLimit } from '../middleware/validation';
 const router = Router();
 // Initialize services
 let database = null;

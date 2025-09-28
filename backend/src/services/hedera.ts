@@ -119,7 +119,8 @@ export class HederaService {
             .addBytes32(formatBytes32String(auditHash))
         )
 
-      const response = await transaction.execute(this.client!)
+      const frozenTransaction = await transaction.freezeWith(this.client!)
+      const response = await frozenTransaction.execute(this.client!)
       const receipt = await response.getReceipt(this.client!)
       const record = await response.getRecord(this.client!)
 
@@ -142,7 +143,8 @@ export class HederaService {
             .addUint256(score)
         )
 
-      const response = await transaction.execute(this.client!)
+      const frozenTransaction = await transaction.freezeWith(this.client!)
+      const response = await frozenTransaction.execute(this.client!)
       const receipt = await response.getReceipt(this.client!)
       const record = await response.getRecord(this.client!)
 
@@ -202,7 +204,8 @@ export class HederaService {
             .addBytes32(formatBytes32String(auditHash))
         )
 
-      const response = await transaction.execute(this.client!)
+      const frozenTransaction = await transaction.freezeWith(this.client!)
+      const response = await frozenTransaction.execute(this.client!)
       const receipt = await response.getReceipt(this.client!)
       const record = await response.getRecord(this.client!)
 
@@ -259,7 +262,8 @@ export class HederaService {
         .addHbarTransfer(AccountId.fromString(toAddress), new Hbar(amountInTinybars / 100000000))
         .setMaxTransactionFee(new Hbar(5))
 
-      const response = await transferTransaction.execute(this.client!)
+      const frozenTransaction = await transferTransaction.freezeWith(this.client!)
+      const response = await frozenTransaction.execute(this.client!)
       const receipt = await response.getReceipt(this.client!)
       
       const transactionId = response.transactionId.toString()
@@ -312,8 +316,9 @@ export class HederaService {
         .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
         .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`)
 
-      // Sign and execute transaction
-      const signedTransaction = await transaction.sign(this.privateKey)
+      // Freeze, sign and execute transaction
+      const frozenTransaction = await transaction.freezeWith(this.client!)
+      const signedTransaction = await frozenTransaction.sign(this.privateKey)
       const txResponse = await signedTransaction.execute(this.client)
 
       // Get transaction receipt
@@ -321,6 +326,7 @@ export class HederaService {
       const transactionId = txResponse.transactionId.toString()
 
       console.log(`Investment successful for agreement ${agreementId}: ${transactionId}`)
+      console.log(`Investment made by server on behalf of investor: ${investorAddress}`)
 
       return {
         success: true,
@@ -328,6 +334,43 @@ export class HederaService {
       }
     } catch (error) {
       console.error('Error investing in agreement:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  // New method: Create investment transaction for investor to sign
+  async createInvestmentTransaction(agreementId: number, amount: number, investorAddress: string): Promise<{ success: boolean; transactionBytes?: string; error?: string }> {
+    try {
+      if (!this.client || !this.contractId) {
+        throw new Error('Hedera service not initialized')
+      }
+
+      // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
+      const amountInTinybars = Math.floor(amount * 100000000)
+
+      // Create investment transaction
+      const transaction = new ContractExecuteTransaction()
+        .setContractId(this.contractId)
+        .setGas(1000000)
+        .setFunction('investInAgreement', new ContractFunctionParameters().addUint256(agreementId))
+        .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
+        .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`)
+
+      // Freeze transaction for investor to sign
+      const frozenTransaction = await transaction.freezeWith(this.client!)
+      
+      // Convert to bytes for investor to sign
+      const transactionBytes = frozenTransaction.toBytes()
+
+      return {
+        success: true,
+        transactionBytes: Buffer.from(transactionBytes).toString('hex')
+      }
+    } catch (error) {
+      console.error('Error creating investment transaction:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'

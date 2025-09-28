@@ -10,7 +10,8 @@
     "dev": "tsx watch src/server.ts",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "postinstall": "npm run build"
   },
   "dependencies": {
     "@hashgraph/sdk": "^2.7.0",

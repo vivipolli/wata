@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { Database } from '../database.js';
+import { Database } from '../database';
 interface AuthRequest extends Request {
     user?: {
         id: number;

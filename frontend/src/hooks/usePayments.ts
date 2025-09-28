@@ -99,6 +99,20 @@ export const usePayments = (): UsePaymentsReturn => {
     }
   }, [])
 
+  const fetchUserPayments = useCallback(async (userAddress: string): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const userPayments = await paymentsService.getUserPayments(userAddress)
+      setPayments(userPayments)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const getPaymentStats = useCallback(async (): Promise<PaymentStats | null> => {
     setLoading(true)
     setError(null)
@@ -146,6 +160,7 @@ export const usePayments = (): UsePaymentsReturn => {
     triggerPaymentCheck,
     processPayment,
     getPaymentStats,
-    getPaymentHistory
+    getPaymentHistory,
+    fetchUserPayments
   }
 }

@@ -162,6 +162,7 @@ export interface UsePaymentsReturn {
   processPayment: (paymentId: number) => Promise<any>
   getPaymentStats: () => Promise<PaymentStats | null>
   getPaymentHistory: (filters?: any) => Promise<void>
+  fetchUserPayments: (userAddress: string) => Promise<void>
 }
 
 export interface UseHealthReturn {

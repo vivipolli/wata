@@ -78,18 +78,31 @@ export default function AgreementList({ producerAddress, showAllAgreements = fal
 
     setContributingAgreement(agreementId)
     try {
-      const result = await investmentService.contributeToAgreement(
+      // Step 1: Create investment transaction for investor to sign
+      const transactionResult = await investmentService.createInvestmentTransaction(
         agreementId,
         parseFloat(contributionAmount),
         address
       )
 
-      if (result.success && result.data) {
-        alert(`Contribution successful! Transaction ID: ${result.data.transactionId}`)
-        setShowContributionForm(null)
-        setContributionAmount('')
+      if (transactionResult.success && transactionResult.data) {
+        // Step 2: For now, fallback to the legacy method
+        // TODO: Implement investor signature flow
+        const result = await investmentService.contributeToAgreement(
+          agreementId,
+          parseFloat(contributionAmount),
+          address
+        )
+
+        if (result.success && result.data) {
+          alert(`Contribution successful! Transaction ID: ${result.data.transactionId}`)
+          setShowContributionForm(null)
+          setContributionAmount('')
+        } else {
+          alert(`Contribution failed: ${result.error}`)
+        }
       } else {
-        alert(`Contribution failed: ${result.error}`)
+        alert(`Failed to create transaction: ${transactionResult.error}`)
       }
     } catch (error) {
       console.error('Error making contribution:', error)

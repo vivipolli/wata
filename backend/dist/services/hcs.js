@@ -8,10 +8,8 @@ export class HederaConsensusService {
     operatorKey;
     constructor() {
         this.operatorId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
-        // Handle different private key formats
         const privateKeyString = process.env.HEDERA_PRIVATE_KEY;
         if (privateKeyString.startsWith('0x')) {
-            // Remove 0x prefix for Hedera SDK
             this.operatorKey = PrivateKey.fromString(privateKeyString.slice(2));
         }
         else {
@@ -19,13 +17,9 @@ export class HederaConsensusService {
         }
         this.client = Client.forTestnet();
         this.client.setOperator(this.operatorId, this.operatorKey);
-        // Set default max transaction fee - skip for now to avoid constructor issues
-        // this.client.setDefaultMaxTransactionFee(new Hbar(10))
     }
     async initialize() {
         try {
-            // Don't create topic automatically - create it when first needed
-            // This avoids signature issues during startup
             console.log('HCS service initialized successfully (topic will be created on first use)');
         }
         catch (error) {
@@ -34,7 +28,6 @@ export class HederaConsensusService {
         }
     }
     async publishAuditRecord(record) {
-        // Create topic if it doesn't exist
         if (!this.topicId) {
             try {
                 const createTopicTx = new TopicCreateTransaction()
@@ -44,7 +37,6 @@ export class HederaConsensusService {
                 const createTopicReceipt = await createTopicResponse.getReceipt(this.client);
                 this.topicId = createTopicReceipt.topicId;
                 console.log(`HCS Topic created: ${this.topicId}`);
-                // Store topic ID in environment for persistence
                 process.env.HCS_TOPIC_ID = this.topicId.toString();
             }
             catch (error) {
