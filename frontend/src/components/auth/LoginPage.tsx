@@ -26,8 +26,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToRegister }) => {
         throw new Error('Please enter a valid email address')
       }
 
-      if (formData.password.length < 6) {
-        throw new Error('Password must be at least 6 characters')
+      if (formData.password.length < 8) {
+        throw new Error('Password must be at least 8 characters')
       }
 
       await login(formData.email, formData.password)

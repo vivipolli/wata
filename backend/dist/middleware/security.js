@@ -84,7 +84,7 @@ exports.securityMiddleware = [
  */
 exports.authRateLimit = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'development' ? 50 : 5, // More generous in development
+    max: process.env.NODE_ENV === 'development' ? 1000 : 5, // Very generous in development for testing
     message: {
         success: false,
         error: 'Too many authentication attempts, please try again later'

@@ -51,16 +51,14 @@ apiClient.interceptors.response.use(
             return apiClient(originalRequest)
           }
         } catch (refreshError) {
-          localStorage.removeItem('wata_user')
-          localStorage.removeItem('wata_token')
-          localStorage.removeItem('wata_refresh_token')
-          window.location.href = '/login'
+          console.error('Token refresh failed:', refreshError)
+          // Don't auto-logout, let the component handle the error
+          return Promise.reject(error)
         }
       } else {
-        localStorage.removeItem('wata_user')
-        localStorage.removeItem('wata_token')
-        localStorage.removeItem('wata_refresh_token')
-        window.location.href = '/login'
+        console.error('No refresh token available')
+        // Don't auto-logout, let the component handle the error
+        return Promise.reject(error)
       }
     }
 

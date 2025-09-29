@@ -315,12 +315,12 @@ export default function AgreementForm({ onSuccess, onCancel, showCancel = false 
       </div>
       
       <form onSubmit={handleSubmit} className="p-6 space-y-6">
-        {errors.submit && (
+        {(errors.submit || error) && (
           <div className="bg-red-50 border border-red-200 rounded-md p-4">
             <div className="flex">
               <FaTimes className="h-5 w-5 text-red-400" />
               <div className="ml-3">
-                <p className="text-sm text-red-800">{errors.submit}</p>
+                <p className="text-sm text-red-800">{errors.submit || error}</p>
               </div>
             </div>
           </div>
