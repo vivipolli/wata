@@ -26,8 +26,17 @@ export const useAgreements = (autoFetch: boolean = true): UseAgreementsReturn =>
           setError('Failed to fetch agreements')
         }
       } else if (hasRole(USER_ROLES.PRODUCER)) {
-        setAgreements([])
-        setError('Producers must use specific producer route for security')
+        // Producers should use getAgreementsByProducer with their address
+        if (user?.address) {
+          const response = await agreementsService.getByProducer(user.address)
+          if (response.success && response.data) {
+            setAgreements(response.data.agreements || [])
+          } else {
+            setError('Failed to fetch producer agreements')
+          }
+        } else {
+          setError('Producer address not found')
+        }
       } else {
         setError('Unauthorized to fetch agreements')
       }

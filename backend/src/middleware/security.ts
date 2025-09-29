@@ -29,21 +29,21 @@ export const securityMiddleware = [
     }
   }),
 
-  // Rate limiting for API endpoints
-  rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'development' ? 1000 : 500, // More generous in development
-    message: {
-      success: false,
-      error: 'Too many requests, please try again later'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-    skip: (req) => {
-      // Skip rate limiting for health checks and development
-      return req.path === '/api/health' || process.env.NODE_ENV === 'development'
-    }
-  }),
+  // Rate limiting temporarily disabled for Railway deployment
+  // rateLimit({
+  //   windowMs: 15 * 60 * 1000, // 15 minutes
+  //   max: process.env.NODE_ENV === 'development' ? 1000 : 500, // More generous in development
+  //   message: {
+  //     success: false,
+  //     error: 'Too many requests, please try again later'
+  //   },
+  //   standardHeaders: true,
+  //   legacyHeaders: false,
+  //   skip: (req) => {
+  //     // Skip rate limiting for health checks and development
+  //     return req.path === '/api/health' || process.env.NODE_ENV === 'development'
+  //   }
+  // }),
 
   // CORS configuration
   (req: Request, res: Response, next: NextFunction) => {
