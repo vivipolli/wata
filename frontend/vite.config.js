@@ -16,6 +16,17 @@ export default defineConfig({
       '.ngrok-free.app'
     ]
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  },
+  preview: {
+    port: 5173,
+    host: true
+  },
   define: {
     'process.env': {},
     global: 'globalThis'
