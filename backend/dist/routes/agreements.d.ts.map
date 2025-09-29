@@ -1,1 +1,1 @@
-{"version":3,"file":"agreements.d.ts","sourceRoot":"","sources":["../../src/routes/agreements.ts"],"names":[],"mappings":"AAEA,OAAO,EAAE,aAAa,EAAE,MAAM,oBAAoB,CAAA;AAClD,OAAO,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAA;AAiCtC,MAAM,CAAC,OAAO,UAAU,eAAe,CAAC,aAAa,EAAE,aAAa,EAAE,QAAQ,EAAE,QAAQ,8CA+VvF"}
+{"version":3,"file":"agreements.d.ts","sourceRoot":"","sources":["../../src/routes/agreements.ts"],"names":[],"mappings":"AAEA,OAAO,EAAE,aAAa,EAAE,MAAM,oBAAoB,CAAA;AAClD,OAAO,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAA;AAiCtC,MAAM,CAAC,OAAO,UAAU,eAAe,CAAC,aAAa,EAAE,aAAa,EAAE,QAAQ,EAAE,QAAQ,8CA2QvF"}

@@ -16,9 +16,9 @@ export default function AgreementList({ producerAddress, showAllAgreements = fal
   const { user, hasRole } = useAuth()
   const { address } = useAccount()
   
-  // Zustand store
-  const { agreements, loading, error, lastUpdated } = useAgreements()
-  const { fetchAgreements, fetchAgreementsByProducer, refreshAgreements } = useAgreementsActions()
+  // Store
+  const { agreements, loading, error } = useAgreements()
+  const { fetchAgreements, fetchAgreementsByProducer } = useAgreementsActions()
   
   // Local state
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set())
@@ -27,14 +27,17 @@ export default function AgreementList({ producerAddress, showAllAgreements = fal
   const [showContributionForm, setShowContributionForm] = useState<number | null>(null)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
-  // Fetch agreements on mount - using useCallback to prevent loops
   const loadAgreements = useCallback(async () => {
-    if (showAllAgreements && hasRole(USER_ROLES.INVESTOR)) {
+    if (hasRole(USER_ROLES.PRODUCER)) {
+      if (user?.address) {
+        await fetchAgreementsByProducer(user.address)
+      } else {
+        console.error('Producer address not found in user profile')
+      }
+    } else if (showAllAgreements && hasRole(USER_ROLES.INVESTOR)) {
       await fetchAgreements()
     } else if (producerAddress) {
       await fetchAgreementsByProducer(producerAddress)
-    } else if (user?.address) {
-      await fetchAgreementsByProducer(user.address)
     }
   }, [showAllAgreements, hasRole, producerAddress, user?.address, fetchAgreements, fetchAgreementsByProducer])
 
@@ -125,26 +128,9 @@ export default function AgreementList({ producerAddress, showAllAgreements = fal
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
     try {
-      await refreshAgreements()
+      await loadAgreements()
     } finally {
       setIsRefreshing(false)
-    }
-  }
-
-  const formatLastUpdate = (date: Date | null): string => {
-    if (!date) return 'Never'
-    
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffSeconds = Math.floor(diffMs / 1000)
-    const diffMinutes = Math.floor(diffSeconds / 60)
-    
-    if (diffSeconds < 60) {
-      return `${diffSeconds}s ago`
-    } else if (diffMinutes < 60) {
-      return `${diffMinutes}m ago`
-    } else {
-      return date.toLocaleTimeString()
     }
   }
 

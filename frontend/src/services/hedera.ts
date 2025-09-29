@@ -110,10 +110,10 @@ class HederaService {
   /**
    * Create agreement using system credentials (no user signature required)
    */
-  async createAgreement(agreementHash: string, producerAddress: string, baseValue: number, hectares: number, producerName?: string, locationLat?: number, locationLng?: number, durationDays?: number): Promise<{ success: boolean; transactionId?: string; agreementId?: number; error?: string }> {
+  async createAgreement(agreementHash: string, producerAddress: string, baseValue: number, hectares: number, producerName?: string, locationLat?: number, locationLng?: number, durationDays?: number): Promise<{ success: boolean; transactionId?: string; agreementId?: number; agreement?: any; error?: string }> {
     try {
       // Send agreement data to backend for processing
-      const response = await apiClient.post('/agreements/create-agreement', {
+      const response = await apiClient.post('/agreements', {
         agreementHash,
         producerAddress,
         baseValue,
@@ -128,7 +128,8 @@ class HederaService {
         return {
           success: true,
           transactionId: response.data.data.transactionId,
-          agreementId: response.data.data.agreementId
+          agreementId: response.data.data.id,
+          agreement: response.data.data
         }
       } else {
         return {

@@ -19,6 +19,7 @@ interface AgreementsState {
   removeAgreement: (id: number) => void
   clearError: () => void
   refreshAgreements: () => Promise<void>
+  refreshProducerAgreements: (producerAddress: string) => Promise<void>
 }
 
 export const useAgreementsStore = create<AgreementsState>()(
@@ -162,9 +163,13 @@ export const useAgreementsStore = create<AgreementsState>()(
             await get().fetchAgreementsByProducer(firstAgreement.producer_address)
           }
         } else {
-          // If no agreements, fetch all
-          await get().fetchAgreements()
+          // If no agreements, don't fetch anything - let the component handle it
+          console.log('No agreements to refresh')
         }
+      },
+
+      refreshProducerAgreements: async (producerAddress: string) => {
+        await get().fetchAgreementsByProducer(producerAddress)
       }
     }),
     {
@@ -192,6 +197,7 @@ export const useAgreementsActions = () => {
   const removeAgreement = useAgreementsStore(state => state.removeAgreement)
   const clearError = useAgreementsStore(state => state.clearError)
   const refreshAgreements = useAgreementsStore(state => state.refreshAgreements)
+  const refreshProducerAgreements = useAgreementsStore(state => state.refreshProducerAgreements)
   
   return {
     fetchAgreements,
@@ -201,7 +207,8 @@ export const useAgreementsActions = () => {
     updateAgreement,
     removeAgreement,
     clearError,
-    refreshAgreements
+    refreshAgreements,
+    refreshProducerAgreements
   }
 }
 

@@ -241,6 +241,28 @@ export const agreementsService = {
     } catch (error: any) {
       throw new Error(`Failed to delete agreement ${id}: ${error.message}`)
     }
+  },
+
+  /**
+   * Verify transaction on blockchain
+   */
+  async verifyTransaction(transactionHash: string): Promise<ApiResponse<{
+    transactionHash: string
+    status: string
+    success: boolean
+    details?: any
+  }>> {
+    try {
+      const response = await apiClient.get<ApiResponse<{
+        transactionHash: string
+        status: string
+        success: boolean
+        details?: any
+      }>>(`/agreements/verify/${transactionHash}`)
+      return response.data
+    } catch (error: any) {
+      throw new Error(`Failed to verify transaction: ${error.message}`)
+    }
   }
 }
 

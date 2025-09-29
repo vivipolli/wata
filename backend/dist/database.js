@@ -31,7 +31,10 @@ class Database {
                     if (err) {
                         return reject(err);
                     }
-                    resolve(this);
+                    resolve({
+                        lastID: this.lastID,
+                        changes: this.changes
+                    });
                 });
             });
         };
@@ -203,16 +206,22 @@ class Database {
     }
     async createAgreement(agreementData) {
         const { agreementHash, producerName, producerAddress, baseValue, hectares, locationLat, locationLng, durationDays } = agreementData;
-        const result = await this.run(`INSERT INTO agreements 
-       (agreement_hash, producer_name, producer_address, base_value, hectares, 
-        location_lat, location_lng, duration_days, blockchain_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [agreementHash, producerName, producerAddress, baseValue, hectares,
-            locationLat, locationLng, durationDays, null]);
-        const id = result?.lastID;
-        if (id === undefined) {
-            throw new Error('Failed to create agreement - no ID returned');
-        }
-        return Number(id);
+        // Use direct SQLite call instead of wrapper
+        return new Promise((resolve, reject) => {
+            if (!this.db) {
+                return reject(new Error('Database is not initialized.'));
+            }
+            this.db.run(`INSERT INTO agreements 
+         (agreement_hash, producer_name, producer_address, base_value, hectares, 
+          location_lat, location_lng, duration_days, blockchain_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [agreementHash, producerName, producerAddress, baseValue, hectares,
+                locationLat, locationLng, durationDays, null], function (err) {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(Number(this.lastID));
+            });
+        });
     }
     async getAgreement(id) {
         return await this.get('SELECT * FROM agreements WHERE id = ?', [id]);

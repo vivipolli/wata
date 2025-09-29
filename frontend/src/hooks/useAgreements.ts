@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useAccount } from 'wagmi'
 import { agreementsService } from '../services'
 import { useAuth } from '../contexts/AuthContext'
 import { USER_ROLES } from '../utils/constants'
@@ -8,7 +9,8 @@ import type { Agreement, CreateAgreementData, Payment, UseAgreementsReturn } fro
  * Custom hook for managing agreements
  */
 export const useAgreements = (autoFetch: boolean = true): UseAgreementsReturn => {
-  const { user, hasRole } = useAuth()
+  const { user, hasRole, updateUserAddress } = useAuth()
+  const { address } = useAccount()
   const [agreements, setAgreements] = useState<Agreement[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
@@ -26,16 +28,16 @@ export const useAgreements = (autoFetch: boolean = true): UseAgreementsReturn =>
           setError('Failed to fetch agreements')
         }
       } else if (hasRole(USER_ROLES.PRODUCER)) {
-        // Producers should use getAgreementsByProducer with their address
-        if (user?.address) {
-          const response = await agreementsService.getByProducer(user.address)
+        // Producers should use getAgreementsByProducer with their wallet address
+        if (address) {
+          const response = await agreementsService.getByProducer(address)
           if (response.success && response.data) {
             setAgreements(response.data.agreements || [])
           } else {
             setError('Failed to fetch producer agreements')
           }
         } else {
-          setError('Producer address not found')
+          setError('Please connect your wallet to view your agreements')
         }
       } else {
         setError('Unauthorized to fetch agreements')
@@ -45,7 +47,7 @@ export const useAgreements = (autoFetch: boolean = true): UseAgreementsReturn =>
     } finally {
       setLoading(false)
     }
-  }, [hasRole])
+  }, [hasRole, address])
 
   const createAgreement = useCallback(async (agreementData: CreateAgreementData): Promise<Agreement | null> => {
     setLoading(true)

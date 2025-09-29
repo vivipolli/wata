@@ -8,7 +8,7 @@ const auth_1 = require("../middleware/auth");
 function agreementRoutes(hederaService, database) {
     const router = express_1.default.Router();
     const authMiddleware = new auth_1.AuthMiddleware(database);
-    router.post('/', async (req, res) => {
+    router.post('/', authMiddleware.authenticate, async (req, res) => {
         try {
             const { producerName, producerAddress, baseValue, hectares, locationLat, locationLng, durationDays, signedTransaction } = req.body;
             if (!producerName || !producerAddress || !baseValue || !hectares) {
@@ -17,52 +17,11 @@ function agreementRoutes(hederaService, database) {
                     error: 'Missing required fields: producerName, producerAddress, baseValue, hectares'
                 });
             }
-            if (signedTransaction || req.body.blockchainId) {
-                const agreementData = {
-                    producerName,
-                    producerAddress,
-                    baseValue,
-                    hectares,
-                    locationLat,
-                    locationLng,
-                    durationDays,
-                    timestamp: Date.now()
-                };
-                const agreementHash = crypto_1.default
-                    .createHash('sha256')
-                    .update(JSON.stringify(agreementData))
-                    .digest('hex');
-                const agreementId = await database.createAgreement({
-                    agreementHash,
-                    producerName,
-                    producerAddress,
-                    baseValue,
-                    hectares,
-                    locationLat,
-                    locationLng,
-                    durationDays
-                });
-                const blockchainId = req.body.blockchainId;
-                if (blockchainId) {
-                    await database.updateAgreementBlockchainId(agreementId, blockchainId);
-                }
-                const response = {
-                    success: true,
-                    data: {
-                        id: agreementId,
-                        blockchainId: blockchainId,
-                        agreementHash,
-                        producerName,
-                        producerAddress,
-                        baseValue,
-                        hectares,
-                        locationLat,
-                        locationLng,
-                        durationDays,
-                        createdAt: new Date().toISOString()
-                    }
-                };
-                return res.status(201).json(response);
+            // Update user address for producers (always update to match the agreement)
+            const user = req.user;
+            if (user && user.role === 'PRODUCER') {
+                await database.updateUserAddress(user.id, producerAddress);
+                console.log(`Updated user ${user.id} address to ${producerAddress}`);
             }
             const agreementData = {
                 producerName,
@@ -88,14 +47,29 @@ function agreementRoutes(hederaService, database) {
                 locationLng,
                 durationDays
             });
-            const result = await hederaService.createAgreementWithSystem(agreementHash, producerAddress, baseValue, hectares);
-            await database.updateAgreementBlockchainId(agreementId, result.agreementId);
+            // Handle blockchain integration
+            let blockchainId = null;
+            let transactionId = null;
+            if (signedTransaction || req.body.blockchainId) {
+                // Use provided blockchain ID or transaction
+                blockchainId = req.body.blockchainId;
+                if (blockchainId) {
+                    await database.updateAgreementBlockchainId(agreementId, blockchainId);
+                }
+            }
+            else {
+                // Create new blockchain agreement
+                const result = await hederaService.createAgreementWithSystem(agreementHash, producerAddress, baseValue, hectares);
+                blockchainId = result.agreementId;
+                transactionId = result.transactionId;
+                await database.updateAgreementBlockchainId(agreementId, result.agreementId);
+            }
             const response = {
                 success: true,
                 data: {
                     id: agreementId,
-                    blockchainId: result.agreementId,
-                    transactionId: result.transactionId,
+                    blockchainId: blockchainId,
+                    transactionId: transactionId,
                     agreementHash,
                     producerName,
                     producerAddress,
@@ -212,46 +186,6 @@ function agreementRoutes(hederaService, database) {
             const response = {
                 success: false,
                 error: 'Failed to fetch payments',
-                message: error instanceof Error ? error.message : 'Unknown error'
-            };
-            res.status(500).json(response);
-        }
-    });
-    router.post('/create-agreement', async (req, res) => {
-        try {
-            const { agreementHash, producerAddress, baseValue, hectares, producerName, locationLat, locationLng, durationDays } = req.body;
-            if (!agreementHash || !producerAddress || !baseValue || !hectares) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Agreement hash, producer address, base value, and hectares are required'
-                });
-            }
-            const finalAgreementId = await database.createAgreement({
-                agreementHash,
-                producerName: producerName || 'Unknown Producer',
-                producerAddress,
-                baseValue,
-                hectares,
-                locationLat,
-                locationLng,
-                durationDays
-            });
-            const result = await hederaService.createAgreementWithSystem(agreementHash, producerAddress, baseValue, hectares);
-            await database.updateAgreementBlockchainId(finalAgreementId, result.agreementId);
-            const response = {
-                success: true,
-                data: {
-                    agreementId: result.agreementId,
-                    transactionId: result.transactionId,
-                    success: true
-                }
-            };
-            res.json(response);
-        }
-        catch (error) {
-            const response = {
-                success: false,
-                error: 'Failed to create agreement',
                 message: error instanceof Error ? error.message : 'Unknown error'
             };
             res.status(500).json(response);

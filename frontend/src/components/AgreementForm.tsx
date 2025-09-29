@@ -3,6 +3,7 @@ import { FaPlus, FaTimes, FaWallet, FaCheckCircle } from 'react-icons/fa'
 import { useAgreementsActions } from '../stores/agreementsStore'
 import { useAuth } from '../contexts/AuthContext'
 import { hederaService } from '../services/hedera'
+import { agreementsService } from '../services/agreements'
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
 import crypto from 'crypto-js'
 import type { ContractFormData } from '../types'
@@ -14,8 +15,8 @@ interface AgreementFormProps {
 }
 
 export default function AgreementForm({ onSuccess, onCancel, showCancel = false }: AgreementFormProps): React.JSX.Element {
-  const { user } = useAuth()
-  const { createAgreement } = useAgreementsActions()
+  const { user, updateUserAddress } = useAuth()
+  const { createAgreement, addAgreement } = useAgreementsActions()
   const [formData, setFormData] = useState<ContractFormData>({
     producerName: '',
     producerAddress: '',
@@ -26,6 +27,7 @@ export default function AgreementForm({ onSuccess, onCancel, showCancel = false 
     durationDays: ''
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [error, setError] = useState<string | null>(null)
   const [isSigning, setIsSigning] = useState<boolean>(false)
   const [signingStep, setSigningStep] = useState<string>('')
   
@@ -166,12 +168,62 @@ export default function AgreementForm({ onSuccess, onCancel, showCancel = false 
       )
 
       if (result.success) {
-        setSigningStep('Transaction confirmed!')
+        setSigningStep('Verifying transaction on blockchain...')
         
-        // Add to store using the original agreement data
-        createAgreement(agreementData)
-        
-        onSuccess()
+        // Verify transaction on blockchain
+        if (result.transactionId) {
+          try {
+            const verification = await agreementsService.verifyTransaction(result.transactionId)
+            if (verification.success && verification.data?.success) {
+              setSigningStep('Transaction confirmed on blockchain!')
+              
+              // Update user address if it's different
+              if (user && user.address !== agreementData.producerAddress) {
+                try {
+                  await updateUserAddress(agreementData.producerAddress)
+                } catch (error) {
+                  console.error('Error updating user address:', error)
+                }
+              }
+              
+              if (result.agreement) {
+                addAgreement(result.agreement)
+              }
+              
+              onSuccess()
+            } else {
+              setSigningStep('Transaction failed verification on blockchain')
+              setError('Transaction was not confirmed on the blockchain')
+            }
+          } catch (verifyError) {
+            console.error('Error verifying transaction:', verifyError)
+            setSigningStep('Transaction created but verification failed')
+            setError('Transaction created but could not verify on blockchain')
+            
+            // Still add to store even if verification fails
+            if (result.agreement) {
+              addAgreement(result.agreement)
+            }
+            onSuccess()
+          }
+        } else {
+          setSigningStep('Transaction confirmed!')
+          
+          // Update user address if it's different
+          if (user && user.address !== agreementData.producerAddress) {
+            try {
+              await updateUserAddress(agreementData.producerAddress)
+            } catch (error) {
+              console.error('Error updating user address:', error)
+            }
+          }
+          
+          if (result.agreement) {
+            addAgreement(result.agreement)
+          }
+          
+          onSuccess()
+        }
         
         // Reset form
         setFormData({
