@@ -17,6 +17,23 @@ interface AgreementFormProps {
 export default function AgreementForm({ onSuccess, onCancel, showCancel = false }: AgreementFormProps): React.JSX.Element {
   const { user, updateUserAddress } = useAuth()
   const { createAgreement, addAgreement } = useAgreementsActions()
+
+  // Map camelCase fields to snake_case for Agreement interface
+  const mapAgreementFields = (agreement: any) => ({
+    id: agreement.id,
+    agreement_hash: agreement.agreementHash,
+    producer_name: agreement.producerName,
+    producer_address: agreement.producerAddress,
+    base_value: agreement.baseValue,
+    hectares: agreement.hectares,
+    location_lat: agreement.locationLat,
+    location_lng: agreement.locationLng,
+    duration_days: agreement.durationDays,
+    created_at: agreement.createdAt,
+    is_active: true,
+    blockchain_id: agreement.blockchainId,
+    transaction_id: agreement.transactionId
+  })
   const [formData, setFormData] = useState<ContractFormData>({
     producerName: '',
     producerAddress: '',
@@ -187,7 +204,7 @@ export default function AgreementForm({ onSuccess, onCancel, showCancel = false 
               }
               
               if (result.agreement) {
-                addAgreement(result.agreement)
+                addAgreement(mapAgreementFields(result.agreement))
               }
               
               onSuccess()
@@ -202,7 +219,7 @@ export default function AgreementForm({ onSuccess, onCancel, showCancel = false 
             
             // Still add to store even if verification fails
             if (result.agreement) {
-              addAgreement(result.agreement)
+              addAgreement(mapAgreementFields(result.agreement))
             }
             onSuccess()
           }
@@ -219,7 +236,7 @@ export default function AgreementForm({ onSuccess, onCancel, showCancel = false 
           }
           
           if (result.agreement) {
-            addAgreement(result.agreement)
+            addAgreement(mapAgreementFields(result.agreement))
           }
           
           onSuccess()

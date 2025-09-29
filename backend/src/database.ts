@@ -159,6 +159,7 @@ export class Database {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         is_active BOOLEAN DEFAULT 1,
         blockchain_id INTEGER,
+        transaction_id TEXT,
         investor_address TEXT,
         governance_mode TEXT DEFAULT "AUTO",
         total_invested REAL DEFAULT 0,
@@ -335,6 +336,10 @@ export class Database {
 
   async updateAgreementBlockchainId(id: number, blockchainId: number): Promise<void> {
     await this.run('UPDATE agreements SET blockchain_id = ? WHERE id = ?', [blockchainId, id])
+  }
+
+  async updateAgreementTransactionId(id: number, transactionId: string): Promise<void> {
+    await this.run('UPDATE agreements SET transaction_id = ? WHERE id = ?', [transactionId, id])
   }
 
   async getAllAgreements(): Promise<DatabaseRow[]> {

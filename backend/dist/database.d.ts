@@ -70,6 +70,7 @@ export declare class Database {
     getAgreement(id: number): Promise<DatabaseRow | undefined>;
     getAgreementByHash(agreementHash: string): Promise<DatabaseRow | undefined>;
     updateAgreementBlockchainId(id: number, blockchainId: number): Promise<void>;
+    updateAgreementTransactionId(id: number, transactionId: string): Promise<void>;
     getAllAgreements(): Promise<DatabaseRow[]>;
     getAgreementsByProducer(producerAddress: string): Promise<DatabaseRow[]>;
     createReading(readingData: ReadingData): Promise<number>;

@@ -8,6 +8,26 @@ const auth_1 = require("../middleware/auth");
 function agreementRoutes(hederaService, database) {
     const router = express_1.default.Router();
     const authMiddleware = new auth_1.AuthMiddleware(database);
+    // Transform database row to camelCase format
+    const transformAgreement = (row) => ({
+        id: row.id,
+        agreementHash: row.agreement_hash,
+        producerName: row.producer_name,
+        producerAddress: row.producer_address,
+        baseValue: row.base_value,
+        hectares: row.hectares,
+        locationLat: row.location_lat,
+        locationLng: row.location_lng,
+        durationDays: row.duration_days,
+        createdAt: row.created_at,
+        isActive: row.is_active,
+        blockchainId: row.blockchain_id,
+        transactionId: row.transaction_id,
+        investorAddress: row.investor_address,
+        governanceMode: row.governance_mode,
+        totalInvested: row.total_invested,
+        totalPaid: row.total_paid
+    });
     router.post('/', authMiddleware.authenticate, async (req, res) => {
         try {
             const { producerName, producerAddress, baseValue, hectares, locationLat, locationLng, durationDays, signedTransaction } = req.body;
@@ -53,8 +73,12 @@ function agreementRoutes(hederaService, database) {
             if (signedTransaction || req.body.blockchainId) {
                 // Use provided blockchain ID or transaction
                 blockchainId = req.body.blockchainId;
+                transactionId = req.body.transactionId;
                 if (blockchainId) {
                     await database.updateAgreementBlockchainId(agreementId, blockchainId);
+                }
+                if (transactionId) {
+                    await database.updateAgreementTransactionId(agreementId, transactionId);
                 }
             }
             else {
@@ -63,6 +87,9 @@ function agreementRoutes(hederaService, database) {
                 blockchainId = result.agreementId;
                 transactionId = result.transactionId;
                 await database.updateAgreementBlockchainId(agreementId, result.agreementId);
+                if (transactionId) {
+                    await database.updateAgreementTransactionId(agreementId, transactionId);
+                }
             }
             const response = {
                 success: true,
@@ -95,9 +122,10 @@ function agreementRoutes(hederaService, database) {
     router.get('/', authMiddleware.authenticate, authMiddleware.blockProducersFromAllAgreements, async (req, res) => {
         try {
             const agreements = await database.getAllAgreements();
+            const transformedAgreements = agreements.map(transformAgreement);
             const response = {
                 success: true,
-                data: agreements
+                data: { agreements: transformedAgreements }
             };
             res.json(response);
         }
@@ -122,10 +150,11 @@ function agreementRoutes(hederaService, database) {
                 return;
             }
             const agreements = await database.getAgreementsByProducer(producerAddress);
+            const transformedAgreements = agreements.map(transformAgreement);
             const response = {
                 success: true,
                 data: {
-                    agreements,
+                    agreements: transformedAgreements,
                     producerAddress,
                     totalAgreements: agreements.length
                 }
@@ -154,10 +183,11 @@ function agreementRoutes(hederaService, database) {
                 return;
             }
             const readings = await database.getReadingsByAgreement(agreementId, 10);
+            const transformedAgreement = transformAgreement(agreement);
             const response = {
                 success: true,
                 data: {
-                    ...agreement,
+                    ...transformedAgreement,
                     recentReadings: readings
                 }
             };

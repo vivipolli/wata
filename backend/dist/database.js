@@ -82,6 +82,7 @@ class Database {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         is_active BOOLEAN DEFAULT 1,
         blockchain_id INTEGER,
+        transaction_id TEXT,
         investor_address TEXT,
         governance_mode TEXT DEFAULT "AUTO",
         total_invested REAL DEFAULT 0,
@@ -213,9 +214,9 @@ class Database {
             }
             this.db.run(`INSERT INTO agreements 
          (agreement_hash, producer_name, producer_address, base_value, hectares, 
-          location_lat, location_lng, duration_days, blockchain_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [agreementHash, producerName, producerAddress, baseValue, hectares,
-                locationLat, locationLng, durationDays, null], function (err) {
+          location_lat, location_lng, duration_days, blockchain_id, transaction_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [agreementHash, producerName, producerAddress, baseValue, hectares,
+                locationLat, locationLng, durationDays, null, null], function (err) {
                 if (err) {
                     return reject(err);
                 }
@@ -231,6 +232,9 @@ class Database {
     }
     async updateAgreementBlockchainId(id, blockchainId) {
         await this.run('UPDATE agreements SET blockchain_id = ? WHERE id = ?', [blockchainId, id]);
+    }
+    async updateAgreementTransactionId(id, transactionId) {
+        await this.run('UPDATE agreements SET transaction_id = ? WHERE id = ?', [transactionId, id]);
     }
     async getAllAgreements() {
         return await this.all('SELECT * FROM agreements WHERE is_active = 1 ORDER BY created_at DESC');
