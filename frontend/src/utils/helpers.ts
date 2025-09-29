@@ -6,6 +6,35 @@ import { WATER_QUALITY, PAYMENT_STATUS, AGREEMENT_STATUS } from './constants'
 import type { WaterQualityStatus, PaymentStatus } from '../types'
 
 /**
+ * Process oracle batch and show result
+ */
+export const processOracleWithFeedback = async (
+  processBatch: (agreementId: number) => Promise<any>,
+  agreementId: number,
+  onSuccess?: () => void
+): Promise<void> => {
+  try {
+    const result = await processBatch(agreementId)
+    
+    if (result.score >= 0.7) {
+      const percentage = (result.score * 100).toFixed(1)
+      alert(`✅ Oracle processed successfully!\nScore: ${percentage}%\nPayment will be approved automatically!`)
+    } else {
+      const percentage = (result.score * 100).toFixed(1)
+      alert(`❌ Oracle processed!\nScore: ${percentage}%\nScore < 70%, payment rejected`)
+    }
+    
+    if (onSuccess) {
+      await onSuccess()
+    }
+  } catch (error) {
+    console.error('Error processing oracle:', error)
+    alert('Error processing oracle')
+    throw error
+  }
+}
+
+/**
  * Format date to readable string
  */
 export const formatDate = (
@@ -340,9 +369,9 @@ export const getStatusIcon = (status: string): string => {
 }
 
 /**
- * Get status color classes for blockchain records
+ * Get status color classes for UI components (consolidated)
  */
-export const getBlockchainStatusColor = (status: string): string => {
+export const getStatusColorClasses = (status: string): string => {
   switch (status) {
     case 'completed':
       return 'bg-green-100 text-green-800'
@@ -352,5 +381,21 @@ export const getBlockchainStatusColor = (status: string): string => {
       return 'bg-red-100 text-red-800'
     default:
       return 'bg-gray-100 text-gray-800'
+  }
+}
+
+/**
+ * Get status icon component class for UI
+ */
+export const getStatusIconClass = (status: string): string => {
+  switch (status) {
+    case 'completed':
+      return 'text-green-600'
+    case 'pending':
+      return 'text-yellow-600'
+    case 'failed':
+      return 'text-red-600'
+    default:
+      return 'text-gray-600'
   }
 }

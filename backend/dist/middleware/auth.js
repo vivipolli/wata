@@ -35,6 +35,19 @@ class AuthMiddleware {
                 });
                 return;
             }
+            // SECURITY CHECK: Verify email matches between token and database
+            if (user.email !== decoded.email) {
+                console.error('🚨 SECURITY ALERT: Email mismatch!', {
+                    tokenEmail: decoded.email,
+                    dbEmail: user.email,
+                    userId: decoded.userId
+                });
+                res.status(401).json({
+                    success: false,
+                    error: 'Token email does not match database user'
+                });
+                return;
+            }
             // Attach user info to request
             req.user = {
                 id: user.id,

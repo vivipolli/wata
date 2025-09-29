@@ -214,9 +214,9 @@ class Database {
             }
             this.db.run(`INSERT INTO agreements 
          (agreement_hash, producer_name, producer_address, base_value, hectares, 
-          location_lat, location_lng, duration_days, blockchain_id, transaction_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [agreementHash, producerName, producerAddress, baseValue, hectares,
-                locationLat, locationLng, durationDays, null, null], function (err) {
+          location_lat, location_lng, duration_days, blockchain_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [agreementHash, producerName, producerAddress, baseValue, hectares,
+                locationLat, locationLng, durationDays, null], function (err) {
                 if (err) {
                     return reject(err);
                 }

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useAgreements, usePayments, useProducerOracleStatus } from '../hooks'
+import { useAgreements, usePayments, useProducerOracleStatus, useOracle } from '../hooks'
 import { useAuth } from '../contexts/AuthContext'
 import { useReadingsStore, useReadings, useReadingsLoading } from '../stores'
 import { readingsService } from '../services'
 import { 
   calculateDashboardStats, 
   calculateProducerStats, 
-  collectUserReadings 
+  collectUserReadings,
+  processOracleWithFeedback
 } from '../utils/helpers'
 import { 
   StatsGrid, 
@@ -15,6 +16,7 @@ import {
   OracleStatus, 
   QuickActions 
 } from './dashboard'
+import PageLayout from './layout/PageLayout'
 import type { DashboardProps } from '../types'
 
 interface Stats {
@@ -42,6 +44,7 @@ export default function Dashboard({}: DashboardProps) {
   const readings = useReadings()
   const readingsLoading = useReadingsLoading()
   const { payments, getPaymentStats } = usePayments()
+  const { processBatch } = useOracle()
   
   // Use the new hierarchical hook for oracle status
   const { status: producerOracleStatus, loading: oracleLoading } = useProducerOracleStatus(user?.address || null)
@@ -183,19 +186,41 @@ export default function Dashboard({}: DashboardProps) {
     }
   }
 
+  const handleProcessOracle = async (): Promise<void> => {
+    setLoading(true)
+    try {
+      const agreementId = userAgreements[0]?.id || 1
+      
+      await processOracleWithFeedback(
+        processBatch,
+        agreementId,
+        async () => {
+          // Atualizar dados após processamento
+          try {
+            const response = await readingsService.getByAgreement(agreementId, 10)
+            if (response.success && response.data) {
+              setUserReadings(response.data)
+            }
+          } catch (error) {
+            console.error('Error fetching updated readings:', error)
+          }
+        }
+      )
+    } catch (error) {
+      console.error('Error processing oracle:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
 
 
   return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div className="px-4 py-6 sm:px-0">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-2 text-gray-600">
-            Monitor water quality and manage PES agreements
-          </p>
-        </div>
-
-        <StatsGrid stats={stats} />
+    <PageLayout 
+      title="Dashboard" 
+      subtitle="Monitor water quality and manage PES agreements"
+    >
+      <StatsGrid stats={stats} />
 
         {/* Producer Overview */}
         {producerStats && <ProducerOverview producerStats={producerStats} />}
@@ -206,14 +231,13 @@ export default function Dashboard({}: DashboardProps) {
             loading={loading}
             userReadingsLoading={userReadingsLoading}
             onSimulateReading={handleSimulateReading}
+            onProcessOracle={handleProcessOracle}
           />
           
           {producerOracleStatus && <OracleStatus producerOracleStatus={producerOracleStatus} />}
           
           <QuickActions />
         </div>
-      </div>
-
-    </div>
+    </PageLayout>
   )
 }

@@ -79,6 +79,9 @@ export interface Payment {
   status: PaymentStatus
   created_at: string
   processed_at?: string
+  score?: number
+  audit_hash?: string
+  batch_id?: number
 }
 
 export type PaymentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'

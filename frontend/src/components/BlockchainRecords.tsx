@@ -7,7 +7,7 @@ import {
   getHederaExplorerUrl, 
   getHederaFileUrl, 
   getValidationStatus,
-  getBlockchainStatusColor
+  getStatusColorClasses
 } from '../utils'
 
 interface BlockchainRecordsProps {
@@ -120,7 +120,7 @@ const BlockchainRecords: React.FC<BlockchainRecordsProps> = ({ userType, userAdd
                         {getStatusIcon(record.status)}
                         <div className="flex items-center space-x-2">
                           <span className="font-medium text-lg">{formatHBAR(record.amount)}</span>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getBlockchainStatusColor(record.status)}`}>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColorClasses(record.status)}`}>
                             {record.status.toUpperCase()}
                           </span>
                         </div>

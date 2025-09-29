@@ -8,6 +8,7 @@ import Notifications from './components/Notifications'
 import Audit from './components/Audit'
 import InvestorDashboard from './components/InvestorDashboard'
 import Payments from './components/Payments'
+import InvestorPayments from './components/InvestorPayments'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import { useHealth } from './hooks'
 import { useAuthGuard } from './hooks/useAuthGuard'
@@ -54,7 +55,7 @@ const AppContent: React.FC = () => {
       case 'notifications':
         return <Notifications />
       case 'payments':
-        return <Payments />
+        return hasRole(USER_ROLES.INVESTOR) ? <InvestorPayments /> : <Payments />
       default:
         return <Dashboard />
     }

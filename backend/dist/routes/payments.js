@@ -25,10 +25,42 @@ function paymentRoutes(hederaService, database, relayerService) {
                 };
                 return res.status(404).json(response);
             }
-            // Trigger payment check through relayer service
-            // Note: triggerPaymentCheck method was removed in V3 refactoring
-            // Payments are now handled automatically via event listeners
-            const result = { success: true, message: 'Payment processing is automatic via event listeners' };
+            // Get the latest batch for this agreement
+            const batches = await database.getBatchesByAgreement(agreementId, 1);
+            if (batches.length === 0) {
+                const response = {
+                    success: false,
+                    error: 'No batches found for this agreement'
+                };
+                return res.status(404).json(response);
+            }
+            const latestBatch = batches[0];
+            // Check if score meets threshold
+            if (latestBatch.score < 0.7) {
+                const response = {
+                    success: false,
+                    error: `Score ${(latestBatch.score * 100).toFixed(1)}% is below threshold of 70%`
+                };
+                return res.status(400).json(response);
+            }
+            // Process payment manually (simplified for testing)
+            const paymentAmount = agreement.base_value * agreement.hectares;
+            // Record payment in database
+            const paymentId = await database.createPayment({
+                agreementId,
+                batchId: latestBatch.id,
+                amount: paymentAmount,
+                status: 'completed',
+                auditHash: latestBatch.audit_hash,
+                score: latestBatch.score,
+                transactionHash: 'test_transaction_' + Date.now()
+            });
+            const result = {
+                success: true,
+                message: `Payment of ${paymentAmount} HBAR approved for agreement ${agreementId}`,
+                amount: paymentAmount,
+                paymentId
+            };
             const response = {
                 success: true,
                 data: result

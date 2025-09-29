@@ -198,7 +198,7 @@ export class RelayerService {
   }
 
   // Execute HBAR payment using HederaService
-  private async executeHBARPayment(
+  public async executeHBARPayment(
     agreementId: number,
     producerAddress: string,
     amount: number,

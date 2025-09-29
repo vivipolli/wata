@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useAgreements, useProducerOracleStatus } from '../hooks'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDate } from '@/utils/formatters'
+import PageLayout from './layout/PageLayout'
 
 const Audit: React.FC = () => {
   const { user } = useAuth()
@@ -40,15 +41,10 @@ const Audit: React.FC = () => {
 
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Your Oracle Audit</h1>
-        <div className="text-sm text-gray-500">
-          View your agreement oracle status and activity
-        </div>
-      </div>
-
+    <PageLayout 
+      title="Your Oracle Audit" 
+      subtitle="View your agreement oracle status and activity"
+    >
       {/* User Oracle Statistics */}
       {producerOracleStatus && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -300,7 +296,7 @@ const Audit: React.FC = () => {
           )}
         </div>
       </div>
-    </div>
+    </PageLayout>
   )
 }
 

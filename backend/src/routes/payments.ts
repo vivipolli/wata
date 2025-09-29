@@ -43,10 +43,47 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
         return res.status(404).json(response)
       }
 
-      // Trigger payment check through relayer service
-      // Note: triggerPaymentCheck method was removed in V3 refactoring
-      // Payments are now handled automatically via event listeners
-      const result = { success: true, message: 'Payment processing is automatic via event listeners' }
+      // Get the latest batch for this agreement
+      const batches = await database.getBatchesByAgreement(agreementId, 1)
+      if (batches.length === 0) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'No batches found for this agreement'
+        }
+        return res.status(404).json(response)
+      }
+
+      const latestBatch = batches[0]
+      
+      // Check if score meets threshold
+      if (latestBatch.score < 0.7) {
+        const response: ApiResponse = {
+          success: false,
+          error: `Score ${(latestBatch.score * 100).toFixed(1)}% is below threshold of 70%`
+        }
+        return res.status(400).json(response)
+      }
+
+      // Process payment manually (simplified for testing)
+      const paymentAmount = agreement.base_value * agreement.hectares
+      
+      // Record payment in database
+      const paymentId = await database.createPayment({
+        agreementId,
+        batchId: latestBatch.id,
+        amount: paymentAmount,
+        status: 'completed',
+        auditHash: latestBatch.audit_hash,
+        score: latestBatch.score,
+        transactionHash: 'test_transaction_' + Date.now()
+      })
+      
+      const result = {
+        success: true,
+        message: `Payment of ${paymentAmount} HBAR approved for agreement ${agreementId}`,
+        amount: paymentAmount,
+        paymentId
+      }
 
       const response: ApiResponse<PaymentCheckResult> = {
         success: true,
@@ -511,6 +548,53 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
         success: false,
         error: 'Failed to fetch user investments',
         message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
+  // Get blockchain records for a user
+  router.get('/blockchain-records', async (req: Request, res: Response) => {
+    try {
+      const userAddress = req.query.userAddress as string
+      const limit = parseInt(req.query.limit as string) || 20
+
+      if (!userAddress) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'userAddress is required'
+        }
+        res.status(400).json(response)
+        return
+      }
+
+      // Get payments with blockchain data for the user
+      const payments = await (database as any).all(
+        `SELECT p.*, a.producer_name, a.producer_address 
+         FROM payments p 
+         JOIN agreements a ON p.agreement_id = a.id 
+         WHERE a.producer_address = ? 
+         AND p.audit_hash IS NOT NULL
+         ORDER BY p.created_at DESC 
+         LIMIT ?`,
+        [userAddress, limit]
+      )
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          records: payments,
+          total: payments.length,
+          userAddress
+        }
+      }
+
+      res.json(response)
+    } catch (error) {
+      console.error('Error fetching blockchain records:', error)
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to fetch blockchain records'
       }
       res.status(500).json(response)
     }

@@ -36,8 +36,14 @@ export const paymentsService = {
    */
   async getByAgreement(agreementId: number): Promise<ApiResponse<{ payments: Payment[] }>> {
     try {
-      const response = await apiClient.get<ApiResponse<{ payments: Payment[] }>>(`/payments/agreement/${agreementId}`)
-      return response.data
+      const response = await apiClient.get<ApiResponse<Payment[]>>(`/payments/agreement/${agreementId}`)
+      // Backend returns data directly, not wrapped in payments
+      return {
+        success: response.data.success,
+        data: { payments: response.data.data || [] },
+        error: response.data.error,
+        message: response.data.message
+      }
     } catch (error: any) {
       throw new Error(`Failed to fetch payments for agreement ${agreementId}: ${error.message}`)
     }

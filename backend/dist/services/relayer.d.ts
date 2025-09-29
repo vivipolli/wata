@@ -1,5 +1,14 @@
 import { HederaService } from './hedera';
 import { Database } from '../database';
+interface PaymentCheckResult {
+    success: boolean;
+    message: string;
+    averageTurbidity?: number;
+    amount?: number;
+    threshold?: number;
+    hcsTransactionId?: string;
+    hfsFileId?: string;
+}
 export declare class RelayerService {
     private hederaService;
     private database;
@@ -12,11 +21,12 @@ export declare class RelayerService {
     stop(): void;
     private setupEventListeners;
     private handlePaymentApproved;
-    private executeHBARPayment;
+    executeHBARPayment(agreementId: number, producerAddress: string, amount: number, auditHash: string, score: number, hcsTransactionId: string, hfsFileId: string): Promise<PaymentCheckResult>;
     private getBatchByAuditHash;
     private getInvestorAddress;
     private getBatchReadings;
     private getContractABI;
     getStatus(): Promise<any>;
 }
+export {};
 //# sourceMappingURL=relayer.d.ts.map

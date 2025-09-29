@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react'
 import { FaWater, FaCheckCircle, FaTimesCircle, FaPlay } from 'react-icons/fa'
-import { useAgreements, usePayments, useContractOracleStatus } from '../hooks'
+import { useAgreements, usePayments, useContractOracleStatus, useOracle } from '../hooks'
 import { useAuth } from '../contexts/AuthContext'
 import { readingsService } from '../services'
+import { processOracleWithFeedback } from '../utils/helpers'
 import PrimaryButton from './common/PrimaryButton'
 import SecondaryButton from './common/SecondaryButton'
+import PageLayout from './layout/PageLayout'
 import type { MonitoringProps, Agreement, Reading, ReadingStats } from '../types'
 
 export default function Monitoring({}: MonitoringProps) {
   const { user } = useAuth()
   const { agreements, getAgreementsByProducer } = useAgreements(false)
   const { triggerPaymentCheck } = usePayments()
+  const { processBatch } = useOracle()
   
   const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
@@ -86,6 +89,24 @@ export default function Monitoring({}: MonitoringProps) {
     }
   }
 
+  const handleProcessOracle = async (agreementId: number): Promise<void> => {
+    setLoading(true)
+    try {
+      await processOracleWithFeedback(
+        processBatch,
+        agreementId,
+        async () => {
+          // Atualizar dados após processamento
+          await fetchAgreementData(agreementId)
+        }
+      )
+    } catch (error) {
+      console.error('Error processing oracle:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSimulateReading = async (): Promise<void> => {
     if (!selectedAgreement) return
     
@@ -118,14 +139,10 @@ export default function Monitoring({}: MonitoringProps) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div className="px-4 py-6 sm:px-0">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Water Quality Monitoring</h1>
-          <p className="mt-2 text-gray-600">
-            Monitor water quality readings and manage compliance
-          </p>
-        </div>
+    <PageLayout 
+      title="Water Quality Monitoring" 
+      subtitle="Monitor water quality readings and manage compliance"
+    >
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1">
@@ -184,6 +201,14 @@ export default function Monitoring({}: MonitoringProps) {
                           >
                             <FaWater className="inline h-4 w-4 mr-1" />
                             {loading ? 'Simulating...' : 'Simulate Reading'}
+                          </PrimaryButton>
+                          <PrimaryButton
+                            onClick={() => handleProcessOracle(selectedAgreement.id)}
+                            size="sm"
+                            disabled={loading}
+                          >
+                            <FaPlay className="inline h-4 w-4 mr-1" />
+                            {loading ? 'Processing...' : 'Process Oracle'}
                           </PrimaryButton>
                       <SecondaryButton
                         onClick={() => handleTriggerPaymentCheck(selectedAgreement.id)}
@@ -356,7 +381,6 @@ export default function Monitoring({}: MonitoringProps) {
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </PageLayout>
   )
 }

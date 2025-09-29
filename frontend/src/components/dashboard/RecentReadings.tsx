@@ -1,5 +1,5 @@
 import React from 'react'
-import { FaWater } from 'react-icons/fa'
+import { FaWater, FaPlay } from 'react-icons/fa'
 import { formatNumber } from '../../utils'
 import PrimaryButton from '../common/PrimaryButton'
 
@@ -17,13 +17,15 @@ interface RecentReadingsProps {
   loading: boolean
   userReadingsLoading: boolean
   onSimulateReading: () => void
+  onProcessOracle?: () => void
 }
 
 const RecentReadings: React.FC<RecentReadingsProps> = ({ 
   readings, 
   loading, 
   userReadingsLoading, 
-  onSimulateReading 
+  onSimulateReading,
+  onProcessOracle
 }) => {
   return (
     <div className="bg-white shadow rounded-lg p-6">
@@ -31,14 +33,26 @@ const RecentReadings: React.FC<RecentReadingsProps> = ({
         <h3 className="text-lg font-medium text-gray-900">
           Recent Turbidity Readings
         </h3>
-        <PrimaryButton
-          onClick={onSimulateReading}
-          disabled={loading || userReadingsLoading}
-          size="sm"
-        >
-          <FaWater className="inline h-4 w-4 mr-1" />
-          {loading || userReadingsLoading ? 'Simulating...' : 'Simulate Reading'}
-        </PrimaryButton>
+        <div className="flex space-x-2">
+          <PrimaryButton
+            onClick={onSimulateReading}
+            disabled={loading || userReadingsLoading}
+            size="sm"
+          >
+            <FaWater className="inline h-4 w-4 mr-1" />
+            {loading || userReadingsLoading ? 'Simulating...' : 'Simulate Reading'}
+          </PrimaryButton>
+          {onProcessOracle && (
+            <PrimaryButton
+              onClick={onProcessOracle}
+              disabled={loading || userReadingsLoading}
+              size="sm"
+            >
+              <FaPlay className="inline h-4 w-4 mr-1" />
+              {loading || userReadingsLoading ? 'Processing...' : 'Process Oracle'}
+            </PrimaryButton>
+          )}
+        </div>
       </div>
       <div className="space-y-3 max-h-80 overflow-y-auto">
         {(readings || []).slice(0, 5).map((reading) => (

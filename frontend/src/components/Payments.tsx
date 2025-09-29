@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { FaDollarSign, FaWallet, FaHistory, FaCheckCircle, FaClock, FaExclamationTriangle, FaFileContract } from 'react-icons/fa'
+import { FaDollarSign, FaWallet, FaHistory, FaCheckCircle, FaClock, FaExclamationTriangle, FaFileContract, FaLink, FaDatabase } from 'react-icons/fa'
 import { useAccount } from 'wagmi'
 import { usePayments, useAgreements } from '../hooks'
-import { formatNumber, formatDate, formatHBAR, getStatusColor } from '../utils'
+import { formatNumber, formatDate, formatHBAR, getStatusIconClass, getStatusColorClasses } from '../utils'
 import HashDisplay from './HashDisplay'
 import BlockchainRecords from './BlockchainRecords'
+import PageLayout from './layout/PageLayout'
 
 interface PaymentStats {
   totalReceived: number
@@ -35,14 +36,65 @@ interface PaymentDetail {
 
 const Payments: React.FC = () => {
   const { address } = useAccount()
-  const { payments, loading: paymentsLoading, getPaymentStats } = usePayments()
+  const { payments, loading: paymentsLoading, getPaymentStats, fetchAgreementPayments } = usePayments()
   const { agreements, loading: agreementsLoading } = useAgreements()
   const [stats, setStats] = useState<PaymentStats | null>(null)
   const [paymentDetails, setPaymentDetails] = useState<PaymentDetail[]>([])
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [selectedAgreementId, setSelectedAgreementId] = useState<number | null>(null)
+  const [agreementsData, setAgreementsData] = useState<any[]>([])
+  const [paymentsData, setPaymentsData] = useState<any[]>([])
 
   // Use the actual connected wallet address
   const producerAddress = address 
+
+  // Load data directly for testing
+  useEffect(() => {
+    const loadData = async () => {
+      if (!producerAddress) return
+      
+      try {
+        // Load agreements
+        const agreementsResponse = await fetch(`http://localhost:3001/api/agreements/producer/${producerAddress}`)
+        const agreementsData = await agreementsResponse.json()
+        
+        if (agreementsData.success && agreementsData.data.agreements) {
+          setAgreementsData(agreementsData.data.agreements)
+          // Set default to latest agreement
+          if (agreementsData.data.agreements.length > 0 && !selectedAgreementId) {
+            const latest = agreementsData.data.agreements.reduce((latest: any, current: any) => 
+              current.id > latest.id ? current : latest
+            )
+            setSelectedAgreementId(latest.id)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading data:', error)
+      }
+    }
+    
+    loadData()
+  }, [producerAddress, selectedAgreementId])
+
+  // Load payments when agreement is selected
+  useEffect(() => {
+    const loadPayments = async () => {
+      if (selectedAgreementId) {
+        try {
+          const response = await fetch(`http://localhost:3001/api/payments/agreement/${selectedAgreementId}`)
+          const data = await response.json()
+          if (data.success && data.data) {
+            // Update payments state directly
+            setPaymentsData(data.data)
+          }
+        } catch (error) {
+          console.error('Error loading payments:', error)
+        }
+      }
+    }
+    
+    loadPayments()
+  }, [selectedAgreementId])
 
   useEffect(() => {
     if (payments && agreements) {
@@ -90,8 +142,8 @@ const Payments: React.FC = () => {
         amount: payment.amount,
         status: payment.status,
         agreementId: payment.agreement_id,
-        score: undefined, // Not available in Payment interface
-        auditHash: undefined, // Not available in Payment interface
+        score: payment.score,
+        auditHash: payment.audit_hash,
         processedAt: payment.processed_at,
         createdAt: payment.created_at,
         producerAddress: producerAddress || 'Unknown', // Use mock address
@@ -107,28 +159,16 @@ const Payments: React.FC = () => {
   }
 
   const getStatusIcon = (status: string) => {
+    const iconClass = getStatusIconClass(status)
     switch (status) {
       case 'completed':
-        return <FaCheckCircle className="text-green-600" />
+        return <FaCheckCircle className={iconClass} />
       case 'pending':
-        return <FaClock className="text-yellow-600" />
+        return <FaClock className={iconClass} />
       case 'failed':
-        return <FaExclamationTriangle className="text-red-600" />
+        return <FaExclamationTriangle className={iconClass} />
       default:
-        return <FaClock className="text-gray-600" />
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-800'
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'failed':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
+        return <FaClock className={iconClass} />
     }
   }
 
@@ -150,12 +190,11 @@ const Payments: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Payments & Finance</h1>
-        <p className="text-gray-600">Manage your PES payments and financial overview</p>
-      </div>
+    <PageLayout 
+      title="Payments & Finance" 
+      subtitle="Manage your PES payments and financial overview"
+    >
+      <div className="space-y-6">
 
       {/* Statistics */}
       {stats && (
@@ -231,6 +270,34 @@ const Payments: React.FC = () => {
         </div>
       )}
 
+      {/* Agreement Selection */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">Select Agreement</h2>
+        <div className="flex items-center space-x-4">
+          <label htmlFor="agreement-select" className="text-sm font-medium text-gray-700">
+            Agreement:
+          </label>
+          <select
+            id="agreement-select"
+            value={selectedAgreementId || ''}
+            onChange={(e) => setSelectedAgreementId(parseInt(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select an agreement...</option>
+            {agreementsData?.map((agreement) => (
+              <option key={agreement.id} value={agreement.id}>
+                Agreement #{agreement.id} - {agreement.producer_name} ({agreement.hectares} hectares)
+              </option>
+            ))}
+          </select>
+          {selectedAgreementId && (
+            <div className="text-sm text-gray-600">
+              Showing payments for Agreement #{selectedAgreementId}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Payment History */}
       <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -272,12 +339,12 @@ const Payments: React.FC = () => {
         </div>
         
         <div className="p-6">
-          {filteredPayments.length === 0 ? (
+          {paymentsData.length === 0 ? (
             <p className="text-gray-500 text-center py-8">No payments found</p>
           ) : (
             <div className="space-y-4">
-              {filteredPayments
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+              {paymentsData
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                 .map((payment) => (
                   <div key={payment.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
                     <div className="flex items-center space-x-4">
@@ -285,19 +352,16 @@ const Payments: React.FC = () => {
                       <div>
                         <div className="flex items-center space-x-2">
                           <span className="font-medium text-lg">{formatHBAR(payment.amount)}</span>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(payment.status)}`}>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColorClasses(payment.status)}`}>
                             {payment.status.toUpperCase()}
                           </span>
                         </div>
                         <div className="text-sm text-gray-500">
-                          Agreement #{payment.agreementId}
-                          {payment.agreementDetails && (
-                            <span> • {payment.agreementDetails.producerName}</span>
-                          )}
+                          Agreement #{payment.agreement_id}
                         </div>
                         {payment.score && (
                           <div className="text-xs text-gray-400 mt-1">
-                            Score: {payment.score.toFixed(1)}%
+                            Score: {(payment.score * 100).toFixed(1)}%
                           </div>
                         )}
                       </div>
@@ -305,19 +369,23 @@ const Payments: React.FC = () => {
                     
                     <div className="text-right">
                       <p className="text-sm text-gray-500">
-                        {payment.processedAt ? formatDate(payment.processedAt) : 'Pending'}
+                        {payment.processed_at ? formatDate(payment.processed_at) : 'Pending'}
                       </p>
                       <p className="text-xs text-gray-400">
-                        Created: {formatDate(payment.createdAt)}
+                        Created: {formatDate(payment.created_at)}
                       </p>
-                      {payment.auditHash && (
-                        <div className="mt-2">
+                      {payment.audit_hash && (
+                        <div className="mt-2 space-y-1">
                           <HashDisplay 
-                            hash={payment.auditHash}
-                            label="Audit"
+                            hash={payment.audit_hash}
+                            label="Audit Hash"
                             type="audit"
                             className="text-xs"
                           />
+                          <div className="flex items-center text-xs text-gray-400">
+                            <FaDatabase className="mr-1" />
+                            <span>Stored on Hedera HFS</span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -333,7 +401,84 @@ const Payments: React.FC = () => {
         userType="producer" 
         userAddress={producerAddress} 
       />
-    </div>
+
+      {/* Payment Blockchain Details */}
+      {paymentsData.length > 0 && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <FaLink className="h-5 w-5 text-blue-600 mr-2" />
+              <h2 className="text-lg font-medium text-gray-900">Blockchain Records</h2>
+            </div>
+            <p className="text-sm text-gray-600 mt-1">
+              Payment transactions and audit data stored on Hedera DLT
+            </p>
+          </div>
+          
+          <div className="p-6">
+            <div className="space-y-4">
+              {paymentsData
+                .filter(payment => payment.audit_hash)
+                .map((payment) => (
+                  <div key={payment.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium text-lg">{formatHBAR(payment.amount)}</span>
+                        <span className="text-sm text-gray-500">Agreement #{payment.agreement_id}</span>
+                      </div>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColorClasses(payment.status)}`}>
+                        {payment.status.toUpperCase()}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Audit Information</h4>
+                        <div className="space-y-2">
+                          {payment.audit_hash && (
+                            <HashDisplay 
+                              hash={payment.audit_hash}
+                              label="Audit Hash"
+                              type="audit"
+                              className="text-sm"
+                            />
+                          )}
+                          {payment.score && (
+                            <div className="text-sm">
+                              <span className="text-gray-600">Quality Score: </span>
+                              <span className="font-medium text-green-600">
+                                {(payment.score * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Blockchain Storage</h4>
+                        <div className="space-y-2">
+                          <div className="flex items-center text-sm text-gray-600">
+                            <FaDatabase className="mr-2" />
+                            <span>Hedera File Service (HFS)</span>
+                          </div>
+                          <div className="flex items-center text-sm text-gray-600">
+                            <FaLink className="mr-2" />
+                            <span>Hedera Consensus Service (HCS)</span>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Immutable audit trail
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+    </PageLayout>
   )
 }
 
