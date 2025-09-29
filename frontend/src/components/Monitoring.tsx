@@ -57,7 +57,7 @@ export default function Monitoring({}: MonitoringProps) {
       // Fetch readings
       const readingsResponse = await readingsService.getByAgreement(agreementId, 50)
       if (readingsResponse.success && readingsResponse.data) {
-        const readings = readingsResponse.data.readings || readingsResponse.data || []
+        const readings = readingsResponse.data || []
         setAgreementReadings(readings)
       }
       
@@ -92,21 +92,23 @@ export default function Monitoring({}: MonitoringProps) {
     setLoading(true)
     try {
       const simulationData = {
-        agreementId: selectedAgreement.id,
-        locationLat: selectedAgreement.location_lat,
-        locationLng: selectedAgreement.location_lng
+        agreementId: selectedAgreement.id
       }
       
-      const response = await readingsService.simulate(simulationData)
-      if (response.success && response.data?.reading) {
-        const newReading = response.data.reading
-        setAgreementReadings(prev => [newReading, ...prev])
-        
-        // Refresh stats for the selected agreement
-        const statsResponse = await readingsService.getStats(selectedAgreement.id, 7)
-        if (statsResponse.success && statsResponse.data?.stats) {
-          setAgreementStats(statsResponse.data.stats)
+      await readingsService.simulate(simulationData)
+      
+      try {
+        const readingsResponse = await readingsService.getByAgreement(selectedAgreement.id, 50)
+        if (readingsResponse.success && readingsResponse.data) {
+          setAgreementReadings(readingsResponse.data)
         }
+      } catch (error) {
+        console.error('Error fetching updated readings:', error)
+      }
+      
+      const statsResponse = await readingsService.getStats(selectedAgreement.id, 7)
+      if (statsResponse.success && statsResponse.data?.stats) {
+        setAgreementStats(statsResponse.data.stats)
       }
     } catch (error) {
       console.error('Error simulating reading:', error)

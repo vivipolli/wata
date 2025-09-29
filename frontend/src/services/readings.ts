@@ -29,9 +29,9 @@ export const readingsService = {
   /**
    * Get readings for a specific agreement
    */
-  async getByAgreement(agreementId: number, limit: number = 50): Promise<ApiResponse<{ readings: Reading[] }>> {
+  async getByAgreement(agreementId: number, limit: number = 50): Promise<ApiResponse<Reading[]>> {
     try {
-      const response = await apiClient.get<ApiResponse<{ readings: Reading[] }>>(`/readings/agreement/${agreementId}?limit=${limit}`)
+      const response = await apiClient.get<ApiResponse<Reading[]>>(`/readings/agreement/${agreementId}?limit=${limit}`)
       return response.data
     } catch (error: any) {
       throw new Error(`Failed to fetch readings for agreement ${agreementId}: ${error.message}`)

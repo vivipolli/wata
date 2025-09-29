@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FaFileContract, FaCalendar, FaDollarSign, FaRuler, FaMapMarkerAlt, FaChevronDown, FaChevronUp, FaHandHoldingUsd, FaSync } from 'react-icons/fa'
+import { FaFileContract, FaCalendar, FaDollarSign, FaRuler, FaMapMarkerAlt, FaChevronDown, FaChevronUp, FaHandHoldingUsd, FaSync, FaExternalLinkAlt } from 'react-icons/fa'
 import { useAgreements, useAgreementsActions } from '../stores/agreementsStore'
 import { useAuth } from '../contexts/AuthContext'
 import { useAccount } from 'wagmi'
 import { investmentService } from '../services/investments'
 import { USER_ROLES } from '../utils/constants'
+import { getHederaExplorerUrl } from '../utils/helpers'
 import PrimaryButton from './common/PrimaryButton'
 
 interface AgreementListProps {
@@ -368,7 +369,17 @@ export default function AgreementList({ producerAddress, showAllAgreements = fal
                       {agreement.transaction_id && (
                         <div>
                           <dt className="text-sm text-gray-500">Transaction ID</dt>
-                          <dd className="text-sm font-medium text-gray-900 font-mono break-all">{agreement.transaction_id}</dd>
+                          <dd className="text-sm font-medium text-gray-900 font-mono break-all">
+                            <a 
+                              href={getHederaExplorerUrl(agreement.transaction_id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {agreement.transaction_id}
+                              <FaExternalLinkAlt className="w-3 h-3" />
+                            </a>
+                          </dd>
                         </div>
                       )}
                       <div>

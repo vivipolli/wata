@@ -128,6 +128,20 @@ export default function readingRoutes(database: Database) {
         return res.status(400).json(response)
       }
 
+      // Get agreement to use its coordinates if not provided
+      const agreement = await database.getAgreement(agreementId)
+      if (!agreement) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Agreement not found'
+        }
+        return res.status(404).json(response)
+      }
+
+      // Use provided coordinates or fall back to agreement coordinates
+      const finalLat = locationLat || agreement.location_lat
+      const finalLng = locationLng || agreement.location_lng
+
       // Generate random turbidity between 0-20 NTU
       const turbidityNtu = Math.random() * 20
       
@@ -135,8 +149,8 @@ export default function readingRoutes(database: Database) {
       const readingData = {
         agreementId,
         turbidityNtu: parseFloat(turbidityNtu.toFixed(2)),
-        locationLat: locationLat || undefined,
-        locationLng: locationLng || undefined,
+        locationLat: finalLat,
+        locationLng: finalLng,
         isSimulated: true
       }
 

@@ -166,8 +166,16 @@ export default function Dashboard({}: DashboardProps) {
     setLoading(true)
     try {
       const agreementId = userAgreements[0]?.id || 1
-      await simulateReading(agreementId, { lat: -23.5505, lng: -46.6333 })
-      // Auto-refresh will handle updating the readings
+      await simulateReading(agreementId)
+      
+      try {
+        const response = await readingsService.getByAgreement(agreementId, 10)
+        if (response.success && response.data) {
+          setUserReadings(response.data)
+        }
+      } catch (error) {
+        console.error('Error fetching updated readings:', error)
+      }
     } catch (error) {
       console.error('Error simulating reading:', error)
     } finally {

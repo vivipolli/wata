@@ -15,7 +15,7 @@ interface ReadingsState {
   fetchRecentReadings: (limit?: number) => Promise<void>
   fetchAgreementReadings: (agreementId: number, limit?: number) => Promise<void>
   fetchReadingStats: (agreementId: number, days?: number) => Promise<void>
-  simulateReading: (agreementId: number, location?: { lat: number; lng: number }) => Promise<Reading | null>
+  simulateReading: (agreementId: number) => Promise<Reading | null>
   startAutoRefresh: (agreementId?: number, interval?: number) => void
   stopAutoRefresh: () => void
   clearError: () => void
@@ -53,7 +53,7 @@ export const useReadingsStore = create<ReadingsState>()(
       try {
         const response = await readingsService.getByAgreement(agreementId, limit)
         if (response.success && response.data) {
-          const readings = response.data.readings || response.data || []
+          const readings = response.data || []
           set(state => ({
             agreementReadings: {
               ...state.agreementReadings,
@@ -86,15 +86,11 @@ export const useReadingsStore = create<ReadingsState>()(
       }
     },
 
-    simulateReading: async (agreementId: number, location?: { lat: number; lng: number }) => {
+    simulateReading: async (agreementId: number) => {
       set({ loading: true, error: null })
       try {
         const simulationData = {
-          agreementId,
-          ...(location && {
-            locationLat: location.lat,
-            locationLng: location.lng
-          })
+          agreementId
         }
         
         const response = await readingsService.simulate(simulationData)

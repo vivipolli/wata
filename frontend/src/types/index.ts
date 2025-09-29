@@ -68,8 +68,6 @@ export interface CreateReadingData {
 
 export interface SimulateReadingData {
   agreementId: number
-  locationLat?: number
-  locationLng?: number
 }
 
 // Payment Types
