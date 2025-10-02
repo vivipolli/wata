@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OracleService = void 0;
 const tslib_1 = require("tslib");
 const crypto_1 = tslib_1.__importDefault(require("crypto"));
+const hfs_js_1 = require("./hfs.js");
+const hcs_js_1 = require("./hcs.js");
 class OracleService {
     database;
     hederaService;
@@ -285,6 +287,46 @@ class OracleService {
                 await this.database.run('UPDATE readings SET is_validated = 1, batch_id = ? WHERE id = ?', [batchId, reading.id]);
             }
             console.log(`Batch submitted to contract: ${realTransactionHash}`);
+            // Store audit data on Hedera File Service (HFS)
+            try {
+                const agreement = await this.database.getAgreement(agreementId);
+                const auditReport = {
+                    agreementId: agreementId.toString(),
+                    batchId: batchId,
+                    auditHash: batchResult.auditHash,
+                    score: batchResult.score,
+                    timestamp: new Date().toISOString(),
+                    transactionHash: realTransactionHash,
+                    producerAddress: agreement.producer_address,
+                    readings: batchResult.validReadings,
+                    validationDetails: {
+                        totalReadings: batchResult.readings.length,
+                        validReadings: batchResult.validReadings.length,
+                        invalidReadings: batchResult.invalidReadings.length,
+                        averageTurbidity: batchResult.averageTurbidity,
+                        outliersDetected: batchResult.outliersDetected
+                    }
+                };
+                const hfsFileId = await hfs_js_1.hfsService.createAuditReport(auditReport);
+                console.log(`Audit report stored on HFS: ${hfsFileId}`);
+                // Publish to Hedera Consensus Service (HCS)
+                const hcsTransactionId = await hcs_js_1.hcsService.publishAuditRecord({
+                    agreementId: agreementId.toString(),
+                    batchId: batchId,
+                    auditHash: batchResult.auditHash,
+                    score: batchResult.score,
+                    timestamp: new Date().toISOString(),
+                    transactionHash: realTransactionHash,
+                    producerAddress: agreement.producer_address
+                });
+                console.log(`Audit record published to HCS: ${hcsTransactionId}`);
+                // Update batch with blockchain storage info
+                await this.database.run('UPDATE batches SET hfs_file_id = ?, hcs_transaction_id = ? WHERE id = ?', [hfsFileId, hcsTransactionId, batchId]);
+            }
+            catch (blockchainError) {
+                console.error('Error storing data on blockchain:', blockchainError);
+                // Don't fail the entire process if blockchain storage fails
+            }
             // Ensure the hash is a string before returning
             const finalHash = typeof realTransactionHash === 'string' ? realTransactionHash : String(realTransactionHash);
             return finalHash;

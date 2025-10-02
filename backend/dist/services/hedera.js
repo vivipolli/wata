@@ -108,9 +108,16 @@ class HederaService {
             const accountId = record.transactionId.accountId?.toString();
             const validStart = record.transactionId.validStart;
             const transactionId = `${accountId}@${validStart.seconds}.${validStart.nanos}`;
+            console.log('HederaService - Transaction details:', {
+                accountId,
+                validStart: validStart.toString(),
+                transactionId,
+                receiptStatus: receipt.status
+            });
             return {
                 ...receipt,
-                transactionHash: transactionId
+                transactionHash: transactionId,
+                transactionId: record.transactionId
             };
         }
         catch (error) {

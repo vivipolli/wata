@@ -555,6 +555,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
 
   // Get blockchain records for a user
   router.get('/blockchain-records', async (req: Request, res: Response) => {
+    console.log('Blockchain records endpoint called')
     try {
       const userAddress = req.query.userAddress as string
       const limit = parseInt(req.query.limit as string) || 20

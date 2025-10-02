@@ -1,6 +1,8 @@
 import crypto from 'crypto'
 import { Database } from '../database.js'
 import { HederaService } from './hedera.js'
+import { hfsService } from './hfs.js'
+import { hcsService } from './hcs.js'
 
 interface ReadingData {
   id: number
@@ -382,6 +384,53 @@ export class OracleService {
       }
 
       console.log(`Batch submitted to contract: ${realTransactionHash}`)
+      
+      // Store audit data on Hedera File Service (HFS)
+      try {
+        const agreement = await this.database.getAgreement(agreementId)
+        const auditReport = {
+          agreementId: agreementId.toString(),
+          batchId: batchId,
+          auditHash: batchResult.auditHash,
+          score: batchResult.score,
+          timestamp: new Date().toISOString(),
+          transactionHash: realTransactionHash,
+          producerAddress: agreement.producer_address,
+          readings: batchResult.validReadings,
+          validationDetails: {
+            totalReadings: batchResult.readings.length,
+            validReadings: batchResult.validReadings.length,
+            invalidReadings: batchResult.invalidReadings.length,
+            averageTurbidity: batchResult.averageTurbidity,
+            outliersDetected: batchResult.outliersDetected
+          }
+        }
+        
+        const hfsFileId = await hfsService.createAuditReport(auditReport)
+        console.log(`Audit report stored on HFS: ${hfsFileId}`)
+        
+        // Publish to Hedera Consensus Service (HCS)
+        const hcsTransactionId = await hcsService.publishAuditRecord({
+          agreementId: agreementId.toString(),
+          batchId: batchId,
+          auditHash: batchResult.auditHash,
+          score: batchResult.score,
+          timestamp: new Date().toISOString(),
+          transactionHash: realTransactionHash,
+          producerAddress: agreement.producer_address
+        })
+        console.log(`Audit record published to HCS: ${hcsTransactionId}`)
+        
+        // Update batch with blockchain storage info
+        await (this.database as any).run(
+          'UPDATE batches SET hfs_file_id = ?, hcs_transaction_id = ? WHERE id = ?',
+          [hfsFileId, hcsTransactionId, batchId]
+        )
+        
+      } catch (blockchainError) {
+        console.error('Error storing data on blockchain:', blockchainError)
+        // Don't fail the entire process if blockchain storage fails
+      }
       
       // Ensure the hash is a string before returning
       const finalHash = typeof realTransactionHash === 'string' ? realTransactionHash : String(realTransactionHash)

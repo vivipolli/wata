@@ -466,6 +466,47 @@ function paymentRoutes(hederaService, database, relayerService) {
             res.status(500).json(response);
         }
     });
+    // Get blockchain records for a user
+    router.get('/blockchain-records', async (req, res) => {
+        console.log('Blockchain records endpoint called');
+        try {
+            const userAddress = req.query.userAddress;
+            const limit = parseInt(req.query.limit) || 20;
+            if (!userAddress) {
+                const response = {
+                    success: false,
+                    error: 'userAddress is required'
+                };
+                res.status(400).json(response);
+                return;
+            }
+            // Get payments with blockchain data for the user
+            const payments = await database.all(`SELECT p.*, a.producer_name, a.producer_address 
+         FROM payments p 
+         JOIN agreements a ON p.agreement_id = a.id 
+         WHERE a.producer_address = ? 
+         AND p.audit_hash IS NOT NULL
+         ORDER BY p.created_at DESC 
+         LIMIT ?`, [userAddress, limit]);
+            const response = {
+                success: true,
+                data: {
+                    records: payments,
+                    total: payments.length,
+                    userAddress
+                }
+            };
+            res.json(response);
+        }
+        catch (error) {
+            console.error('Error fetching blockchain records:', error);
+            const response = {
+                success: false,
+                error: 'Failed to fetch blockchain records'
+            };
+            res.status(500).json(response);
+        }
+    });
     return router;
 }
 //# sourceMappingURL=payments.js.map

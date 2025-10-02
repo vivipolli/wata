@@ -152,9 +152,17 @@ export class HederaService {
       const validStart = record.transactionId.validStart
       const transactionId = `${accountId}@${validStart.seconds}.${validStart.nanos}`
       
+      console.log('HederaService - Transaction details:', {
+        accountId,
+        validStart: validStart.toString(),
+        transactionId,
+        receiptStatus: receipt.status
+      })
+      
       return {
         ...receipt,
-        transactionHash: transactionId
+        transactionHash: transactionId,
+        transactionId: record.transactionId
       } as any
     } catch (error) {
       throw error
