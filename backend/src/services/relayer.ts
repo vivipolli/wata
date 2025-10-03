@@ -1,5 +1,5 @@
 import { HederaService } from './hedera'
-import { Database } from '../database'
+import { PrismaDatabase } from './orm/prismaDatabase'
 import { hcsService, type AuditRecord } from './hcs'
 import { hfsService, type AuditReport } from './hfs'
 import { ethers } from 'ethers'
@@ -16,11 +16,11 @@ interface PaymentCheckResult {
 
 export class RelayerService {
   private hederaService: HederaService
-  private database: Database
+  private database: PrismaDatabase
   private isRunning: boolean = false
   private contract: ethers.Contract | null = null
   private provider: ethers.Provider | null = null
-  constructor(hederaService: HederaService, database: Database) {
+  constructor(hederaService: HederaService, database: PrismaDatabase) {
     this.hederaService = hederaService
     this.database = database
   }

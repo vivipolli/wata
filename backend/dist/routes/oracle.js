@@ -46,12 +46,11 @@ function oracleRoutes(database, hederaService) {
             // Get oracle status for each agreement
             const contractsWithOracleStatus = await Promise.all(agreements.map(async (agreement) => {
                 const batches = await database.getBatchesByAgreement(agreement.id, 10);
-                const recentLogs = await database.getOracleLogsByBatch(agreement.id);
                 // Calculate contract-specific oracle metrics
                 const totalBatches = batches.length;
-                const pendingBatches = batches.filter((b) => b.validation_status === 'pending').length;
+                const pendingBatches = batches.filter(batch => batch.validation_status === 'pending').length;
                 const averageScore = totalBatches > 0 ?
-                    batches.reduce((sum, b) => sum + b.score, 0) / totalBatches : 0;
+                    batches.reduce((sum, batch) => sum + (batch.score ?? 0), 0) / totalBatches : 0;
                 const lastActivity = batches.length > 0 ? batches[0].created_at : null;
                 return {
                     agreementId: agreement.id,
@@ -66,22 +65,22 @@ function oracleRoutes(database, hederaService) {
                         pendingBatches,
                         averageScore: Math.round(averageScore * 100) / 100,
                         lastActivity,
-                        recentBatches: batches.slice(0, 5).map((batch) => ({
+                        recentBatches: batches.slice(0, 5).map(batch => ({
                             id: batch.id,
                             score: batch.score,
                             status: batch.validation_status,
                             createdAt: batch.created_at,
-                            transactionHash: batch.transaction_hash
+                            transactionHash: batch.hcs_transaction_id
                         }))
                     }
                 };
             }));
             // Calculate overall summary
-            const allBatches = contractsWithOracleStatus.flatMap(c => c.oracleStatus.recentBatches);
-            const totalBatches = contractsWithOracleStatus.reduce((sum, c) => sum + c.oracleStatus.totalBatches, 0);
-            const pendingBatches = contractsWithOracleStatus.reduce((sum, c) => sum + c.oracleStatus.pendingBatches, 0);
+            const allBatches = contractsWithOracleStatus.flatMap(contract => contract.oracleStatus.recentBatches);
+            const totalBatches = contractsWithOracleStatus.reduce((sum, contract) => sum + contract.oracleStatus.totalBatches, 0);
+            const pendingBatches = contractsWithOracleStatus.reduce((sum, contract) => sum + contract.oracleStatus.pendingBatches, 0);
             const overallAverageScore = totalBatches > 0 ?
-                contractsWithOracleStatus.reduce((sum, c) => sum + (c.oracleStatus.averageScore * c.oracleStatus.totalBatches), 0) / totalBatches : 0;
+                contractsWithOracleStatus.reduce((sum, contract) => sum + (contract.oracleStatus.averageScore * contract.oracleStatus.totalBatches), 0) / totalBatches : 0;
             const response = {
                 success: true,
                 data: {
@@ -140,21 +139,22 @@ function oracleRoutes(database, hederaService) {
             // Get all batches for this agreement
             const batches = await database.getBatchesByAgreement(agreementId, 50);
             // Get recent oracle logs
-            const recentLogs = await database.getOracleLogsByBatch(agreementId);
+            const recentLogs = await database.getRecentOracleLogs(50);
+            const agreementLogs = recentLogs.filter(log => log.batch_id && batches.some(batch => batch.id === log.batch_id));
             // Calculate detailed metrics
             const totalBatches = batches.length;
-            const pendingBatches = batches.filter((b) => b.validation_status === 'pending').length;
-            const validatedBatches = batches.filter((b) => b.validation_status === 'validated').length;
-            const submittedBatches = batches.filter((b) => b.validation_status === 'submitted').length;
+            const pendingBatches = batches.filter(batch => batch.validation_status === 'pending').length;
+            const validatedBatches = batches.filter(batch => batch.validation_status === 'validated').length;
+            const submittedBatches = batches.filter(batch => batch.validation_status === 'submitted').length;
             const averageScore = totalBatches > 0 ?
-                batches.reduce((sum, b) => sum + b.score, 0) / totalBatches : 0;
-            const lastWeekBatches = batches.filter((b) => {
-                const batchDate = new Date(b.created_at);
+                batches.reduce((sum, batch) => sum + (batch.score ?? 0), 0) / totalBatches : 0;
+            const lastWeekBatches = batches.filter(batch => {
+                const batchDate = new Date(batch.created_at);
                 const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
                 return batchDate >= weekAgo;
             });
             const weeklyAverageScore = lastWeekBatches.length > 0 ?
-                lastWeekBatches.reduce((sum, b) => sum + b.score, 0) / lastWeekBatches.length : 0;
+                lastWeekBatches.reduce((sum, batch) => sum + (batch.score ?? 0), 0) / lastWeekBatches.length : 0;
             const response = {
                 success: true,
                 data: {
@@ -176,7 +176,7 @@ function oracleRoutes(database, hederaService) {
                         averageScore: Math.round(averageScore * 100) / 100,
                         weeklyAverageScore: Math.round(weeklyAverageScore * 100) / 100,
                         lastActivity: batches.length > 0 ? batches[0].created_at : null,
-                        recentBatches: batches.slice(0, 10).map((batch) => ({
+                        recentBatches: batches.slice(0, 10).map(batch => ({
                             id: batch.id,
                             score: batch.score,
                             status: batch.validation_status,
@@ -185,10 +185,10 @@ function oracleRoutes(database, hederaService) {
                             outliersDetected: batch.outliers_detected,
                             createdAt: batch.created_at,
                             submittedAt: batch.submitted_at,
-                            transactionHash: batch.transaction_hash,
+                            transactionHash: batch.hcs_transaction_id,
                             auditHash: batch.audit_hash
                         })),
-                        recentLogs: recentLogs.slice(0, 20).map((log) => ({
+                        recentLogs: agreementLogs.slice(0, 20).map(log => ({
                             id: log.id,
                             action: log.action,
                             details: log.details,
@@ -243,15 +243,10 @@ function oracleRoutes(database, hederaService) {
             // Get batches with transaction hashes
             const batches = await database.getBatchesByAgreement(agreementId, limit);
             const batchesWithTxHash = await Promise.all(batches.map(async (batch) => {
-                const oracleLog = await database.get('SELECT transaction_hash FROM oracle_logs WHERE batch_id = ? AND action = "batch_submitted" ORDER BY timestamp DESC LIMIT 1', [batch.id]);
-                let transactionHash = oracleLog?.transaction_hash || null;
-                // Convert binary hash to hex string if needed
-                if (transactionHash && typeof transactionHash === 'object' && transactionHash.type === 'Buffer') {
-                    transactionHash = '0x' + Buffer.from(transactionHash.data).toString('hex');
-                }
+                const oracleLog = await database.getOracleLogForBatchAction(batch.id, 'batch_submitted');
                 return {
                     ...batch,
-                    transaction_hash: transactionHash
+                    transaction_hash: oracleLog?.transaction_hash ?? null
                 };
             }));
             const response = {
@@ -422,15 +417,10 @@ function oracleRoutes(database, hederaService) {
             const batches = await database.getBatchesByAgreement(agreementId, limit);
             // Add transaction_hash from oracle logs for each batch
             const batchesWithTxHash = await Promise.all(batches.map(async (batch) => {
-                const oracleLog = await database.get('SELECT transaction_hash FROM oracle_logs WHERE batch_id = ? AND action = "batch_submitted" ORDER BY timestamp DESC LIMIT 1', [batch.id]);
-                let transactionHash = oracleLog?.transaction_hash || null;
-                // Convert binary hash to hex string if needed
-                if (transactionHash && typeof transactionHash === 'object' && transactionHash.type === 'Buffer') {
-                    transactionHash = '0x' + Buffer.from(transactionHash.data).toString('hex');
-                }
+                const oracleLog = await database.getOracleLogForBatchAction(batch.id, 'batch_submitted');
                 return {
                     ...batch,
-                    transaction_hash: transactionHash
+                    transaction_hash: oracleLog?.transaction_hash ?? null
                 };
             }));
             const response = {

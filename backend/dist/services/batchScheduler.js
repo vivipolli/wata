@@ -102,8 +102,8 @@ class BatchSchedulerService {
      */
     async getUnprocessedReadings(agreementId) {
         const allReadings = await this.database.getReadingsByAgreement(agreementId, 1000);
-        // Filter unprocessed readings (batch_id IS NULL AND is_validated = 0)
-        return allReadings.filter(reading => reading.batch_id === null && reading.is_validated === 0);
+        // Filter unprocessed readings (batch_id IS NULL AND is_validated = false)
+        return allReadings.filter(reading => reading.batch_id === null && reading.is_validated === false);
     }
     /**
      * Manually trigger batch processing for a specific agreement

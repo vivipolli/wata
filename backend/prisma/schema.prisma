@@ -1,0 +1,147 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model agreements {
+  id               Int       @id @default(autoincrement())
+  agreement_hash   String    @unique
+  producer_name    String
+  producer_address String
+  base_value       Int
+  hectares         Int
+  location_lat     Float?
+  location_lng     Float?
+  duration_days    Int?
+  created_at       DateTime  @default(now())
+  is_active        Boolean   @default(true)
+  blockchain_id    Int?
+  transaction_id   String?
+  investor_address String?
+  governance_mode  String    @default("AUTO")
+  total_invested   Float     @default(0)
+  total_paid       Float     @default(0)
+  batches          batches[]
+  payments         payments[]
+  readings         readings[]
+  investments      investments[]
+  audit_records    audit_records[]
+}
+
+model readings {
+  id             Int       @id @default(autoincrement())
+  agreement_id   Int
+  turbidity_ntu  Float
+  timestamp      DateTime  @default(now())
+  location_lat   Float?
+  location_lng   Float?
+  is_simulated   Boolean   @default(false)
+  audit_hash     String?
+  batch_id       Int?
+  is_validated   Boolean   @default(false)
+  agreement      agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
+  batch          batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
+}
+
+model batches {
+  id                Int       @id @default(autoincrement())
+  agreement_id      Int
+  audit_hash        String    @unique
+  oracle_signature  String?
+  score             Float
+  readings_count    Int
+  average_turbidity Float
+  median_turbidity  Float?
+  outliers_detected Int?      @default(0)
+  validation_status String    @default("pending")
+  created_at        DateTime  @default(now())
+  submitted_at      DateTime?
+  oracle_address    String?
+  hcs_transaction_id String?
+  hfs_file_id        String?
+  agreement         agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
+  readings          readings[]
+  payments          payments[]
+  oracle_logs       oracle_logs[]
+  audit_records     audit_records[]
+}
+
+model payments {
+  id                 Int       @id @default(autoincrement())
+  agreement_id       Int
+  batch_id           Int?
+  amount             Int
+  transaction_hash   String?
+  status             String    @default("pending")
+  created_at         DateTime  @default(now())
+  processed_at       DateTime?
+  audit_hash         String?
+  score              Float?
+  hcs_transaction_id String?
+  hfs_file_id        String?
+  investor_address   String?
+  agreement          agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
+  batch              batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
+}
+
+model oracle_logs {
+  id              Int       @id @default(autoincrement())
+  batch_id        Int
+  action          String
+  details         String?
+  oracle_address  String?
+  timestamp       DateTime  @default(now())
+  transaction_hash String?
+  batch           batches   @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+}
+
+model investments {
+  id               Int       @id @default(autoincrement())
+  agreement_id     Int
+  investor_address String
+  amount           Float
+  transaction_hash String?
+  status           String?   @default("pending")
+  created_at       DateTime  @default(now())
+  processed_at     DateTime?
+  agreement        agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
+}
+
+model audit_records {
+  id                 Int       @id @default(autoincrement())
+  agreement_id       Int
+  batch_id           Int?
+  audit_hash         String
+  score              Float?
+  timestamp          DateTime  @default(now())
+  transaction_hash   String?
+  producer_address   String?
+  investor_address   String?
+  hcs_transaction_id String?
+  hfs_file_id        String?
+  agreement          agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
+  batch              batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
+}
+
+model users {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  name       String
+  password   String
+  role       String
+  address    String?
+  is_active  Boolean  @default(true)
+  last_login DateTime?
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+}

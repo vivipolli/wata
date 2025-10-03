@@ -3,6 +3,7 @@
         "target": "ES2022",
         "module": "CommonJS",
         "moduleResolution": "node",
+        "baseUrl": "./src",
         "allowSyntheticDefaultImports": true,
         "esModuleInterop": true,
         "allowJs": true,

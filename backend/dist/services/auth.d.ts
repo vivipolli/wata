@@ -1,4 +1,4 @@
-import { Database } from '../database';
+import { PrismaDatabase } from './orm/prismaDatabase';
 import { AuthMiddleware } from '../middleware/auth';
 export interface LoginCredentials {
     email: string;
@@ -28,7 +28,7 @@ export declare class AuthService {
     private database;
     private authMiddleware;
     private saltRounds;
-    constructor(database: Database);
+    constructor(database: PrismaDatabase);
     /**
      * Register a new user
      */

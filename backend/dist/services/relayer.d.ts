@@ -1,5 +1,5 @@
 import { HederaService } from './hedera';
-import { Database } from '../database';
+import { PrismaDatabase } from './orm/prismaDatabase';
 interface PaymentCheckResult {
     success: boolean;
     message: string;
@@ -15,7 +15,7 @@ export declare class RelayerService {
     private isRunning;
     private contract;
     private provider;
-    constructor(hederaService: HederaService, database: Database);
+    constructor(hederaService: HederaService, database: PrismaDatabase);
     initialize(): Promise<void>;
     start(): Promise<void>;
     stop(): void;

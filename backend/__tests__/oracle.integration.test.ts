@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/glo
 import request from 'supertest'
 import express from 'express'
 import cors from 'cors'
-import { Database } from '../src/database'
+import { PrismaDatabase, getPrismaClient } from '../src/services/orm/prismaDatabase'
 import { HederaService } from '../src/services/hedera'
 import { OracleService } from '../src/services/oracle'
 import oracleRoutes from '../src/routes/oracle'
@@ -31,14 +31,14 @@ class MockHederaService extends HederaService {
 
 describe('Oracle Integration Tests', () => {
   let app: express.Application
-  let database: Database
+let database: PrismaDatabase
   let hederaService: HederaService
   let oracleService: OracleService
 
   beforeAll(async () => {
     // Setup test database
-    database = new Database()
-    process.env.DB_PATH = ':memory:' // Use in-memory database for testing
+    process.env.DATABASE_URL = 'file:./data/test-db.sqlite'
+    database = new PrismaDatabase()
     await database.initialize()
 
     // Setup mock Hedera service
@@ -58,7 +58,7 @@ describe('Oracle Integration Tests', () => {
   })
 
   afterAll(async () => {
-    database.close()
+    await database.close()
   })
 
   // Helper function to create agreement with blockchain_id
@@ -70,11 +70,19 @@ describe('Oracle Integration Tests', () => {
 
   beforeEach(async () => {
     // Clean up database before each test
-    await (database as any).run('DELETE FROM oracle_logs')
-    await (database as any).run('DELETE FROM batches')
-    await (database as any).run('DELETE FROM payments')
-    await (database as any).run('DELETE FROM readings')
-    await (database as any).run('DELETE FROM agreements')
+    const prisma = getPrismaClient()
+    try {
+      await prisma.$transaction([
+        prisma.oracle_logs.deleteMany(),
+        prisma.audit_records.deleteMany(),
+        prisma.payments.deleteMany(),
+        prisma.readings.deleteMany(),
+        prisma.batches.deleteMany(),
+        prisma.agreements.deleteMany()
+      ])
+    } catch (error) {
+      // Ignore errors if tables don't exist yet
+    }
   })
 
   describe('POST /api/oracle/process', () => {

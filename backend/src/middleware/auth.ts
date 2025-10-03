@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-import { Database } from '../database'
+import { PrismaDatabase } from '../services/orm/prismaDatabase'
 
 interface AuthRequest extends Request {
   user?: {
@@ -21,10 +21,10 @@ interface JwtPayload {
 }
 
 export class AuthMiddleware {
-  private database: Database
+  private database: PrismaDatabase
   private jwtSecret: string
 
-  constructor(database: Database) {
+  constructor(database: PrismaDatabase) {
     this.database = database
     this.jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
   }

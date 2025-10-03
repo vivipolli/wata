@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express'
 import crypto from 'crypto'
 import { HederaService } from '../services/hedera'
-import { Database } from '../database'
+import { PrismaDatabase } from '../services/orm/prismaDatabase'
 import { AuthMiddleware } from '../middleware/auth'
 import type { ApiResponse, CreateAgreementWithSignatureRequest } from '../types/index'
 
@@ -34,7 +34,7 @@ interface CreateAgreementResponse {
   message?: string | undefined
 }
 
-export default function agreementRoutes(hederaService: HederaService, database: Database) {
+export default function agreementRoutes(hederaService: HederaService, database: PrismaDatabase) {
   const router = express.Router()
   const authMiddleware = new AuthMiddleware(database)
 

@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const tslib_1 = require("tslib");
 const express_1 = tslib_1.__importDefault(require("express"));
 const dotenv_1 = tslib_1.__importDefault(require("dotenv"));
-const database_js_1 = require("./database.js");
+const prismaDatabase_js_1 = require("./services/orm/prismaDatabase.js");
 const hedera_js_1 = require("./services/hedera.js");
 const relayer_js_1 = require("./services/relayer.js");
 const oracle_js_1 = require("./services/oracle.js");
@@ -29,7 +29,7 @@ app.use(security_js_1.requestLogger);
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 // Initialize services
-const db = new database_js_1.Database();
+const db = new prismaDatabase_js_1.PrismaDatabase();
 const hederaService = new hedera_js_1.HederaService();
 const relayerService = new relayer_js_1.RelayerService(hederaService, db);
 const oracleService = new oracle_js_1.OracleService(db, hederaService);

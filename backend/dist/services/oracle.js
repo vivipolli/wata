@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OracleService = void 0;
 const tslib_1 = require("tslib");
 const crypto_1 = tslib_1.__importDefault(require("crypto"));
-const hfs_js_1 = require("./hfs.js");
-const hcs_js_1 = require("./hcs.js");
+const hfs_1 = require("./hfs");
+const hcs_1 = require("./hcs");
 class OracleService {
     database;
     hederaService;
@@ -19,18 +19,14 @@ class OracleService {
     // Collector Module - Collects readings for validation
     async collectReadingsForValidation(agreementId, hoursBack = 168) {
         const cutoffDate = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-        const readings = await this.database.all(`SELECT * FROM readings 
-       WHERE agreement_id = ? 
-       AND timestamp >= ? 
-       AND is_validated = 0
-       ORDER BY timestamp ASC`, [agreementId, cutoffDate.toISOString()]);
+        const readings = await this.database.getReadingsForValidation(agreementId, cutoffDate);
         return readings.map(row => ({
             id: row.id,
             agreementId: row.agreement_id,
             turbidityNtu: row.turbidity_ntu,
-            timestamp: row.timestamp,
-            locationLat: row.location_lat,
-            locationLng: row.location_lng,
+            timestamp: row.timestamp instanceof Date ? row.timestamp.toISOString() : row.timestamp,
+            locationLat: row.location_lat ?? undefined,
+            locationLng: row.location_lng ?? undefined,
             isSimulated: row.is_simulated
         }));
     }
@@ -153,14 +149,13 @@ class OracleService {
         const readings = await this.collectReadingsForValidation(agreementId);
         if (readings.length === 0) {
             // Check if there are any readings at all for this agreement
-            const allReadings = await this.database.all('SELECT COUNT(*) as count FROM readings WHERE agreement_id = ?', [agreementId]);
-            if (allReadings[0].count === 0) {
+            const totalReadings = await this.database.countReadingsForAgreement(agreementId);
+            if (totalReadings === 0) {
                 throw new Error('No readings found for this agreement');
             }
             else {
-                // Check if readings are already validated
-                const validatedReadings = await this.database.all('SELECT COUNT(*) as count FROM readings WHERE agreement_id = ? AND is_validated = 1', [agreementId]);
-                if (validatedReadings[0].count > 0) {
+                const validatedCount = await this.database.countValidatedReadingsForAgreement(agreementId);
+                if (validatedCount > 0) {
                     throw new Error('All readings for this agreement have already been processed');
                 }
                 else {
@@ -283,9 +278,7 @@ class OracleService {
                 transactionHash: realTransactionHash
             });
             // Mark readings as validated
-            for (const reading of batchResult.validReadings) {
-                await this.database.run('UPDATE readings SET is_validated = 1, batch_id = ? WHERE id = ?', [batchId, reading.id]);
-            }
+            await this.database.markReadingsAsValidated(batchId, batchResult.validReadings.map(r => r.id));
             console.log(`Batch submitted to contract: ${realTransactionHash}`);
             // Store audit data on Hedera File Service (HFS)
             try {
@@ -307,10 +300,10 @@ class OracleService {
                         outliersDetected: batchResult.outliersDetected
                     }
                 };
-                const hfsFileId = await hfs_js_1.hfsService.createAuditReport(auditReport);
+                const hfsFileId = await hfs_1.hfsService.createAuditReport(auditReport);
                 console.log(`Audit report stored on HFS: ${hfsFileId}`);
                 // Publish to Hedera Consensus Service (HCS)
-                const hcsTransactionId = await hcs_js_1.hcsService.publishAuditRecord({
+                const hcsTransactionId = await hcs_1.hcsService.publishAuditRecord({
                     agreementId: agreementId.toString(),
                     batchId: batchId,
                     auditHash: batchResult.auditHash,
@@ -321,7 +314,10 @@ class OracleService {
                 });
                 console.log(`Audit record published to HCS: ${hcsTransactionId}`);
                 // Update batch with blockchain storage info
-                await this.database.run('UPDATE batches SET hfs_file_id = ?, hcs_transaction_id = ? WHERE id = ?', [hfsFileId, hcsTransactionId, batchId]);
+                await this.database.attachBatchLedgerReferences(batchId, {
+                    hfsFileId,
+                    hcsTransactionId
+                });
             }
             catch (blockchainError) {
                 console.error('Error storing data on blockchain:', blockchainError);

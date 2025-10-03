@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express'
 import { HederaService } from '../services/hedera'
-import { Database } from '../database'
+import { PrismaDatabase } from '../services/orm/prismaDatabase'
 import { RelayerService } from '../services/relayer'
 import type { TriggerCheckRequest, ApiResponse } from '../types/index'
 
@@ -17,7 +17,7 @@ interface PaymentStats {
   totalPendingAmount: number
 }
 
-export default function paymentRoutes(hederaService: HederaService, database: Database, relayerService: RelayerService) {
+export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService) {
   const router = express.Router()
 
   // Trigger payment check for an agreement
@@ -194,20 +194,9 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
   router.get('/history', async (req: Request, res: Response) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50
-      const status = req.query.status as string
+      const status = req.query.status as string | undefined
       
-      let payments
-      if (status) {
-        payments = await (database as any).all(
-          'SELECT * FROM payments WHERE status = ? ORDER BY created_at DESC LIMIT ?',
-          [status, limit]
-        )
-      } else {
-        payments = await (database as any).all(
-          'SELECT * FROM payments ORDER BY created_at DESC LIMIT ?',
-          [limit]
-        )
-      }
+      const payments = await database.getPaymentHistory({ limit, status })
 
       const response: ApiResponse = {
         success: true,
@@ -231,7 +220,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
     try {
       const userAddress = req.params.userAddress
       const limit = parseInt(req.query.limit as string) || 50
-      const status = req.query.status as string
+      const status = req.query.status as string | undefined
 
       if (!userAddress) {
         const response: ApiResponse = {
@@ -241,18 +230,11 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
         return res.status(400).json(response)
       }
 
-      let payments
-      if (status) {
-        payments = await (database as any).all(
-          'SELECT p.*, a.producer_name FROM payments p JOIN agreements a ON p.agreement_id = a.id WHERE a.producer_address = ? AND p.status = ? ORDER BY p.created_at DESC LIMIT ?',
-          [userAddress, status, limit]
-        )
-      } else {
-        payments = await (database as any).all(
-          'SELECT p.*, a.producer_name FROM payments p JOIN agreements a ON p.agreement_id = a.id WHERE a.producer_address = ? ORDER BY p.created_at DESC LIMIT ?',
-          [userAddress, limit]
-        )
-      }
+      const payments = await database.getPaymentsByProducerAddress({
+        producerAddress: userAddress,
+        limit,
+        status
+      })
 
       const response: ApiResponse = {
         success: true,
@@ -274,11 +256,9 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
   // Get payment statistics
   router.get('/stats', async (req: Request, res: Response) => {
     try {
-      // This would require additional database methods to get statistics
-      // For now, return basic info
       const pendingPayments = await database.getPendingPayments()
       
-      const totalPendingAmount = pendingPayments.reduce((sum: number, p: any) => sum + p.amount, 0)
+      const totalPendingAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0)
 
       const response: ApiResponse<PaymentStats> = {
         success: true,
@@ -353,7 +333,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
         agreementId,
         investorAddress,
         amount,
-        transactionHash: null // Will be set after blockchain transaction
+        transactionHash: null
       })
 
       // Execute investment on Hedera blockchain
@@ -569,17 +549,10 @@ export default function paymentRoutes(hederaService: HederaService, database: Da
         return
       }
 
-      // Get payments with blockchain data for the user
-      const payments = await (database as any).all(
-        `SELECT p.*, a.producer_name, a.producer_address 
-         FROM payments p 
-         JOIN agreements a ON p.agreement_id = a.id 
-         WHERE a.producer_address = ? 
-         AND p.audit_hash IS NOT NULL
-         ORDER BY p.created_at DESC 
-         LIMIT ?`,
-        [userAddress, limit]
-      )
+      const payments = await database.getPaymentsWithBlockchainData({
+        producerAddress: userAddress,
+        limit
+      })
 
       const response: ApiResponse = {
         success: true,

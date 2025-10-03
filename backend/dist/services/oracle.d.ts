@@ -1,5 +1,5 @@
-import { Database } from '../database.js';
-import { HederaService } from './hedera.js';
+import { PrismaDatabase } from './orm/prismaDatabase';
+import { HederaService } from './hedera';
 interface ReadingData {
     id: number;
     agreementId: number;
@@ -25,7 +25,7 @@ export declare class OracleService {
     private hederaService;
     private oraclePrivateKey;
     private oracleAddress;
-    constructor(database: Database, hederaService: HederaService);
+    constructor(database: PrismaDatabase, hederaService: HederaService);
     collectReadingsForValidation(agreementId: number, hoursBack?: number): Promise<ReadingData[]>;
     private validateReading;
     private calculateScore;

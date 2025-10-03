@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import { Database } from './database.js'
+import { PrismaDatabase } from './services/orm/prismaDatabase.js'
 import { HederaService } from './services/hedera.js'
 import { RelayerService } from './services/relayer.js'
 import { OracleService } from './services/oracle.js'
@@ -40,7 +40,7 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Initialize services
-const db = new Database()
+const db = new PrismaDatabase()
 const hederaService = new HederaService()
 const relayerService = new RelayerService(hederaService, db)
 const oracleService = new OracleService(db, hederaService)

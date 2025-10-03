@@ -1,10 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import rateLimit from 'express-rate-limit'
 import { AuthService } from '../services/auth'
-import { Database } from '../database'
-import { 
-  validateUserRegistration, 
-  validateUserLogin, 
+import { PrismaDatabase } from '../services/orm/prismaDatabase'
+import {
+  validateUserRegistration,
+  validateUserLogin,
   validatePasswordChange,
   validateUserProfileUpdate,
   handleValidationErrors,
@@ -16,14 +16,14 @@ import { AuthRequest } from '../middleware/auth'
 const router = Router()
 
 // Initialize services
-let database: Database | null = null
+let database: PrismaDatabase | null = null
 let authService: AuthService | null = null
 let authMiddleware: any = null
 
 // Initialize database and services
 const initializeServices = async () => {
   if (!database) {
-    database = new Database()
+    database = new PrismaDatabase()
     await database.initialize()
     authService = new AuthService(database)
     authMiddleware = authService.getAuthMiddleware()

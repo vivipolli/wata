@@ -161,13 +161,7 @@ function paymentRoutes(hederaService, database, relayerService) {
         try {
             const limit = parseInt(req.query.limit) || 50;
             const status = req.query.status;
-            let payments;
-            if (status) {
-                payments = await database.all('SELECT * FROM payments WHERE status = ? ORDER BY created_at DESC LIMIT ?', [status, limit]);
-            }
-            else {
-                payments = await database.all('SELECT * FROM payments ORDER BY created_at DESC LIMIT ?', [limit]);
-            }
+            const payments = await database.getPaymentHistory({ limit, status });
             const response = {
                 success: true,
                 data: { payments }
@@ -197,13 +191,11 @@ function paymentRoutes(hederaService, database, relayerService) {
                 };
                 return res.status(400).json(response);
             }
-            let payments;
-            if (status) {
-                payments = await database.all('SELECT p.*, a.producer_name FROM payments p JOIN agreements a ON p.agreement_id = a.id WHERE a.producer_address = ? AND p.status = ? ORDER BY p.created_at DESC LIMIT ?', [userAddress, status, limit]);
-            }
-            else {
-                payments = await database.all('SELECT p.*, a.producer_name FROM payments p JOIN agreements a ON p.agreement_id = a.id WHERE a.producer_address = ? ORDER BY p.created_at DESC LIMIT ?', [userAddress, limit]);
-            }
+            const payments = await database.getPaymentsByProducerAddress({
+                producerAddress: userAddress,
+                limit,
+                status
+            });
             const response = {
                 success: true,
                 data: { payments }
@@ -223,8 +215,6 @@ function paymentRoutes(hederaService, database, relayerService) {
     // Get payment statistics
     router.get('/stats', async (req, res) => {
         try {
-            // This would require additional database methods to get statistics
-            // For now, return basic info
             const pendingPayments = await database.getPendingPayments();
             const totalPendingAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
             const response = {
@@ -293,7 +283,7 @@ function paymentRoutes(hederaService, database, relayerService) {
                 agreementId,
                 investorAddress,
                 amount,
-                transactionHash: null // Will be set after blockchain transaction
+                transactionHash: null
             });
             // Execute investment on Hedera blockchain
             const hederaResult = await hederaService.investInAgreement(agreementId, amount, investorAddress);
@@ -480,14 +470,10 @@ function paymentRoutes(hederaService, database, relayerService) {
                 res.status(400).json(response);
                 return;
             }
-            // Get payments with blockchain data for the user
-            const payments = await database.all(`SELECT p.*, a.producer_name, a.producer_address 
-         FROM payments p 
-         JOIN agreements a ON p.agreement_id = a.id 
-         WHERE a.producer_address = ? 
-         AND p.audit_hash IS NOT NULL
-         ORDER BY p.created_at DESC 
-         LIMIT ?`, [userAddress, limit]);
+            const payments = await database.getPaymentsWithBlockchainData({
+                producerAddress: userAddress,
+                limit
+            });
             const response = {
                 success: true,
                 data: {

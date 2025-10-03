@@ -1,4 +1,4 @@
-import { Database } from '../database'
+import { PrismaDatabase } from './orm/prismaDatabase'
 import { OracleService } from './oracle'
 
 /**
@@ -6,12 +6,12 @@ import { OracleService } from './oracle'
  * Business Rule: Leituras válidas devem ser agregadas em batches (ex.: a cada 6h)
  */
 export class BatchSchedulerService {
-  private database: Database
+  private database: PrismaDatabase
   private oracleService: OracleService
   private intervalId: NodeJS.Timeout | null = null
   private isRunning: boolean = false
 
-  constructor(database: Database, oracleService: OracleService) {
+  constructor(database: PrismaDatabase, oracleService: OracleService) {
     this.database = database
     this.oracleService = oracleService
   }
@@ -114,9 +114,9 @@ export class BatchSchedulerService {
   private async getUnprocessedReadings(agreementId: number): Promise<any[]> {
     const allReadings = await this.database.getReadingsByAgreement(agreementId, 1000)
     
-    // Filter unprocessed readings (batch_id IS NULL AND is_validated = 0)
+    // Filter unprocessed readings (batch_id IS NULL AND is_validated = false)
     return allReadings.filter(reading => 
-      reading.batch_id === null && reading.is_validated === 0
+      reading.batch_id === null && reading.is_validated === false
     )
   }
 

@@ -36,7 +36,7 @@ class AuthService {
                 role: userData.role,
                 address: userData.address,
                 isActive: true,
-                createdAt: new Date().toISOString()
+                createdAt: new Date()
             });
             // Get created user
             const user = await this.database.getUserById(userId);

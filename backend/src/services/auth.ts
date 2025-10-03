@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt'
-import { Database } from '../database'
+import { PrismaDatabase } from './orm/prismaDatabase'
 import { AuthMiddleware } from '../middleware/auth'
 
 export interface LoginCredentials {
@@ -30,11 +30,11 @@ export interface AuthResponse {
 }
 
 export class AuthService {
-  private database: Database
+  private database: PrismaDatabase
   private authMiddleware: AuthMiddleware
   private saltRounds: number
 
-  constructor(database: Database) {
+  constructor(database: PrismaDatabase) {
     this.database = database
     this.authMiddleware = new AuthMiddleware(database)
     this.saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12')
@@ -65,7 +65,7 @@ export class AuthService {
         role: userData.role,
         address: userData.address,
         isActive: true,
-        createdAt: new Date().toISOString()
+        createdAt: new Date()
       })
 
       // Get created user

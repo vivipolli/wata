@@ -1,8 +1,8 @@
 import crypto from 'crypto'
-import { Database } from '../database.js'
-import { HederaService } from './hedera.js'
-import { hfsService } from './hfs.js'
-import { hcsService } from './hcs.js'
+import { PrismaDatabase } from './orm/prismaDatabase'
+import { HederaService } from './hedera'
+import { hfsService } from './hfs'
+import { hcsService } from './hcs'
 
 interface ReadingData {
   id: number
@@ -33,12 +33,12 @@ interface BatchValidationResult {
 }
 
 export class OracleService {
-  private database: Database
+  private database: PrismaDatabase
   private hederaService: HederaService
   private oraclePrivateKey: string
   private oracleAddress: string
 
-  constructor(database: Database, hederaService: HederaService) {
+  constructor(database: PrismaDatabase, hederaService: HederaService) {
     this.database = database
     this.hederaService = hederaService
     this.oraclePrivateKey = process.env.ORACLE_PRIVATE_KEY || ''
@@ -49,22 +49,15 @@ export class OracleService {
   async collectReadingsForValidation(agreementId: number, hoursBack: number = 168): Promise<ReadingData[]> {
     const cutoffDate = new Date(Date.now() - hoursBack * 60 * 60 * 1000)
     
-    const readings = await (this.database as any).all(
-      `SELECT * FROM readings 
-       WHERE agreement_id = ? 
-       AND timestamp >= ? 
-       AND is_validated = 0
-       ORDER BY timestamp ASC`,
-      [agreementId, cutoffDate.toISOString()]
-    )
+    const readings = await this.database.getReadingsForValidation(agreementId, cutoffDate)
 
     return readings.map(row => ({
       id: row.id,
       agreementId: row.agreement_id,
       turbidityNtu: row.turbidity_ntu,
-      timestamp: row.timestamp,
-      locationLat: row.location_lat,
-      locationLng: row.location_lng,
+      timestamp: row.timestamp instanceof Date ? row.timestamp.toISOString() : row.timestamp,
+      locationLat: row.location_lat ?? undefined,
+      locationLng: row.location_lng ?? undefined,
       isSimulated: row.is_simulated
     }))
   }
@@ -220,21 +213,14 @@ export class OracleService {
     
     if (readings.length === 0) {
       // Check if there are any readings at all for this agreement
-      const allReadings = await (this.database as any).all(
-        'SELECT COUNT(*) as count FROM readings WHERE agreement_id = ?',
-        [agreementId]
-      )
-      
-      if (allReadings[0].count === 0) {
+      const totalReadings = await this.database.countReadingsForAgreement(agreementId)
+
+      if (totalReadings === 0) {
         throw new Error('No readings found for this agreement')
       } else {
-        // Check if readings are already validated
-        const validatedReadings = await (this.database as any).all(
-          'SELECT COUNT(*) as count FROM readings WHERE agreement_id = ? AND is_validated = 1',
-          [agreementId]
-        )
-        
-        if (validatedReadings[0].count > 0) {
+        const validatedCount = await this.database.countValidatedReadingsForAgreement(agreementId)
+
+        if (validatedCount > 0) {
           throw new Error('All readings for this agreement have already been processed')
         } else {
           throw new Error('No readings found for validation in the specified time range')
@@ -376,12 +362,7 @@ export class OracleService {
       })
 
       // Mark readings as validated
-      for (const reading of batchResult.validReadings) {
-        await (this.database as any).run(
-          'UPDATE readings SET is_validated = 1, batch_id = ? WHERE id = ?',
-          [batchId, reading.id]
-        )
-      }
+      await this.database.markReadingsAsValidated(batchId, batchResult.validReadings.map(r => r.id))
 
       console.log(`Batch submitted to contract: ${realTransactionHash}`)
       
@@ -422,10 +403,10 @@ export class OracleService {
         console.log(`Audit record published to HCS: ${hcsTransactionId}`)
         
         // Update batch with blockchain storage info
-        await (this.database as any).run(
-          'UPDATE batches SET hfs_file_id = ?, hcs_transaction_id = ? WHERE id = ?',
-          [hfsFileId, hcsTransactionId, batchId]
-        )
+        await this.database.attachBatchLedgerReferences(batchId, {
+          hfsFileId,
+          hcsTransactionId
+        })
         
       } catch (blockchainError) {
         console.error('Error storing data on blockchain:', blockchainError)

@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express'
 import crypto from 'crypto'
-import { Database } from '../database'
+import { PrismaDatabase } from '../services/orm/prismaDatabase'
 import type { SubmitReadingRequest, SimulateReadingRequest, ApiResponse } from '../types/index'
 
 interface ReadingData {
@@ -32,7 +32,7 @@ interface ReadingStats {
   days: number
 }
 
-export default function readingRoutes(database: Database) {
+export default function readingRoutes(database: PrismaDatabase) {
   const router = express.Router()
 
   // Submit a new reading

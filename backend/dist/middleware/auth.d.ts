@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { Database } from '../database';
+import { PrismaDatabase } from '../services/orm/prismaDatabase';
 interface AuthRequest extends Request {
     user?: {
         id: number;
@@ -19,7 +19,7 @@ interface JwtPayload {
 export declare class AuthMiddleware {
     private database;
     private jwtSecret;
-    constructor(database: Database);
+    constructor(database: PrismaDatabase);
     /**
      * Middleware to authenticate JWT tokens
      */

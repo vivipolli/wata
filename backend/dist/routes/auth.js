@@ -4,7 +4,7 @@ const tslib_1 = require("tslib");
 const express_1 = require("express");
 const express_rate_limit_1 = tslib_1.__importDefault(require("express-rate-limit"));
 const auth_1 = require("../services/auth");
-const database_1 = require("../database");
+const prismaDatabase_1 = require("../services/orm/prismaDatabase");
 const validation_1 = require("../middleware/validation");
 const router = (0, express_1.Router)();
 // Initialize services
@@ -14,7 +14,7 @@ let authMiddleware = null;
 // Initialize database and services
 const initializeServices = async () => {
     if (!database) {
-        database = new database_1.Database();
+        database = new prismaDatabase_1.PrismaDatabase();
         await database.initialize();
         authService = new auth_1.AuthService(database);
         authMiddleware = authService.getAuthMiddleware();

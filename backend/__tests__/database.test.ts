@@ -1,18 +1,38 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
-import { Database } from '../src/database'
+import { PrismaDatabase } from '../src/services/orm/prismaDatabase'
 
 describe('Database Tests', () => {
-  let database: Database
+  let database: PrismaDatabase
 
   beforeEach(async () => {
-    // Use in-memory database for testing
-    process.env.DB_PATH = ':memory:'
-    database = new Database()
+    process.env.NODE_ENV = 'test'
+    process.env.DATABASE_URL = 'file:./data/test-db.sqlite'
+    database = new PrismaDatabase()
     await database.initialize()
+    
+    // Clean up database before each test
+    try {
+      const { getPrismaClient } = await import('../src/services/orm/prismaDatabase')
+      const prisma = getPrismaClient()
+      await prisma.$transaction([
+        prisma.audit_records.deleteMany(),
+        prisma.investments.deleteMany(),
+        prisma.oracle_logs.deleteMany(),
+        prisma.payments.deleteMany(),
+        prisma.readings.deleteMany(),
+        prisma.batches.deleteMany(),
+        prisma.agreements.deleteMany(),
+        prisma.users.deleteMany()
+      ])
+    } catch (error) {
+      // Ignore errors if tables don't exist yet
+    }
   })
 
-  afterEach(() => {
-    database.close()
+  afterEach(async () => {
+    if (database) {
+      await database.close()
+    }
   })
 
   it('should create agreement with all V3 fields', async () => {
@@ -37,7 +57,6 @@ describe('Database Tests', () => {
   })
 
   it('should create investment', async () => {
-    // First create an agreement
     const agreementId = await database.createAgreement({
       agreementHash: 'test-hash-investment',
       producerName: 'Test Producer',
@@ -46,7 +65,6 @@ describe('Database Tests', () => {
       hectares: 50
     })
 
-    // Create investment
     const investmentId = await database.createInvestment({
       agreementId,
       investorAddress: '0.0.789012',
@@ -64,7 +82,6 @@ describe('Database Tests', () => {
   })
 
   it('should create audit record', async () => {
-    // First create an agreement
     const agreementId = await database.createAgreement({
       agreementHash: 'test-hash-audit',
       producerName: 'Test Producer',
@@ -73,7 +90,6 @@ describe('Database Tests', () => {
       hectares: 50
     })
 
-    // Create audit record
     const auditId = await database.createAuditRecord({
       agreementId,
       auditHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
@@ -96,7 +112,6 @@ describe('Database Tests', () => {
   })
 
   it('should create batch with validation status', async () => {
-    // First create an agreement
     const agreementId = await database.createAgreement({
       agreementHash: 'test-hash-batch',
       producerName: 'Test Producer',
@@ -105,7 +120,6 @@ describe('Database Tests', () => {
       hectares: 50
     })
 
-    // Create batch
     const batchId = await database.createBatch({
       agreementId,
       auditHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
@@ -125,7 +139,6 @@ describe('Database Tests', () => {
   })
 
   it('should create payment with V3 fields', async () => {
-    // First create an agreement
     const agreementId = await database.createAgreement({
       agreementHash: 'test-hash-payment',
       producerName: 'Test Producer',
@@ -134,7 +147,6 @@ describe('Database Tests', () => {
       hectares: 50
     })
 
-    // Create batch
     const batchId = await database.createBatch({
       agreementId,
       auditHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
@@ -144,7 +156,6 @@ describe('Database Tests', () => {
       validationStatus: 'pending'
     })
 
-    // Create payment
     const paymentId = await database.createPayment({
       agreementId,
       batchId,
@@ -166,7 +177,6 @@ describe('Database Tests', () => {
   })
 
   it('should get investments by agreement', async () => {
-    // First create an agreement
     const agreementId = await database.createAgreement({
       agreementHash: 'test-hash-investments',
       producerName: 'Test Producer',
@@ -175,14 +185,12 @@ describe('Database Tests', () => {
       hectares: 50
     })
 
-    // Create multiple investments
     await database.createInvestment({
       agreementId,
       investorAddress: '0.0.111111',
       amount: 500
     })
 
-    // Small delay to ensure different timestamps
     await new Promise(resolve => setTimeout(resolve, 10))
 
     await database.createInvestment({
@@ -193,14 +201,11 @@ describe('Database Tests', () => {
 
     const investments = await database.getInvestmentsByAgreement(agreementId)
     expect(investments).toHaveLength(2)
-    
-    // Check that both investments exist (order may vary due to timing)
     const amounts = investments.map(inv => inv.amount).sort((a, b) => b - a)
     expect(amounts).toEqual([1000, 500])
   })
 
   it('should get audit records by agreement', async () => {
-    // First create an agreement
     const agreementId = await database.createAgreement({
       agreementHash: 'test-hash-audits',
       producerName: 'Test Producer',
@@ -209,14 +214,12 @@ describe('Database Tests', () => {
       hectares: 50
     })
 
-    // Create multiple audit records
     await database.createAuditRecord({
       agreementId,
       auditHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
       score: 80
     })
 
-    // Small delay to ensure different timestamps
     await new Promise(resolve => setTimeout(resolve, 10))
 
     await database.createAuditRecord({
@@ -227,8 +230,6 @@ describe('Database Tests', () => {
 
     const audits = await database.getAuditRecordsByAgreement(agreementId)
     expect(audits).toHaveLength(2)
-    
-    // Check that both audit records exist (order may vary due to timing)
     const scores = audits.map(audit => audit.score).sort((a, b) => b - a)
     expect(scores).toEqual([90, 80])
   })

@@ -1,4 +1,4 @@
-import { Database } from '../database';
+import { PrismaDatabase } from './orm/prismaDatabase';
 import { OracleService } from './oracle';
 /**
  * Batch Scheduler Service
@@ -9,7 +9,7 @@ export declare class BatchSchedulerService {
     private oracleService;
     private intervalId;
     private isRunning;
-    constructor(database: Database, oracleService: OracleService);
+    constructor(database: PrismaDatabase, oracleService: OracleService);
     /**
      * Start the batch scheduler
      * Processes batches every 6 hours for all active agreements
