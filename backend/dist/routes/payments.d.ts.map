@@ -1,1 +1,0 @@
-{"version":3,"file":"payments.d.ts","sourceRoot":"","sources":["../../src/routes/payments.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,aAAa,EAAE,MAAM,oBAAoB,CAAA;AAClD,OAAO,EAAE,cAAc,EAAE,MAAM,gCAAgC,CAAA;AAC/D,OAAO,EAAE,cAAc,EAAE,MAAM,qBAAqB,CAAA;AAgBpD,MAAM,CAAC,OAAO,UAAU,aAAa,CAAC,aAAa,EAAE,aAAa,EAAE,QAAQ,EAAE,cAAc,EAAE,cAAc,EAAE,cAAc,8CA8iB3H"}

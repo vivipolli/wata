@@ -1,18 +1,19 @@
 import React from 'react'
 import { FaWater, FaChartLine, FaFileContract, FaBell, FaCircle, FaShieldAlt, FaTimes, FaDollarSign } from 'react-icons/fa'
 import type { IconType } from 'react-icons'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 
 interface Tab {
   id: string
   label: string
   icon: IconType
+  path: string
   roles?: string[]
 }
 
 interface SidebarProps {
   currentTab: string
-  onTabChange: (tab: string) => void
   isHealthy: boolean
   isOpen: boolean
   onToggle: () => void
@@ -20,23 +21,24 @@ interface SidebarProps {
 
 export default function Sidebar({ 
   currentTab, 
-  onTabChange, 
   isHealthy = false, 
   isOpen,
   onToggle
 }: SidebarProps): React.JSX.Element {
   const { user, hasRole } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const getAvailableTabs = (): Tab[] => {
    
     const allTabs: Tab[] = [
-      { id: 'producer_dashboard', label: 'Dashboard', icon: FaChartLine, roles: ['PRODUCER'] },
-      { id: 'investidor_dashboard', label: 'Dashboard', icon: FaChartLine, roles: ['INVESTOR'] },
-      { id: 'contracts', label: 'Contracts', icon: FaFileContract, roles: ['PRODUCER', 'INVESTOR'] },
-      { id: 'monitoring', label: 'Monitoring', icon: FaWater, roles: ['PRODUCER'] },
-      { id: 'payments', label: 'Payments', icon: FaDollarSign, roles: ['PRODUCER', 'INVESTOR'] },
-      { id: 'audit', label: 'Audit', icon: FaShieldAlt, roles: ['PRODUCER', 'INVESTOR'] },
-      { id: 'notifications', label: 'Notifications', icon: FaBell, roles: ['PRODUCER', 'INVESTOR'] }
+      { id: 'producer_dashboard', label: 'Dashboard', icon: FaChartLine, path: '/dashboard', roles: ['PRODUCER'] },
+      { id: 'investidor_dashboard', label: 'Dashboard', icon: FaChartLine, path: '/dashboard', roles: ['INVESTOR'] },
+      { id: 'contracts', label: 'Contracts', icon: FaFileContract, path: '/contracts', roles: ['PRODUCER', 'INVESTOR'] },
+      { id: 'monitoring', label: 'Monitoring', icon: FaWater, path: '/monitoring', roles: ['PRODUCER'] },
+      { id: 'payments', label: 'Payments', icon: FaDollarSign, path: '/payments', roles: ['PRODUCER', 'INVESTOR'] },
+      { id: 'audit', label: 'Audit', icon: FaShieldAlt, path: '/audit', roles: ['PRODUCER', 'INVESTOR'] },
+      { id: 'notifications', label: 'Notifications', icon: FaBell, path: '/notifications', roles: ['PRODUCER', 'INVESTOR'] }
     ]
     if (!user) {
       return allTabs.filter(tab => !tab.roles || tab.roles.length === 0)
@@ -104,15 +106,18 @@ export default function Sidebar({
           <nav className="flex-1 px-4 py-6 space-y-2">
             {tabs.map((tab) => {
               const Icon = tab.icon
+              const isActive = location.pathname === tab.path || 
+                (tab.path === '/dashboard' && (currentTab === 'producer_dashboard' || currentTab === 'investidor_dashboard'))
+              
               return (
                 <button
                   key={tab.id}
                   onClick={() => {
-                    onTabChange(tab.id)
+                    navigate(tab.path)
                     onToggle() // Close sidebar on mobile after selection
                   }}
                   className={`w-full flex items-center px-4 py-3 rounded-lg text-sm transition-all duration-200 ${
-                    currentTab === tab.id
+                    isActive
                       ? 'bg-white/20 text-gray-500 shadow-lg'
                       : 'text-gray-500/80 hover:text-gray-500 hover:bg-white/10'
                   }`}

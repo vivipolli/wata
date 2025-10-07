@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Sidebar from './components/layout/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -19,47 +20,25 @@ import { WagmiProviderWrapper } from './providers/WagmiProvider'
 import { USER_ROLES } from './utils/constants'
 
 const AppContent: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<string>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false)
   const { isHealthy } = useHealth()
   const { user, hasRole } = useAuth()
-
-  // Set default dashboard based on user role
-  useEffect(() => {
-    if (user) {
-      if (hasRole(USER_ROLES.INVESTOR)) {
-        setCurrentTab('investidor_dashboard')
-      } else if (hasRole(USER_ROLES.PRODUCER)) {
-        setCurrentTab('producer_dashboard')
-      }
-    }
-  }, [user, hasRole])
-
+  const location = useLocation()
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen)
   }
 
-  const renderTabContent = (): React.JSX.Element => {
-    switch (currentTab) {
-      case 'producer_dashboard':
-        return <Dashboard />
-      case 'investidor_dashboard':
-        return <InvestorDashboard />
-      case 'contracts':
-        return <ContractRegistration />
-      case 'monitoring':
-        return <Monitoring />
-      case 'audit':
-        return <Audit />
-      case 'notifications':
-        return <Notifications />
-      case 'payments':
-        return hasRole(USER_ROLES.INVESTOR) ? <InvestorPayments /> : <Payments />
-      default:
-        return <Dashboard />
+  // Get current tab from URL path
+  const getCurrentTabFromPath = (pathname: string): string => {
+    const path = pathname.replace('/', '')
+    if (path === '' || path === 'dashboard') {
+      return hasRole(USER_ROLES.INVESTOR) ? 'investidor_dashboard' : 'producer_dashboard'
     }
+    return path
   }
+
+  const currentTab = getCurrentTabFromPath(location.pathname)
 
   return (
     <ProtectedRoute>
@@ -67,7 +46,6 @@ const AppContent: React.FC = () => {
         {/* Sidebar */}
         <Sidebar
           currentTab={currentTab}
-          onTabChange={setCurrentTab}
           isHealthy={isHealthy}
           isOpen={sidebarOpen}
           onToggle={toggleSidebar}
@@ -75,14 +53,25 @@ const AppContent: React.FC = () => {
         
         {/* Main content */}
         <div className="lg:ml-64">
-          <Header
-            currentTab={currentTab}
-            onTabChange={setCurrentTab}
-            isHealthy={isHealthy}
-            onToggleSidebar={toggleSidebar}
-          />
+        <Header
+          isHealthy={isHealthy}
+          onToggleSidebar={toggleSidebar}
+        />
           <main className="pt-16 p-6">
-            {renderTabContent()}
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={
+                hasRole(USER_ROLES.INVESTOR) ? <InvestorDashboard /> : <Dashboard />
+              } />
+              <Route path="/contracts" element={<ContractRegistration />} />
+              <Route path="/monitoring" element={<Monitoring />} />
+              <Route path="/audit" element={<Audit />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/payments" element={
+                hasRole(USER_ROLES.INVESTOR) ? <InvestorPayments /> : <Payments />
+              } />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
           </main>
         </div>
       </div>
@@ -92,15 +81,17 @@ const AppContent: React.FC = () => {
 
 function App(): React.JSX.Element {
   return (
-    <WagmiProviderWrapper>
-      <AuthProvider>
-        <WalletProvider>
-          <NotificationProvider>
-            <AppContent />
-          </NotificationProvider>
-        </WalletProvider>
-      </AuthProvider>
-    </WagmiProviderWrapper>
+    <Router>
+      <WagmiProviderWrapper>
+        <AuthProvider>
+          <WalletProvider>
+            <NotificationProvider>
+              <AppContent />
+            </NotificationProvider>
+          </WalletProvider>
+        </AuthProvider>
+      </WagmiProviderWrapper>
+    </Router>
   )
 }
 

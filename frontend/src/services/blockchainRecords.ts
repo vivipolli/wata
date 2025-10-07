@@ -36,7 +36,7 @@ class BlockchainRecordsService {
     offset: number = 0
   ): Promise<BlockchainRecordsResponse> {
     try {
-      const response = await apiClient.get('/api/blockchain/records', {
+      const response = await apiClient.get('/payments/blockchain-records', {
         params: {
           userType,
           userAddress,

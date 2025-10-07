@@ -4,7 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import UserMenu from './auth/UserMenu'
 import WalletConnectButton from './wallet/WalletConnectButton'
 
-interface HeaderPropsExtended extends HeaderProps {
+interface HeaderPropsExtended {
+  isHealthy?: boolean
   onToggleSidebar: () => void
 }
 
