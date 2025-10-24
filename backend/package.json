@@ -15,7 +15,7 @@
     "prepare": "prisma generate",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "postinstall": "npm run build"
+    "postinstall": "npm run build && npm run prisma:migrate"
   },
   "dependencies": {
     "@hashgraph/sdk": "^2.7.0",

@@ -1,17 +1,39 @@
 import apiClient from './api'
 
+export interface BlockchainRecordAgreement {
+  id: number
+  agreement_hash: string
+  producer_name: string
+  producer_address: string
+  base_value: number
+  hectares: number
+  location_lat?: number
+  location_lng?: number
+  duration_days?: number
+  created_at: string
+  is_active: boolean
+  blockchain_id?: number
+  transaction_id?: string | null
+  total_invested?: number
+  total_paid?: number
+}
+
 export interface BlockchainRecord {
   id: number
   agreementId: number
+  batchId?: number | null
   amount: number
   status: string
-  auditHash: string
-  score: number
-  timestamp: string
-  hcsTransactionId?: string
-  hfsFileId?: string
-  producerAddress: string
-  investorAddress?: string
+  auditHash?: string | null
+  score?: number | null
+  createdAt: string
+  processedAt?: string | null
+  transactionHash?: string | null
+  hcsTransactionId?: string | null
+  hfsFileId?: string | null
+  producerAddress?: string | null
+  investorAddress?: string | null
+  agreement?: BlockchainRecordAgreement | null
 }
 
 export interface BlockchainRecordsResponse {
@@ -19,10 +41,39 @@ export interface BlockchainRecordsResponse {
   data?: {
     records: BlockchainRecord[]
     total: number
-    page: number
-    limit: number
+    page?: number
+    limit?: number
   }
   error?: string
+}
+
+const normalizeRecord = (record: any): BlockchainRecord => {
+  const agreement = record.agreement ?? null
+
+  const amount = typeof record.amount === 'number' ? record.amount : Number(record.amount || 0)
+  const score = typeof record.score === 'number'
+    ? record.score
+    : typeof record.score === 'string'
+      ? Number(record.score)
+      : null
+
+  return {
+    id: record.id,
+    agreementId: record.agreement_id ?? record.agreementId ?? agreement?.id ?? 0,
+    batchId: record.batch_id ?? record.batchId ?? null,
+    amount,
+    status: record.status ?? 'pending',
+    auditHash: record.audit_hash ?? record.auditHash ?? null,
+    score: Number.isNaN(score) ? null : score,
+    createdAt: record.created_at ?? record.timestamp ?? '',
+    processedAt: record.processed_at ?? null,
+    transactionHash: record.transaction_hash ?? record.transactionHash ?? null,
+    hcsTransactionId: record.hcs_transaction_id ?? record.hcsTransactionId ?? null,
+    hfsFileId: record.hfs_file_id ?? record.hfsFileId ?? null,
+    producerAddress: record.producer_address ?? record.producerAddress ?? agreement?.producer_address ?? null,
+    investorAddress: record.investor_address ?? record.investorAddress ?? null,
+    agreement
+  }
 }
 
 class BlockchainRecordsService {
@@ -44,7 +95,20 @@ class BlockchainRecordsService {
           offset
         }
       })
-      return response.data
+      const apiResponse = response.data
+
+      if (apiResponse?.success && apiResponse?.data?.records) {
+        const normalizedRecords = apiResponse.data.records.map((record: any) => normalizeRecord(record))
+        return {
+          success: true,
+          data: {
+            ...apiResponse.data,
+            records: normalizedRecords
+          }
+        }
+      }
+
+      return apiResponse
     } catch (error: any) {
       console.error('Error fetching blockchain records:', error)
       return {
@@ -65,7 +129,20 @@ class BlockchainRecordsService {
       const response = await apiClient.get(`/api/blockchain/records/agreement/${agreementId}`, {
         params: { limit }
       })
-      return response.data
+      const apiResponse = response.data
+
+      if (apiResponse?.success && apiResponse?.data?.records) {
+        const normalizedRecords = apiResponse.data.records.map((record: any) => normalizeRecord(record))
+        return {
+          success: true,
+          data: {
+            ...apiResponse.data,
+            records: normalizedRecords
+          }
+        }
+      }
+
+      return apiResponse
     } catch (error: any) {
       console.error('Error fetching agreement blockchain records:', error)
       return {
