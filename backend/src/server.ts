@@ -23,6 +23,11 @@ import type { HealthStatus } from './types/index.js'
 
 dotenv.config()
 
+// Map DB_PATH to DATABASE_URL if needed (for Railway compatibility)
+if (process.env.DB_PATH && !process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = `file:${process.env.DB_PATH}`
+}
+
 const app = express()
 const PORT = process.env.PORT || 3001
 
