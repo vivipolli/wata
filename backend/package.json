@@ -5,18 +5,19 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "start": "npm run prisma:generate && npm run prisma:migrate && node dist/server.js",
+    "start": "npm run prisma:generate && npm run prisma:migrate:prod && node dist/server.js",
     "start:dev": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "test": "jest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
+    "prisma:migrate:prod": "DATABASE_URL=\"file:/tmp/wata.db\" prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prepare": "prisma generate",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "postinstall": "npm run build && npm run prisma:generate && npm run prisma:migrate"
+    "postinstall": "npm run build && npm run prisma:generate && npm run prisma:migrate:prod"
   },
   "dependencies": {
     "@hashgraph/sdk": "^2.7.0",
