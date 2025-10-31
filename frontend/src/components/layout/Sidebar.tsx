@@ -3,6 +3,7 @@ import { FaWater, FaChartLine, FaFileContract, FaBell, FaCircle, FaShieldAlt, Fa
 import type { IconType } from 'react-icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import logo from '../../assets/logo.svg'
 
 interface Tab {
   id: string
@@ -80,7 +81,7 @@ export default function Sidebar({
           <div className="flex items-center justify-between p-4 border-white/20">
             <div className="flex items-center space-x-3">
               <div className="w-16 h-16 rounded-lg flex items-center justify-center">
-                <img src="/src/assets/logo.svg" alt="W.A.T.A. Logo" className="h-80 w-80" />
+                <img src={logo} alt="W.A.T.A. Logo" className="h-80 w-80" />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-primary-500">W.A.T.A.</h1>

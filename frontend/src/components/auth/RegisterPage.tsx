@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { USER_ROLES } from '../../utils/constants'
 import LoadingSpinner from '../common/LoadingSpinner'
+import logo from '../../assets/logo.svg'
 
 interface RegisterPageProps {
   onSwitchToLogin: () => void
@@ -94,7 +95,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onSwitchToLogin }) => {
         {/* Header */}
         <div className="text-center">
           <div className="mx-auto h-16 w-16 bg-gradient-to-r from-[#94b9ff] to-[#cdffd8] rounded-full flex items-center justify-center mb-4">
-            <img src="/src/assets/logo.svg" alt="W.A.T.A. Logo" className="h-8 w-8" />
+            <img src={logo} alt="W.A.T.A. Logo" className="h-8 w-8" />
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
             Join W.A.T.A.
