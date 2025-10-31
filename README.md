@@ -2,9 +2,16 @@
 
 A blockchain-based Payment for Ecosystem Services (PES) platform for water quality monitoring and automated payments using Hedera Hashgraph.
 
+## 🎥 Pitch Video
+
+<video width="100%" controls>
+  <source src="W.A.T.A.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 ## 🎯 Project Overview
 
-W.A.T.A. Chain (Water Accountability Tokenized Agreement) is a decentralized platform that automates payments for environmental services (PES) based on water quality data collected via IoT and processed through oracles on the Hedera Hashgraph network.
+W.A.T.A. Chain (Water Accountability Transaction Automation) is a decentralized platform that automates payments for environmental services (PES) based on water quality data collected via IoT and processed through oracles on the Hedera Hashgraph network.
 
 The architecture implements a three-layer solution that connects IoT sensors in the field, data validation oracles, and smart contracts on the blockchain, creating a transparent and automated system for compensating rural producers for environmental conservation practices.
 
@@ -165,71 +172,6 @@ The relayer service monitors blockchain events and processes payments:
 5. **Automated Payment**: Relayer processes payment and transfers HBAR
 6. **Audit Trail**: All actions recorded on blockchain for transparency
 
-## 🛠️ Development
-
-### Smart Contract Development
-
-```bash
-cd contracts
-
-# Run tests
-yarn hardhat test
-
-# Verify contract on Hedera
-yarn hardhat verify --network hedera_testnet <CONTRACT_ADDRESS>
-```
-
-### Backend Development
-
-```bash
-cd backend
-
-# Run with auto-reload
-yarn dev
-
-# Check logs
-tail -f logs/app.log
-```
-
-### Frontend Development
-
-```bash
-cd frontend
-
-# Development server
-yarn dev
-
-# Build for production
-yarn build
-```
-
-## 🔧 Configuration
-
-### Hedera Testnet Setup
-
-1. Create account at [Hedera Portal](https://portal.hedera.com/)
-2. Get test HBAR from [Hedera Testnet Faucet](https://portal.hedera.com/)
-3. Export private key and account ID
-4. Update environment variables
-
-### Environment Variables
-
-**Backend (.env)**:
-```
-HEDERA_ACCOUNT_ID=0.0.123456
-HEDERA_PRIVATE_KEY=302e020100300506032b657004220420...
-HEDERA_NETWORK=testnet
-CONTRACT_ADDRESS=0x...
-CONTRACT_OWNER_PRIVATE_KEY=0x...
-PORT=3001
-DB_PATH=./data/wata.db
-```
-
-**Contracts (.env)**:
-```
-PRIVATE_KEY=0x...
-```
-
 ## 📊 Monitoring & Analytics
 
 - Real-time water quality dashboards
@@ -244,45 +186,3 @@ PRIVATE_KEY=0x...
 - On-chain storage limited to essential data (hashes, addresses, values)
 - Relayer pattern for secure payment processing
 
-## 🚀 Deployment
-
-### Production Deployment
-
-1. Deploy smart contract to Hedera Mainnet
-2. Set up production database (PostgreSQL recommended)
-3. Configure production environment variables
-4. Deploy backend to cloud provider
-5. Deploy frontend to CDN
-
-### Monitoring
-
-- Set up logging and monitoring for backend services
-- Monitor blockchain events and transaction status
-- Track payment processing and compliance metrics
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch
-3. Make changes
-4. Add tests
-5. Submit pull request
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
-## 🆘 Support
-
-For issues and questions:
-- Create GitHub issue
-- Check documentation
-- Review smart contract code
-
-## 🔮 Future Enhancements
-
-- Integration with real IoT sensors
-- Multi-token support (HTS tokens)
-- Advanced compliance algorithms
-- Mobile application
-- Integration with other blockchain networks

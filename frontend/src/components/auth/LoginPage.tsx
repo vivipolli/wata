@@ -59,7 +59,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToRegister }) => {
             Welcome to W.A.T.A.
           </h2>
           <p className="text-gray-600">
-            Water Accountability Tokenized Agreement
+            Water Accountability Transaction Automation
           </p>
           <p className="text-sm text-gray-500 mt-2">
             Secure access to your environmental impact dashboard

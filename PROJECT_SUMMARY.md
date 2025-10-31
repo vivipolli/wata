@@ -2,7 +2,7 @@
 
 ## 🎯 Project Overview
 
-W.A.T.A. Chain (Water Accountability Tokenized Agreement) is a decentralized platform that automates payments for environmental services (PES) based on water quality data collected via IoT and processed through oracles on the Hedera Hashgraph network.
+W.A.T.A. Chain (Water Accountability Transaction Automation) is a decentralized platform that automates payments for environmental services (PES) based on water quality data collected via IoT and processed through oracles on the Hedera Hashgraph network.
 
 The architecture implements a three-layer solution that connects IoT sensors in the field, data validation oracles, and smart contracts on the blockchain, creating a transparent and automated system for compensating rural producers for environmental conservation practices.
 
