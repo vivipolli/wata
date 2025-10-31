@@ -21,7 +21,8 @@
   },
   "dependencies": {
     "@hashgraph/sdk": "^2.7.0",
-    "@prisma/client": "^6.16.3",
+    "@pinata/sdk": "^2.1.0",
+    "@prisma/client": "6.16.3",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

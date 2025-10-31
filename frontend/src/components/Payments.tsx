@@ -23,6 +23,7 @@ import HashDisplay from './HashDisplay'
 import PageLayout from './layout/PageLayout'
 import apiClient from '../services/api'
 import { blockchainRecordsService, type BlockchainRecord } from '../services/blockchainRecords'
+import NFTCertificateButton from './payments/NFTCertificateButton'
 
 interface PaymentStats {
   totalReceived: number
@@ -49,6 +50,12 @@ interface PaymentDetail {
     hectares: number
     baseValue: number
   }
+  nftTokenId?: string
+  nftSerial?: number
+  nftTransactionId?: string
+  nftMetadataUri?: string
+  producerNftTransferred?: boolean
+  producerNftTransferTx?: string
 }
 
 const mapPaymentDetail = (payment: any, fallbackProducerAddress?: string): PaymentDetail => {
@@ -71,7 +78,13 @@ const mapPaymentDetail = (payment: any, fallbackProducerAddress?: string): Payme
           hectares: payment.agreement.hectares,
           baseValue: payment.agreement.base_value
         }
-      : undefined
+      : undefined,
+    nftTokenId: payment.nft_token_id ?? payment.nftTokenId,
+    nftSerial: payment.nft_serial ?? payment.nftSerial,
+    nftTransactionId: payment.nft_transaction_id ?? payment.nftTransactionId,
+    nftMetadataUri: payment.nft_metadata_uri ?? payment.nftMetadataUri,
+    producerNftTransferred: payment.producer_nft_transferred ?? payment.producerNftTransferred ?? false,
+    producerNftTransferTx: payment.producer_nft_transfer_tx ?? payment.producerNftTransferTx
   }
 }
 
@@ -457,46 +470,69 @@ const Payments: React.FC = () => {
                   .map((payment) => (
                     <div
                       key={payment.id}
-                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                      className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
                     >
-                      <div className="flex items-center space-x-4">
-                        {getStatusIcon(payment.status)}
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-medium text-lg">{formatHBAR(payment.amount)}</span>
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColorClasses(payment.status)}`}>
-                              {payment.status.toUpperCase()}
-                            </span>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          {getStatusIcon(payment.status)}
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium text-lg">{formatHBAR(payment.amount)}</span>
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColorClasses(payment.status)}`}>
+                                {payment.status.toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              Agreement #{payment.agreementId}
+                            </div>
+                            {payment.score != null && (
+                              <div className="text-xs text-gray-400 mt-1">Score: {formatScore(payment.score)}</div>
+                            )}
                           </div>
-                          <div className="text-sm text-gray-500">
-                            Agreement #{payment.agreementId}
-                          </div>
-                          {payment.score != null && (
-                            <div className="text-xs text-gray-400 mt-1">Score: {formatScore(payment.score)}</div>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">
+                            {payment.processedAt ? formatDate(payment.processedAt) : 'Pending approval'}
+                          </p>
+                          <p className="text-xs text-gray-400">Created: {formatDate(payment.createdAt)}</p>
+                          {payment.auditHash && (
+                            <div className="mt-2 space-y-1">
+                              <HashDisplay
+                                hash={payment.auditHash}
+                                label="Audit Hash"
+                                type="audit"
+                                className="text-xs"
+                              />
+                              <div className="flex items-center text-xs text-gray-400">
+                                <FaDatabase className="mr-1" />
+                                <span>Stored on Hedera HFS</span>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
 
-                      <div className="text-right">
-                        <p className="text-sm text-gray-500">
-                          {payment.processedAt ? formatDate(payment.processedAt) : 'Pending approval'}
-                        </p>
-                        <p className="text-xs text-gray-400">Created: {formatDate(payment.createdAt)}</p>
-                        {payment.auditHash && (
-                          <div className="mt-2 space-y-1">
-                            <HashDisplay
-                              hash={payment.auditHash}
-                              label="Audit Hash"
-                              type="audit"
-                              className="text-xs"
-                            />
-                            <div className="flex items-center text-xs text-gray-400">
-                              <FaDatabase className="mr-1" />
-                              <span>Stored on Hedera HFS</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      {payment.status === 'completed' && payment.nftTokenId && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <NFTCertificateButton
+                            payment={{
+                              id: payment.id,
+                              nftTokenId: payment.nftTokenId,
+                              nftSerial: payment.nftSerial,
+                              nftTransactionId: payment.nftTransactionId,
+                              nftMetadataUri: payment.nftMetadataUri,
+                              producerNftTransferred: payment.producerNftTransferred,
+                              producerNftTransferTx: payment.producerNftTransferTx,
+                              amount: payment.amount,
+                              score: payment.score,
+                              agreementId: payment.agreementId
+                            }}
+                            userAddress={producerAddress}
+                            onSuccess={() => fetchAgreementPayments(selectedAgreementId!)}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
               </div>

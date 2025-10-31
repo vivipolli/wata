@@ -4,6 +4,7 @@ import { HederaService } from '../src/services/hedera'
 import { RelayerService } from '../src/services/relayer'
 import { hcsService } from '../src/services/hcs'
 import { hfsService } from '../src/services/hfs'
+import { NftService, type MintCertificateParams, type MintCertificateResult } from '../src/services/nft'
 
 class MockHederaService extends HederaService {
   async initialize(): Promise<void> {
@@ -26,6 +27,22 @@ class MockHederaService extends HederaService {
   async getAccountInfo(): Promise<any> {
     return {
       balance: { toString: () => '1000000000' }
+    }
+  }
+}
+
+class MockNftService extends NftService {
+  async initialize(): Promise<void> {
+    console.log('Mock NFT service initialized')
+  }
+
+  async mintCertificate(params: MintCertificateParams): Promise<MintCertificateResult> {
+    return {
+      tokenId: '0.0.999999',
+      serialNumber: params.agreementId,
+      metadata: JSON.stringify({ test: true }),
+      metadataUri: `https://gateway.pinata.cloud/ipfs/test-${params.agreementId}`,
+      transactionId: `mint-${Date.now()}`
     }
   }
 }
@@ -61,6 +78,7 @@ describe('Relayer Integration Tests', () => {
   let database: PrismaDatabase
   let hederaService: HederaService
   let relayerService: RelayerService
+  let nftService: NftService
 
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DB_PATH
@@ -70,7 +88,10 @@ describe('Relayer Integration Tests', () => {
     hederaService = new MockHederaService()
     await hederaService.initialize()
 
-    relayerService = new RelayerService(hederaService, database)
+    nftService = new MockNftService()
+    await nftService.initialize()
+
+    relayerService = new RelayerService(hederaService, database, nftService)
   })
 
   afterAll(async () => {
@@ -139,6 +160,8 @@ describe('Relayer Integration Tests', () => {
       expect(payments[0].amount).toBe(5000)
       expect(payments[0].status).toBe('completed')
       expect(payments[0].transaction_hash).toBeDefined()
+      expect(payments[0].nft_token_id).toBe('0.0.999999')
+      expect(payments[0].nft_serial).toBe(agreementId)
     })
 
     it('should not process payments for scores below threshold', async () => {
@@ -281,7 +304,7 @@ describe('Relayer Integration Tests', () => {
 
   describe('Relayer Service Lifecycle', () => {
     it('should start and stop correctly', async () => {
-      const newRelayerService = new RelayerService(hederaService, database)
+      const newRelayerService = new RelayerService(hederaService, database, nftService)
       await newRelayerService.start()
       expect((newRelayerService as any).isRunning).toBe(true)
       newRelayerService.stop()
@@ -289,7 +312,7 @@ describe('Relayer Integration Tests', () => {
     })
 
     it('should handle starting already running service', async () => {
-      const newRelayerService = new RelayerService(hederaService, database)
+      const newRelayerService = new RelayerService(hederaService, database, nftService)
       await newRelayerService.start()
       await expect(newRelayerService.start()).resolves.not.toThrow()
       newRelayerService.stop()

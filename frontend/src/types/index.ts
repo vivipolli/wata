@@ -82,6 +82,35 @@ export interface Payment {
   score?: number
   audit_hash?: string
   batch_id?: number
+  nft_token_id?: string
+  nft_serial?: number
+  nft_transaction_id?: string
+  nft_metadata_uri?: string
+  producer_nft_transferred?: boolean
+  producer_nft_transfer_tx?: string
+}
+
+export interface NFTCertificate {
+  producer?: {
+    tokenId: string
+    serialNumber: number
+    metadataUri: string
+    transactionId: string
+  }
+  investor?: {
+    tokenId: string
+    serialNumber: number
+    metadataUri: string
+    transactionId: string
+  }
+}
+
+export interface NFTPendingInfo {
+  serialNumber: number
+  tokenId: string
+  agreementId: number
+  amount: number
+  created_at: string
 }
 
 export type PaymentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'

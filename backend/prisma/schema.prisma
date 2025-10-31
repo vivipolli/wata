@@ -27,15 +27,16 @@ model agreements {
   is_active        Boolean   @default(true)
   blockchain_id    Int?
   transaction_id   String?
-  investor_address String?
-  governance_mode  String    @default("AUTO")
-  total_invested   Float     @default(0)
-  total_paid       Float     @default(0)
-  batches          batches[]
-  payments         payments[]
-  readings         readings[]
-  investments      investments[]
-  audit_records    audit_records[]
+  investor_address  String?
+  hedera_account_id String?
+  governance_mode   String    @default("AUTO")
+  total_invested    Float     @default(0)
+  total_paid        Float     @default(0)
+  batches           batches[]
+  payments          payments[]
+  readings          readings[]
+  investments       investments[]
+  audit_records     audit_records[]
 }
 
 model readings {
@@ -90,6 +91,18 @@ model payments {
   hcs_transaction_id String?
   hfs_file_id        String?
   investor_address   String?
+  nft_token_id       String?
+  nft_serial         Int?
+  nft_transaction_id String?
+  nft_metadata_uri   String?
+  investor_nft_token_id       String?
+  investor_nft_serial         Int?
+  investor_nft_transaction_id String?
+  investor_nft_metadata_uri   String?
+  producer_nft_transferred    Boolean   @default(false)
+  producer_nft_transfer_tx    String?
+  investor_nft_transferred    Boolean   @default(false)
+  investor_nft_transfer_tx    String?
   agreement          agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   batch              batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
 }

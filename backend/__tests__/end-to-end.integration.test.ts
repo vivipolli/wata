@@ -4,6 +4,7 @@ import { HederaService } from '../src/services/hedera'
 import { RelayerService } from '../src/services/relayer'
 import { hcsService } from '../src/services/hcs'
 import { hfsService } from '../src/services/hfs'
+import { NftService, type MintCertificateParams, type MintCertificateResult } from '../src/services/nft'
 
 class MockHederaService extends HederaService {
   async initialize(): Promise<void> {
@@ -53,6 +54,7 @@ describe('W.A.T.A. Chain End-to-End Integration Tests', () => {
   let database: PrismaDatabase
   let hederaService: HederaService
   let relayerService: RelayerService
+  let nftService: NftService
 
   beforeAll(async () => {
     process.env.DATABASE_URL = 'file:./data/test-db.sqlite'
@@ -62,7 +64,24 @@ describe('W.A.T.A. Chain End-to-End Integration Tests', () => {
     hederaService = new MockHederaService()
     await hederaService.initialize()
 
-    relayerService = new RelayerService(hederaService, database)
+    nftService = new (class extends NftService {
+      async initialize(): Promise<void> {
+        console.log('Mock NFT service initialized for E2E')
+      }
+
+      async mintCertificate(params: MintCertificateParams): Promise<MintCertificateResult> {
+        return {
+          tokenId: '0.0.999999',
+          serialNumber: params.agreementId,
+          metadata: JSON.stringify({ e2e: true }),
+          metadataUri: `https://gateway.pinata.cloud/ipfs/e2e-${params.agreementId}`,
+          transactionId: `mint-${Date.now()}`
+        }
+      }
+    })()
+    await nftService.initialize()
+
+    relayerService = new RelayerService(hederaService, database, nftService)
     await relayerService.initialize()
   })
 
@@ -157,6 +176,8 @@ describe('W.A.T.A. Chain End-to-End Integration Tests', () => {
       expect(payments[0].audit_hash).toBe(auditHash)
       expect(payments[0].hcs_transaction_id).toBeDefined()
       expect(payments[0].hfs_file_id).toBeDefined()
+      expect(payments[0].nft_token_id).toBe('0.0.999999')
+      expect(payments[0].nft_serial).toBe(agreementId)
       expect(payments[0].investor_address).toBeDefined()
 
       expect(hcsPublishSpy).toHaveBeenCalledWith(

@@ -1,6 +1,8 @@
 # W.A.T.A. Chain - Water Quality PES Platform
 
-A blockchain-based Payment for Ecosystem Services (PES) platform for water quality monitoring and automated payments using Hedera Hashgraph.
+Clean water, trusted by data. Transparent PES on Hedera.
+
+A Hedera-powered Payment for Ecosystem Services (PES) platform for water quality monitoring, on-chain accountability, and automated HBAR payments.
 
 ## 🎯 Project Overview
 
@@ -15,6 +17,22 @@ The architecture implements a three-layer solution that connects IoT sensors in 
 • **Increase transparency and reliability** through blockchain technology
 • **Facilitate access for small producers** to environmental compensation programs
 • **Create a scalable model** for different regions and types of environmental services
+
+## ✨ What makes W.A.T.A. different
+
+- **Dual, soulbound NFT certificates** for each payment: one for the producer (environmental metrics) and one for the investor (financial/impact), both sharing the same audit hash for traceability
+- **Unified smart contract** with governance modes (AUTO, HYBRID) and investment support
+- **Batch-level HCS audit trail** for cost-efficient, immutable compliance records
+- **Automatic NFT transfer** to producers when associated, with safe fallback and claim flow
+- **Event-driven relayer** that executes HBAR payments and persists audit references
+
+## 🟣 Hedera Integration
+
+- **HTS (Hedera Token Service)**: Mint soulbound-like certificate NFTs (producer and investor)
+- **HCS (Hedera Consensus Service)**: Publish audit records and validated batches at payment approval
+- **HFS (Hedera File Service)**: Optional storage for signed audit reports
+- **HBAR Payments**: Automated transfers executed by the relayer using Hedera SDK
+- **Wallets**: Ready for HashPack/Blade (producer association and future investor flows)
 
 ## 🏗️ Architecture
 
@@ -107,6 +125,8 @@ cp .env.example .env
 # HEDERA_PRIVATE_KEY=302e020100300506032b657004220420...
 # CONTRACT_ADDRESS=0x... (from deployment)
 # CONTRACT_OWNER_PRIVATE_KEY=0x...
+# NFT_CERTIFICATION_TOKEN_ID=0.0.xxxxxx (pre-minted NFT token for certificates)
+# NFT_CERT_METADATA_BASE_URI=https://example.com/certificates (optional metadata URI prefix)
 
 # Start the backend
 yarn dev

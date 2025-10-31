@@ -6,6 +6,7 @@ import { HederaService } from './services/hedera.js'
 import { RelayerService } from './services/relayer.js'
 import { OracleService } from './services/oracle.js'
 import { BatchSchedulerService } from './services/batchScheduler.js'
+import { NftService } from './services/nft.js'
 import agreementRoutes from './routes/agreements.js'
 import readingRoutes from './routes/readings.js'
 import paymentRoutes from './routes/payments.js'
@@ -13,6 +14,7 @@ import oracleRoutes from './routes/oracle.js'
 import hederaRoutes from './routes/hedera.js'
 import batchSchedulerRoutes from './routes/batchScheduler.js'
 import authRoutes from './routes/auth.js'
+import nftRoutes from './routes/nft.js'
 import { 
   securityMiddleware, 
   requestLogger, 
@@ -47,7 +49,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 // Initialize services
 const db = new PrismaDatabase()
 const hederaService = new HederaService()
-const relayerService = new RelayerService(hederaService, db)
+const nftService = new NftService()
+const relayerService = new RelayerService(hederaService, db, nftService)
 const oracleService = new OracleService(db, hederaService)
 const batchSchedulerService = new BatchSchedulerService(db, oracleService)
 
@@ -59,6 +62,7 @@ app.use('/api/payments', paymentRoutes(hederaService, db, relayerService))
 app.use('/api/oracle', oracleRoutes(db, hederaService))
 app.use('/api/hedera', hederaRoutes)
 app.use('/api/batch-scheduler', batchSchedulerRoutes(batchSchedulerService))
+app.use('/api/nft', nftRoutes)
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {

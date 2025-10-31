@@ -61,6 +61,18 @@ export interface PaymentData {
   hcsTransactionId?: string | null
   hfsFileId?: string | null
   investorAddress?: string | null
+  nftTokenId?: string | null
+  nftSerial?: number | null
+  nftTransactionId?: string | null
+  nftMetadataUri?: string | null
+  investorNftTokenId?: string | null
+  investorNftSerial?: number | null
+  investorNftTransactionId?: string | null
+  investorNftMetadataUri?: string | null
+  producerNftTransferred?: boolean
+  producerNftTransferTx?: string | null
+  investorNftTransferred?: boolean
+  investorNftTransferTx?: string | null
 }
 
 export interface BatchData {
@@ -245,7 +257,19 @@ export class PrismaDatabase {
         score: data.score ?? null,
         hcs_transaction_id: data.hcsTransactionId ?? null,
         hfs_file_id: data.hfsFileId ?? null,
-        investor_address: data.investorAddress ?? null
+        investor_address: data.investorAddress ?? null,
+        nft_token_id: data.nftTokenId ?? null,
+        nft_serial: data.nftSerial ?? null,
+        nft_transaction_id: data.nftTransactionId ?? null,
+        nft_metadata_uri: data.nftMetadataUri ?? null,
+        investor_nft_token_id: data.investorNftTokenId ?? null,
+        investor_nft_serial: data.investorNftSerial ?? null,
+        investor_nft_transaction_id: data.investorNftTransactionId ?? null,
+        investor_nft_metadata_uri: data.investorNftMetadataUri ?? null,
+        producer_nft_transferred: data.producerNftTransferred ?? false,
+        producer_nft_transfer_tx: data.producerNftTransferTx ?? null,
+        investor_nft_transferred: data.investorNftTransferred ?? false,
+        investor_nft_transfer_tx: data.investorNftTransferTx ?? null
       }
     })
     return payment.id
@@ -265,7 +289,34 @@ export class PrismaDatabase {
   async getPaymentsByAgreement(agreementId: number): Promise<payments[]> {
     return this.prisma.payments.findMany({
       where: { agreement_id: agreementId },
-      orderBy: { created_at: 'desc' }
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        agreement_id: true,
+        batch_id: true,
+        amount: true,
+        transaction_hash: true,
+        status: true,
+        created_at: true,
+        processed_at: true,
+        audit_hash: true,
+        score: true,
+        hcs_transaction_id: true,
+        hfs_file_id: true,
+        investor_address: true,
+        nft_token_id: true,
+        nft_serial: true,
+        nft_transaction_id: true,
+        nft_metadata_uri: true,
+        investor_nft_token_id: true,
+        investor_nft_serial: true,
+        investor_nft_transaction_id: true,
+        investor_nft_metadata_uri: true,
+        producer_nft_transferred: true,
+        producer_nft_transfer_tx: true,
+        investor_nft_transferred: true,
+        investor_nft_transfer_tx: true
+      }
     })
   }
 

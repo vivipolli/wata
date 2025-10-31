@@ -33,6 +33,14 @@ export interface Payment {
   auditHash: string
   createdAt: string
   processedAt?: string
+  nftTokenId?: string
+  nftSerial?: number
+  nftTransactionId?: string
+  nftMetadataUri?: string
+  investorNftTokenId?: string
+  investorNftSerial?: number
+  investorNftTransactionId?: string
+  investorNftMetadataUri?: string
 }
 
 export interface TransactionData {

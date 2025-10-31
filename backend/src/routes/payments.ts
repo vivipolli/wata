@@ -10,11 +10,51 @@ interface PaymentCheckResult {
   averageTurbidity?: number
   amount?: number
   threshold?: number
+  certificate?: {
+    producer: {
+      tokenId: string
+      serialNumber: number
+      metadataUri: string
+      transactionId: string
+    }
+    investor?: {
+      tokenId: string
+      serialNumber: number
+      metadataUri: string
+      transactionId: string
+    }
+  } | null
 }
 
 interface PaymentStats {
   pendingPayments: number
   totalPendingAmount: number
+}
+
+function appendCertificateInfo(payment: any) {
+  if (!payment) {
+    return payment
+  }
+
+  return {
+    ...payment,
+    certificate: payment.nft_token_id
+      ? {
+          producer: {
+            tokenId: payment.nft_token_id,
+            serialNumber: payment.nft_serial,
+            metadataUri: payment.nft_metadata_uri,
+            transactionId: payment.nft_transaction_id
+          },
+          investor: payment.investor_nft_token_id ? {
+            tokenId: payment.investor_nft_token_id,
+            serialNumber: payment.investor_nft_serial,
+            metadataUri: payment.investor_nft_metadata_uri,
+            transactionId: payment.investor_nft_transaction_id
+          } : undefined
+        }
+      : null
+  }
 }
 
 export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService) {
@@ -82,7 +122,8 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
         success: true,
         message: `Payment of ${paymentAmount} HBAR approved for agreement ${agreementId}`,
         amount: paymentAmount,
-        paymentId
+        paymentId,
+        certificate: null
       }
 
       const response: ApiResponse<PaymentCheckResult> = {
@@ -110,7 +151,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
 
       const response: ApiResponse = {
         success: true,
-        data: payments
+        data: payments.map(appendCertificateInfo)
       }
 
       res.json(response)
@@ -132,7 +173,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
 
       const response: ApiResponse = {
         success: true,
-        data: pendingPayments
+        data: pendingPayments.map(appendCertificateInfo)
       }
 
       res.json(response)
@@ -200,7 +241,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
 
       const response: ApiResponse = {
         success: true,
-        data: { payments }
+        data: { payments: payments.map(appendCertificateInfo) }
       }
 
       res.json(response)
@@ -238,7 +279,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
 
       const response: ApiResponse = {
         success: true,
-        data: { payments }
+        data: { payments: payments.map(appendCertificateInfo) }
       }
 
       res.json(response)
@@ -557,7 +598,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
       const response: ApiResponse = {
         success: true,
         data: {
-          records: payments,
+          records: payments.map(appendCertificateInfo),
           total: payments.length,
           userAddress
         }

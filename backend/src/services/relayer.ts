@@ -2,6 +2,7 @@ import { HederaService } from './hedera'
 import { PrismaDatabase } from './orm/prismaDatabase'
 import { hcsService, type AuditRecord } from './hcs'
 import { hfsService, type AuditReport } from './hfs'
+import { NftService, type MintCertificateResult } from './nft'
 import { ethers } from 'ethers'
 
 interface PaymentCheckResult {
@@ -12,6 +13,20 @@ interface PaymentCheckResult {
   threshold?: number
   hcsTransactionId?: string
   hfsFileId?: string
+  certificate?: {
+    producer: {
+      tokenId: string
+      serialNumber: number
+      metadataUri: string
+      transactionId: string
+    }
+    investor?: {
+      tokenId: string
+      serialNumber: number
+      metadataUri: string
+      transactionId: string
+    }
+  }
 }
 
 export class RelayerService {
@@ -20,15 +35,18 @@ export class RelayerService {
   private isRunning: boolean = false
   private contract: ethers.Contract | null = null
   private provider: ethers.Provider | null = null
-  constructor(hederaService: HederaService, database: PrismaDatabase) {
+  private nftService: NftService
+  constructor(hederaService: HederaService, database: PrismaDatabase, nftService: NftService) {
     this.hederaService = hederaService
     this.database = database
+    this.nftService = nftService
   }
 
   async initialize(): Promise<void> {
     try {
       await this.hederaService.initialize()
       await hcsService.initialize()
+      await this.nftService.initialize()
       
       this.provider = new ethers.JsonRpcProvider(process.env.HEDERA_RPC_URL || 'https://testnet.hashio.io/api')
       
@@ -219,7 +237,23 @@ export class RelayerService {
           message: 'Payment already exists',
           amount,
           hcsTransactionId,
-          hfsFileId
+          hfsFileId,
+          certificate: existingPayment.nft_token_id && existingPayment.nft_serial !== null && existingPayment.nft_serial !== undefined
+            ? {
+                producer: {
+                  tokenId: existingPayment.nft_token_id,
+                  serialNumber: existingPayment.nft_serial,
+                  metadataUri: existingPayment.nft_metadata_uri ?? '',
+                  transactionId: existingPayment.nft_transaction_id ?? ''
+                },
+                investor: existingPayment.investor_nft_token_id ? {
+                  tokenId: existingPayment.investor_nft_token_id,
+                  serialNumber: existingPayment.investor_nft_serial ?? 0,
+                  metadataUri: existingPayment.investor_nft_metadata_uri ?? '',
+                  transactionId: existingPayment.investor_nft_transaction_id ?? ''
+                } : undefined
+              }
+            : undefined
         }
       }
 
@@ -233,10 +267,43 @@ export class RelayerService {
       )
 
       if (transferResult.success) {
-        // Get batch ID from audit hash
+        let producerNft: MintCertificateResult | null = null
+        let investorNft: MintCertificateResult | null = null
+        let dualResult: any = null
+
+        try {
+          const batch = await this.getBatchByAuditHash(auditHash)
+          const investorAddr = await this.getInvestorAddress(agreementId)
+
+          if (!investorAddr) {
+            console.warn('No investor address found for agreement', agreementId)
+          }
+
+          dualResult = await this.nftService.mintDualCertificates({
+            agreementId,
+            paymentAmount: amount,
+            producerAddress,
+            investorAddress: investorAddr || '',
+            auditHash,
+            score,
+            paymentTransactionHash: transferResult.transactionHash,
+            hcsTransactionId,
+            hfsFileId,
+            batchData: batch ? {
+              readingsCount: batch.readings_count,
+              averageTurbidity: batch.average_turbidity,
+              medianTurbidity: batch.median_turbidity ?? undefined
+            } : undefined
+          })
+
+          producerNft = dualResult.producer
+          investorNft = dualResult.investor
+        } catch (error) {
+          console.error('Error minting dual NFT certificates:', error)
+        }
+
         const batch = await this.getBatchByAuditHash(auditHash)
         
-        // Record successful payment with V3 fields if available
         const paymentData: any = {
           agreementId,
           batchId: batch?.id || null,
@@ -247,10 +314,33 @@ export class RelayerService {
           transactionHash: transferResult.transactionHash
         }
 
-        // Add HCS/HFS fields and investor address
         paymentData.hcsTransactionId = hcsTransactionId
         paymentData.hfsFileId = hfsFileId
         paymentData.investorAddress = await this.getInvestorAddress(agreementId)
+
+        if (producerNft) {
+          paymentData.nftTokenId = producerNft.tokenId
+          paymentData.nftSerial = producerNft.serialNumber
+          paymentData.nftTransactionId = producerNft.transactionId
+          paymentData.nftMetadataUri = producerNft.metadataUri
+        }
+
+        if (investorNft) {
+          paymentData.investorNftTokenId = investorNft.tokenId
+          paymentData.investorNftSerial = investorNft.serialNumber
+          paymentData.investorNftTransactionId = investorNft.transactionId
+          paymentData.investorNftMetadataUri = investorNft.metadataUri
+        }
+
+        if (dualResult?.producerTransferResult) {
+          paymentData.producerNftTransferred = dualResult.producerTransferResult.success
+          paymentData.producerNftTransferTx = dualResult.producerTransferResult.transactionId || null
+        }
+
+        if (dualResult?.investorTransferResult) {
+          paymentData.investorNftTransferred = dualResult.investorTransferResult.success
+          paymentData.investorNftTransferTx = dualResult.investorTransferResult.transactionId || null
+        }
 
         await this.database.createPayment(paymentData)
 
@@ -259,7 +349,23 @@ export class RelayerService {
           message: 'Payment executed successfully',
           amount,
           hcsTransactionId,
-          hfsFileId
+          hfsFileId,
+          certificate: producerNft
+            ? {
+                producer: {
+                  tokenId: producerNft.tokenId,
+                  serialNumber: producerNft.serialNumber,
+                  metadataUri: producerNft.metadataUri,
+                  transactionId: producerNft.transactionId
+                },
+                investor: investorNft ? {
+                  tokenId: investorNft.tokenId,
+                  serialNumber: investorNft.serialNumber,
+                  metadataUri: investorNft.metadataUri,
+                  transactionId: investorNft.transactionId
+                } : undefined
+              }
+            : undefined
         }
       } else {
         return {
