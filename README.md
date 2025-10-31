@@ -4,10 +4,9 @@ A blockchain-based Payment for Ecosystem Services (PES) platform for water quali
 
 ## 🎥 Pitch Video
 
-<video width="100%" controls>
-  <source src="W.A.T.A.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+[![W.A.T.A. Chain Demo](https://img.youtube.com/vi/GiOs8k2sy3E/maxresdefault.jpg)](https://youtu.be/GiOs8k2sy3E)
+
+> **[▶️ Watch on YouTube](https://youtu.be/GiOs8k2sy3E?si=YnhDrppiQJK-FPxI)**
 
 ## 🎯 Project Overview
 
