@@ -38,8 +38,12 @@ export default function agreementRoutes(hederaService: HederaService, database: 
   const router = express.Router()
   const authMiddleware = new AuthMiddleware(database)
 
+  // Every agreements route requires an authenticated user.
+  // Creating an agreement fixes baseValue/hectares (the payout basis), so it is restricted to MANAGER.
+  router.use(authMiddleware.authenticate)
+
   router.post('/', 
-    authMiddleware.authenticate,
+    authMiddleware.requireRole('MANAGER'),
     async (req: Request, res: Response) => {
     try {
       const {
@@ -147,7 +151,6 @@ export default function agreementRoutes(hederaService: HederaService, database: 
   })
 
   router.get('/', 
-    authMiddleware.authenticate,
     authMiddleware.blockProducersFromAllAgreements,
     async (req: Request, res: Response) => {
     try {

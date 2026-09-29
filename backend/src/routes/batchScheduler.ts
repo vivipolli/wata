@@ -1,12 +1,19 @@
 import { Router, Request, Response } from 'express'
 import { BatchSchedulerService } from '../services/batchScheduler'
 import { ApiResponse } from '../types'
+import type { PrismaDatabase } from '../services/orm/prismaDatabase'
+import { AuthMiddleware } from '../middleware/auth'
 
-export default function batchSchedulerRoutes(batchSchedulerService: BatchSchedulerService) {
+export default function batchSchedulerRoutes(batchSchedulerService: BatchSchedulerService, database: PrismaDatabase) {
   const router = Router()
+  const authMiddleware = new AuthMiddleware(database)
+  const requireManager = authMiddleware.requireRole('MANAGER')
+
+  // All scheduler routes require an authenticated user; mutating ones require MANAGER
+  router.use(authMiddleware.authenticate)
 
   // Start batch scheduler
-  router.post('/start', async (req: Request, res: Response) => {
+  router.post('/start', requireManager, async (req: Request, res: Response) => {
     try {
       await batchSchedulerService.start()
       
@@ -27,7 +34,7 @@ export default function batchSchedulerRoutes(batchSchedulerService: BatchSchedul
   })
 
   // Stop batch scheduler
-  router.post('/stop', async (req: Request, res: Response) => {
+  router.post('/stop', requireManager, async (req: Request, res: Response) => {
     try {
       batchSchedulerService.stop()
       
@@ -69,7 +76,7 @@ export default function batchSchedulerRoutes(batchSchedulerService: BatchSchedul
   })
 
   // Manually process batch for specific agreement
-  router.post('/process/:agreementId', async (req: Request, res: Response) => {
+  router.post('/process/:agreementId', requireManager, async (req: Request, res: Response) => {
     try {
       const agreementId = parseInt(req.params.agreementId)
       

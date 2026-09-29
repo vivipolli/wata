@@ -31,8 +31,13 @@ if (process.env.DB_PATH && !process.env.DATABASE_URL) {
 const app = express()
 const PORT = process.env.PORT || 3001
 
-// Trust proxy for Railway deployment
-app.set('trust proxy', true)
+// Trust only the configured number of reverse-proxy hops (Railway: 1).
+// `true` would trust any client-supplied X-Forwarded-For and let callers bypass rate limits.
+const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS ?? '0', 10)
+if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0) {
+  throw new Error('TRUST_PROXY_HOPS must be a non-negative integer')
+}
+app.set('trust proxy', trustProxyHops)
 
 // Security middleware
 app.use(securityMiddleware)
@@ -57,8 +62,8 @@ app.use('/api/agreements', agreementRoutes(hederaService, db))
 app.use('/api/readings', readingRoutes(db))
 app.use('/api/payments', paymentRoutes(hederaService, db, relayerService))
 app.use('/api/oracle', oracleRoutes(db, hederaService))
-app.use('/api/hedera', hederaRoutes)
-app.use('/api/batch-scheduler', batchSchedulerRoutes(batchSchedulerService))
+app.use('/api/hedera', hederaRoutes(hederaService, db))
+app.use('/api/batch-scheduler', batchSchedulerRoutes(batchSchedulerService, db))
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {

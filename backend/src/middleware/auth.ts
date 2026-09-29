@@ -15,9 +15,30 @@ interface AuthRequest extends Request {
 interface JwtPayload {
   userId: number
   email: string
-  role: string
+  role?: string
+  type?: 'refresh'
   iat: number
   exp: number
+}
+
+const JWT_ISSUER = 'wata-chain'
+const JWT_AUDIENCE = 'wata-users'
+const JWT_ALGORITHM: jwt.Algorithm = 'HS256'
+const MIN_JWT_SECRET_LENGTH = 32
+
+/**
+ * Reads JWT_SECRET from the environment and refuses to start without a strong value.
+ * There is intentionally no fallback: a default secret committed to the repo would let
+ * anyone forge tokens.
+ */
+export function loadJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret || secret.length < MIN_JWT_SECRET_LENGTH) {
+    throw new Error(
+      `JWT_SECRET must be set and at least ${MIN_JWT_SECRET_LENGTH} characters long`
+    )
+  }
+  return secret
 }
 
 export class AuthMiddleware {
@@ -26,7 +47,7 @@ export class AuthMiddleware {
 
   constructor(database: PrismaDatabase) {
     this.database = database
-    this.jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
+    this.jwtSecret = loadJwtSecret()
   }
 
   /**
@@ -47,15 +68,28 @@ export class AuthMiddleware {
       const token = authHeader.substring(7) // Remove 'Bearer ' prefix
       
       // Verify JWT token
-      const decoded = jwt.verify(token, this.jwtSecret) as JwtPayload
+      const decoded = jwt.verify(token, this.jwtSecret, {
+        algorithms: [JWT_ALGORITHM],
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE
+      }) as JwtPayload
+
+      // Refresh tokens must only be accepted by the refresh endpoint
+      if (decoded.type === 'refresh') {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid token'
+        })
+        return
+      }
       
       // Get user from database to ensure they still exist and are active
       const user = await this.database.getUserById(decoded.userId)
       
-      if (!user) {
+      if (!user || !user.is_active) {
         res.status(401).json({
           success: false,
-          error: 'Invalid token - user not found'
+          error: 'Invalid token - user not found or inactive'
         })
         return
       }
@@ -230,9 +264,10 @@ export class AuthMiddleware {
     }
 
     return jwt.sign(payload, this.jwtSecret, {
+      algorithm: JWT_ALGORITHM,
       expiresIn: process.env.JWT_EXPIRES_IN || '24h',
-      issuer: 'wata-chain',
-      audience: 'wata-users'
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE
     } as jwt.SignOptions)
   }
 
@@ -247,9 +282,10 @@ export class AuthMiddleware {
     }
 
     return jwt.sign(payload, this.jwtSecret, {
+      algorithm: JWT_ALGORITHM,
       expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-      issuer: 'wata-chain',
-      audience: 'wata-users'
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE
     } as jwt.SignOptions)
   }
 
@@ -258,7 +294,15 @@ export class AuthMiddleware {
    */
   verifyRefreshToken(token: string): JwtPayload | null {
     try {
-      const decoded = jwt.verify(token, this.jwtSecret) as JwtPayload
+      const decoded = jwt.verify(token, this.jwtSecret, {
+        algorithms: [JWT_ALGORITHM],
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE
+      }) as JwtPayload
+      // Only refresh tokens are valid here; access tokens must not mint new sessions
+      if (decoded.type !== 'refresh') {
+        return null
+      }
       return decoded
     } catch (error) {
       return null
