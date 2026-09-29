@@ -89,11 +89,22 @@ export class HederaService {
       const response = await transaction.execute(this.client!)
       const receipt = await response.getReceipt(this.client!)
       const record = await response.getRecord(this.client!)
-      const result = record.contractFunctionResult?.getUint256(0)
       const transactionId = record.transactionId?.toString()
-      
+
+      // The agreement ID is the contract's return value. A missing or out-of-range result must
+      // fail loudly: defaulting to 0 would bind this agreement to on-chain agreement #0.
+      const functionResult = record.contractFunctionResult
+      if (!functionResult) {
+        throw new Error(`createAgreement returned no function result (transaction ${transactionId ?? 'unknown'})`)
+      }
+      const result = functionResult.getUint256(0)
+      const agreementId = result == null ? NaN : Number(result.toString())
+      if (!Number.isSafeInteger(agreementId) || agreementId < 0) {
+        throw new Error(`createAgreement returned an invalid agreement ID (transaction ${transactionId ?? 'unknown'})`)
+      }
+
       return {
-        agreementId: Number(result || 0),
+        agreementId,
         transactionId: transactionId
       }
     } catch (error) {

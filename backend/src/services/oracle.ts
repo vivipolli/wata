@@ -313,9 +313,9 @@ export class OracleService {
         oracleAddress: this.oracleAddress
       })
 
-      // Get blockchain ID for the agreement
+      // Get blockchain ID for the agreement. On-chain IDs start at 0, so only null means "not deployed".
       const agreement = await this.database.getAgreement(agreementId)
-      if (!agreement || !agreement.blockchain_id) {
+      if (!agreement || agreement.blockchain_id == null) {
         console.warn(`Agreement ${agreementId} not found or not deployed to blockchain - skipping batch submission`)
         return 'skipped'
       }
