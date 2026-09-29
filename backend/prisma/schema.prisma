@@ -51,6 +51,9 @@ model readings {
   is_validated   Boolean   @default(false)
   agreement      agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   batch          batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
+
+  @@index([agreement_id, timestamp])
+  @@index([timestamp])
 }
 
 model batches {
@@ -74,6 +77,8 @@ model batches {
   payments          payments[]
   oracle_logs       oracle_logs[]
   audit_records     audit_records[]
+
+  @@index([agreement_id, created_at])
 }
 
 model payments {
@@ -92,6 +97,12 @@ model payments {
   investor_address   String?
   agreement          agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   batch              batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
+
+  // One payment per validated batch: closes the check-then-insert race in trigger-check.
+  // SQLite treats NULLs as distinct, so rows without an audit hash are not constrained.
+  @@unique([agreement_id, audit_hash])
+  @@index([agreement_id, created_at])
+  @@index([created_at])
 }
 
 model oracle_logs {

@@ -18,6 +18,11 @@ interface PaymentStats {
   totalPendingAmount: number
 }
 
+// Prisma reports unique constraint violations with code P2002
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'P2002'
+}
+
 export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService) {
   const router = express.Router()
   const authMiddleware = new AuthMiddleware(database)
@@ -86,14 +91,28 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
       // hash is recorded: the payout must come from an actual on-ledger release, which will
       // set the real hash when it executes.
       const paymentAmount = agreement.base_value * agreement.hectares
-      const paymentId = await database.createPayment({
-        agreementId,
-        batchId: latestBatch.id,
-        amount: paymentAmount,
-        status: 'pending',
-        auditHash: latestBatch.audit_hash,
-        score: latestBatch.score
-      })
+      let paymentId: number
+      try {
+        paymentId = await database.createPayment({
+          agreementId,
+          batchId: latestBatch.id,
+          amount: paymentAmount,
+          status: 'pending',
+          auditHash: latestBatch.audit_hash,
+          score: latestBatch.score
+        })
+      } catch (error) {
+        // A concurrent request inserted the same (agreement, audit hash) between the check
+        // above and this insert; the unique index rejects the duplicate.
+        if (isUniqueViolation(error)) {
+          const response: ApiResponse = {
+            success: false,
+            error: 'A payment already exists for the latest validated batch'
+          }
+          return res.status(409).json(response)
+        }
+        throw error
+      }
 
       const result = {
         success: true,
