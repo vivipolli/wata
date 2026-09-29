@@ -3,6 +3,7 @@ import { HederaService } from '../services/hedera'
 import type { PrismaDatabase } from '../services/orm/prismaDatabase'
 import { AuthMiddleware } from '../middleware/auth'
 import { RelayerService } from '../services/relayer'
+import { isUniqueViolation } from '../utils/prismaErrors'
 import type { TriggerCheckRequest, ApiResponse } from '../types/index'
 
 interface PaymentCheckResult {
@@ -16,11 +17,6 @@ interface PaymentCheckResult {
 interface PaymentStats {
   pendingPayments: number
   totalPendingAmount: number
-}
-
-// Prisma reports unique constraint violations with code P2002
-function isUniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'P2002'
 }
 
 export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService) {

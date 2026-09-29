@@ -218,6 +218,53 @@ describe('Relayer Integration Tests', () => {
     })
   })
 
+  describe('Payment reservation before transfer', () => {
+    async function createAgreement(hash: string): Promise<number> {
+      return database.createAgreement({
+        agreementHash: hash,
+        producerName: 'Test Producer',
+        producerAddress: '0.0.123456',
+        baseValue: 100,
+        hectares: 50
+      })
+    }
+
+    it('transfers only once when the same batch is paid concurrently', async () => {
+      const agreementId = await createAgreement('test-hash-concurrent')
+      const transfer = jest.spyOn(hederaService, 'transferHBAR')
+
+      const results = await Promise.all(Array.from({ length: 5 }, () =>
+        relayerService.executeHBARPayment(agreementId, '0.0.123456', 5000, 'audit-hash-concurrent', 85, '', '')
+      ))
+
+      expect(transfer).toHaveBeenCalledTimes(1)
+      expect(results.filter(r => r.message === 'Payment executed successfully')).toHaveLength(1)
+      const payments = await database.getPaymentsByAgreement(agreementId)
+      expect(payments).toHaveLength(1)
+      expect(payments[0].status).toBe('completed')
+      expect(payments[0].transaction_hash).toBeTruthy()
+      transfer.mockRestore()
+    })
+
+    it('keeps a failed transfer as failed and does not retry it implicitly', async () => {
+      const agreementId = await createAgreement('test-hash-failed-transfer')
+      const transfer = jest.spyOn(hederaService, 'transferHBAR')
+        .mockResolvedValueOnce({ success: false, error: 'Transfer failed' })
+
+      const first = await relayerService.executeHBARPayment(agreementId, '0.0.123456', 5000, 'audit-hash-failed', 85, '', '')
+      const second = await relayerService.executeHBARPayment(agreementId, '0.0.123456', 5000, 'audit-hash-failed', 85, '', '')
+
+      expect(first.success).toBe(false)
+      expect(second.message).toBe('Payment already exists')
+      expect(transfer).toHaveBeenCalledTimes(1)
+      const payments = await database.getPaymentsByAgreement(agreementId)
+      expect(payments).toHaveLength(1)
+      expect(payments[0].status).toBe('failed')
+      expect(payments[0].transaction_hash).toBeNull()
+      transfer.mockRestore()
+    })
+  })
+
   describe('Payment Event Handling', () => {
     it('should handle PaymentApproved event correctly with V3 features', async () => {
       const agreementId = await database.createAgreement({
