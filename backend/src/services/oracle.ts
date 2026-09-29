@@ -346,7 +346,12 @@ export class OracleService {
         realTransactionHash = `${accountId}@${validStart.seconds}.${validStart.nanos}`
         console.log('Constructed Transaction ID manually:', realTransactionHash)
       } else {
-        realTransactionHash = txRecord.transactionId?.toString() || 'unknown'
+        const fallback = txRecord.transactionId?.toString()
+        if (!fallback) {
+          // Never record a placeholder as proof of submission; the batch stays 'validated'
+          throw new Error(`Ledger returned no transaction ID for batch ${batchId}`)
+        }
+        realTransactionHash = fallback
       }
       
       console.log('Final transaction hash being used:', realTransactionHash)

@@ -75,6 +75,24 @@ describe('OracleService.submitValidatedBatch with on-chain agreement ID 0', () =
   })
 })
 
+describe('OracleService.submitValidatedBatch without a ledger transaction ID', () => {
+  beforeEach(() => {
+    jest.spyOn(console, 'log').mockImplementation(() => undefined)
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('fails instead of recording a placeholder hash, and does not mark the batch submitted', async () => {
+    const db = fakeDatabase(0)
+    const hedera = { submitValidatedBatch: jest.fn(async () => ({ transactionId: undefined })) }
+    const oracle = new OracleService(db, hedera as any)
+
+    await expect(oracle.submitValidatedBatch(1, batchResult())).rejects.toThrow('no transaction ID')
+    expect(db.updateBatchStatus).not.toHaveBeenCalled()
+    expect(db.createOracleLog).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'batch_submitted' }))
+  })
+})
+
 describe('HederaService.createAgreementWithSystem result handling', () => {
   let service: HederaService
 
