@@ -16,7 +16,9 @@ beforeAll(async () => {
   const { execSync } = await import('child_process')
   // --accept-data-loss: adding a unique index makes prisma prompt even when no duplicates exist.
   // This only ever targets the throwaway test database, which the suites wipe anyway.
-  execSync('DATABASE_URL=file:./data/test-db.sqlite npx prisma db push --accept-data-loss', { stdio: 'inherit' })
+  // --skip-generate: regenerating the client here rewrites node_modules while other suites load it;
+  // the client comes from `npx prisma generate`.
+  execSync('DATABASE_URL=file:./data/test-db.sqlite npx prisma db push --accept-data-loss --skip-generate', { stdio: 'inherit' })
   
   // Create Prisma client after migrations
   prisma = new PrismaClient({

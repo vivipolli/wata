@@ -37,6 +37,10 @@ class MockRelayerService {
     console.log('Mock RelayerService stopped')
   }
 }
+// Auth middleware refuses to start without a strong secret; use a fixed test-only value
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret-0123456789abcdef'
+
+import { AuthMiddleware } from '../src/middleware/auth'
 import agreementRoutes from '../src/routes/agreements'
 import readingRoutes from '../src/routes/readings'
 import paymentRoutes from '../src/routes/payments'
@@ -205,12 +209,13 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     // Clean database before creating test user
     await prismaCleanup()
 
-    try {
+    {
+      // The flows under test (agreement creation, readings, trigger-check) are MANAGER operations
       const testUser = {
         email: 'test@example.com',
         name: 'Test User',
         password: 'password123',
-        role: 'INVESTOR',
+        role: 'MANAGER',
         address: '0x742d35Cc6639C0532fEb217F5e4B9af48Bf9bA2A',
         isActive: true,
         createdAt: new Date()
@@ -220,24 +225,8 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       const userId = await database.createUser(testUser)
       console.log('Test user created with ID:', userId)
 
-      // Generate JWT token manually
-      const jwt = require('jsonwebtoken')
-      const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
-      
-      authToken = jwt.sign(
-        {
-          userId: userId,
-          email: testUser.email,
-          role: testUser.role
-        },
-        jwtSecret,
-        { expiresIn: '1h' }
-      )
-      
-      console.log('Auth token generated successfully')
-    } catch (error) {
-      console.warn('Auth setup failed, tests may fail:', error)
-      authToken = 'mock-token'
+      // Sign with the same algorithm, issuer and audience the middleware enforces
+      authToken = new AuthMiddleware(database).generateToken({ id: userId, email: testUser.email, role: testUser.role })
     }
   })
 
@@ -355,6 +344,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     it('should generate valid turbidity reading (0-20 NTU)', async () => {
       const response = await request(app)
         .post('/api/readings/simulate')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId })
         .expect(201)
 
@@ -378,6 +368,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     it('should reject simulation without agreementId', async () => {
       const response = await request(app)
         .post('/api/readings/simulate')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({})
         .expect(400)
 
@@ -421,6 +412,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       const response = await request(app)
         .post('/api/readings/submit')
+        .set('Authorization', `Bearer ${authToken}`)
         .send(readingData)
         .expect(201)
 
@@ -444,6 +436,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       const response = await request(app)
         .post('/api/readings/submit')
+        .set('Authorization', `Bearer ${authToken}`)
         .send(invalidReadingData)
         .expect(400)
 
@@ -463,6 +456,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       await request(app)
         .post('/api/readings/submit')
+        .set('Authorization', `Bearer ${authToken}`)
         .send(readingData)
         .expect(201)
 
@@ -505,6 +499,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       for (const turbidity of compliantReadings) {
         await request(app)
           .post('/api/readings/submit')
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
             agreementId: agreementId,
             turbidityNtu: turbidity,
@@ -524,6 +519,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body).toMatchObject({
@@ -542,6 +538,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       for (const turbidity of nonCompliantReadings) {
         await request(app)
           .post('/api/readings/submit')
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
             agreementId: agreementId,
             turbidityNtu: turbidity,
@@ -561,6 +558,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body).toMatchObject({
@@ -577,6 +575,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${invalidAgreementId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(404)
 
       expect(response.body).toMatchObject({
@@ -592,6 +591,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       for (const turbidity of compliantReadings) {
         await request(app)
           .post('/api/readings/submit')
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
             agreementId: agreementId,
             turbidityNtu: turbidity,
@@ -611,6 +611,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body).toMatchObject({
@@ -699,6 +700,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       for (const turbidity of readings) {
         await request(app)
           .post('/api/readings/submit')
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
             agreementId: agreementId,
             turbidityNtu: turbidity,
@@ -711,6 +713,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     it('should return recent readings', async () => {
       const response = await request(app)
         .get('/api/readings/recent')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body).toMatchObject({
@@ -730,6 +733,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     it('should respect limit parameter', async () => {
       const response = await request(app)
         .get('/api/readings/recent?limit=2')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body.data.length).toBeLessThanOrEqual(2)
@@ -740,6 +744,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     it('should return payment statistics', async () => {
       const response = await request(app)
         .get('/api/payments/stats')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body).toMatchObject({

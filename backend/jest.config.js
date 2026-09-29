@@ -21,5 +21,7 @@ export default {
   coverageReporters: ['text', 'lcov', 'html'],
   setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
   testTimeout: 15000,
+  // All database suites share one SQLite file and wipe its tables, so they must not run in parallel
+  maxWorkers: 1,
   verbose: true
 };
