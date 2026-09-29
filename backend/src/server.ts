@@ -20,6 +20,7 @@ import {
   notFoundHandler 
 } from './middleware/security.js'
 import type { HealthStatus } from './types/index.js'
+import { resolveHederaNetwork } from './utils/hederaNetwork.js'
 
 dotenv.config()
 
@@ -91,7 +92,7 @@ async function startServer(): Promise<void> {
     
     app.listen(PORT, () => {
         console.log(`🚀 W.A.T.A. Backend running on port ${PORT}`)
-        console.log(`🌐 Hedera Network: ${process.env.HEDERA_NETWORK || 'testnet'}`)
+        console.log(`🌐 Hedera Network: ${resolveHederaNetwork()}`)
         console.log(`📊 Database initialized`)
         console.log(`🔄 Relayer service started`)
         console.log(`⏰ Batch scheduler started (6-hour intervals)`)

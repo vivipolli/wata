@@ -18,6 +18,7 @@ import { ethers } from 'ethers'
 import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { sha256HexToBytes32 } from '../utils/bytes32'
+import { createHederaClient } from '../utils/hederaNetwork'
 
 dotenv.config()
 
@@ -49,7 +50,7 @@ export class HederaService {
       }
       this.contractAddress = process.env.CONTRACT_ADDRESS!
 
-      this.client = Client.forTestnet().setOperator(this.accountId, this.privateKey)
+      this.client = createHederaClient().setOperator(this.accountId, this.privateKey)
       
       if (this.contractAddress.startsWith('0x')) {
         this.contractId = ContractId.fromEvmAddress(0, 0, this.contractAddress)

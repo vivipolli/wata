@@ -8,6 +8,7 @@ import {
   Hbar,
 } from '@hashgraph/sdk'
 import { config } from 'dotenv'
+import { createHederaClient } from '../utils/hederaNetwork'
 import fs from 'fs'
 import path from 'path'
 
@@ -44,7 +45,7 @@ export class HederaFileService {
       this.operatorKey = PrivateKey.fromString(privateKeyString)
     }
     
-    this.client = Client.forTestnet()
+    this.client = createHederaClient()
     this.client.setOperator(this.operatorId, this.operatorKey)
     // Set default max transaction fee - skip for now to avoid constructor issues
     // this.client.setDefaultMaxTransactionFee(new Hbar(10))
