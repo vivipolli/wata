@@ -34,14 +34,33 @@ interface CreateAgreementResponse {
   message?: string | undefined
 }
 
+// Body fields that must never be accepted when creating an agreement
+const FORBIDDEN_CREATE_FIELDS = ['blockchainId', 'blockchain_id', 'signedTransaction'] as const
+
 export default function agreementRoutes(hederaService: HederaService, database: PrismaDatabase) {
   const router = express.Router()
   const authMiddleware = new AuthMiddleware(database)
 
+  // Every agreements route requires an authenticated user.
+  // Creating an agreement fixes baseValue/hectares (the payout basis), so it is restricted to MANAGER.
+  router.use(authMiddleware.authenticate)
+
   router.post('/', 
-    authMiddleware.authenticate,
+    authMiddleware.requireRole('MANAGER'),
     async (req: Request, res: Response) => {
     try {
+      // The on-chain ID must come from the contract's own transaction record, never from the
+      // client: a caller-supplied ID could bind this agreement to another producer's agreement.
+      // Client-signed creation is not implemented, so a signed transaction is rejected too.
+      const body = req.body ?? {}
+      const forbidden = FORBIDDEN_CREATE_FIELDS.filter(field => Object.prototype.hasOwnProperty.call(body, field))
+      if (forbidden.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Field(s) not accepted: ${forbidden.join(', ')}. The on-chain agreement ID is assigned by the contract.`
+        } as ApiResponse)
+      }
+
       const {
         producerName,
         producerAddress,
@@ -49,9 +68,8 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         hectares,
         locationLat,
         locationLng,
-        durationDays,
-        signedTransaction
-      }: CreateAgreementWithSignatureRequest = req.body
+        durationDays
+      }: CreateAgreementWithSignatureRequest = body
 
       if (!producerName || !producerAddress || !baseValue || !hectares) {
         return res.status(400).json({
@@ -94,28 +112,16 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         durationDays
       })
 
-      // Handle blockchain integration
-      let blockchainId = null
-      let transactionId = null
-
-      if (signedTransaction || req.body.blockchainId) {
-        // Use provided blockchain ID or transaction
-        blockchainId = req.body.blockchainId
-        if (blockchainId) {
-          await database.updateAgreementBlockchainId(agreementId, blockchainId)
-        }
-      } else {
-        // Create new blockchain agreement
-        const result = await hederaService.createAgreementWithSystem(
-          agreementHash,
-          producerAddress,
-          baseValue,
-          hectares
-        )
-        blockchainId = result.agreementId
-        transactionId = result.transactionId
-        await database.updateAgreementBlockchainId(agreementId, result.agreementId)
-      }
+      // Create the agreement on-chain; the ID is read from the transaction record
+      const result = await hederaService.createAgreementWithSystem(
+        agreementHash,
+        producerAddress,
+        baseValue,
+        hectares
+      )
+      const blockchainId = result.agreementId
+      const transactionId = result.transactionId
+      await database.updateAgreementBlockchainId(agreementId, blockchainId)
 
       const response: ApiResponse<CreateAgreementResponse> = {
         success: true,
@@ -147,7 +153,6 @@ export default function agreementRoutes(hederaService: HederaService, database: 
   })
 
   router.get('/', 
-    authMiddleware.authenticate,
     authMiddleware.blockProducersFromAllAgreements,
     async (req: Request, res: Response) => {
     try {

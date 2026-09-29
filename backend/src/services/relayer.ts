@@ -2,6 +2,7 @@ import { HederaService } from './hedera'
 import { PrismaDatabase } from './orm/prismaDatabase'
 import { hcsService, type AuditRecord } from './hcs'
 import { hfsService, type AuditReport } from './hfs'
+import { isUniqueViolation } from '../utils/prismaErrors'
 import { ethers } from 'ethers'
 
 interface PaymentCheckResult {
@@ -208,19 +209,35 @@ export class RelayerService {
     hfsFileId: string
   ): Promise<PaymentCheckResult> {
     try {
-      // Check if payment already exists for this audit hash
-      const existingPayments = await this.database.getPaymentsByAgreement(agreementId)
-      const existingPayment = existingPayments.find(p => p.audit_hash === auditHash)
-      
-      if (existingPayment) {
-        console.log(`Payment already exists for audit hash ${auditHash}, skipping`)
-        return {
-          success: true,
-          message: 'Payment already exists',
+      // Reserve the payment before moving funds. The unique index on (agreement_id, audit_hash)
+      // makes this insert the lock: a concurrent or repeated call for the same batch fails here,
+      // before any transfer, so the same batch can never be paid twice.
+      const batch = await this.getBatchByAuditHash(auditHash)
+      let paymentId: number
+      try {
+        paymentId = await this.database.createPayment({
+          agreementId,
+          batchId: batch?.id ?? null,
           amount,
+          status: 'pending',
+          auditHash,
+          score,
           hcsTransactionId,
-          hfsFileId
+          hfsFileId,
+          investorAddress: await this.getInvestorAddress(agreementId)
+        })
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          console.log(`Payment already exists for audit hash ${auditHash}, skipping`)
+          return {
+            success: true,
+            message: 'Payment already exists',
+            amount,
+            hcsTransactionId,
+            hfsFileId
+          }
         }
+        throw error
       }
 
       // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
@@ -233,26 +250,7 @@ export class RelayerService {
       )
 
       if (transferResult.success) {
-        // Get batch ID from audit hash
-        const batch = await this.getBatchByAuditHash(auditHash)
-        
-        // Record successful payment with V3 fields if available
-        const paymentData: any = {
-          agreementId,
-          batchId: batch?.id || null,
-          amount,
-          status: 'completed',
-          auditHash,
-          score,
-          transactionHash: transferResult.transactionHash
-        }
-
-        // Add HCS/HFS fields and investor address
-        paymentData.hcsTransactionId = hcsTransactionId
-        paymentData.hfsFileId = hfsFileId
-        paymentData.investorAddress = await this.getInvestorAddress(agreementId)
-
-        await this.database.createPayment(paymentData)
+        await this.database.updatePaymentStatus(paymentId, 'completed', transferResult.transactionHash)
 
         return {
           success: true,
@@ -262,6 +260,8 @@ export class RelayerService {
           hfsFileId
         }
       } else {
+        // The reservation stays as 'failed'; a retry for this batch needs a deliberate manual action
+        await this.database.updatePaymentStatus(paymentId, 'failed')
         return {
           success: false,
           message: transferResult.error || 'Payment execution failed'

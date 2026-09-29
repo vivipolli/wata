@@ -2,6 +2,42 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { Request, Response, NextFunction } from 'express'
 
+const DEVELOPMENT_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173'
+]
+
+function readPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return fallback
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+  return parsed
+}
+
+/**
+ * Origins allowed to call the API. Read from ALLOWED_ORIGINS (comma-separated, exact URLs).
+ * CORS_ORIGIN (single value) is still honoured for backwards compatibility.
+ * Local dev origins are added only when NODE_ENV === 'development'.
+ */
+export function getAllowedOrigins(): string[] {
+  const configured = [process.env.ALLOWED_ORIGINS, process.env.CORS_ORIGIN]
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+
+  const origins = process.env.NODE_ENV === 'development'
+    ? [...configured, ...DEVELOPMENT_ORIGINS]
+    : configured
+
+  return Array.from(new Set(origins))
+}
+
 /**
  * Security middleware configuration
  */
@@ -29,59 +65,35 @@ export const securityMiddleware = [
     }
   }),
 
-  // Rate limiting temporarily disabled for Railway deployment
-  // rateLimit({
-  //   windowMs: 15 * 60 * 1000, // 15 minutes
-  //   max: process.env.NODE_ENV === 'development' ? 1000 : 500, // More generous in development
-  //   message: {
-  //     success: false,
-  //     error: 'Too many requests, please try again later'
-  //   },
-  //   standardHeaders: true,
-  //   legacyHeaders: false,
-  //   skip: (req) => {
-  //     // Skip rate limiting for health checks and development
-  //     return req.path === '/api/health' || process.env.NODE_ENV === 'development'
-  //   }
-  // }),
+  // Global rate limiting (configurable via RATE_LIMIT_WINDOW_MS / RATE_LIMIT_MAX_REQUESTS)
+  rateLimit({
+    windowMs: readPositiveInt('RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+    limit: readPositiveInt('RATE_LIMIT_MAX_REQUESTS', 300),
+    message: {
+      success: false,
+      error: 'Too many requests, please try again later'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.path === '/api/health'
+  }),
 
-  // CORS configuration
+  // CORS: exact-match allowlist only. No platform wildcards (*.vercel.app, ngrok).
   (req: Request, res: Response, next: NextFunction) => {
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173',
-      'https://wata-mu.vercel.app',
-      process.env.CORS_ORIGIN
-    ]
-    
     const origin = req.headers.origin
-    
-    // Allow ngrok URLs in development
-    const isNgrokUrl = origin && (
-      (origin as string).includes('.ngrok.io') || 
-      (origin as string).includes('.ngrok-free.app')
-    )
-    
-    const isVercelUrl = origin && (
-      (origin as string).includes('.vercel.app') ||
-      (origin as string).includes('wata-mu.vercel.app')
-    )
-    
-    if (allowedOrigins.includes(origin as string) || isNgrokUrl || isVercelUrl) {
+    const allowedOrigins = getAllowedOrigins()
+    const isAllowed = typeof origin === 'string' && allowedOrigins.includes(origin)
+
+    if (isAllowed) {
       res.header('Access-Control-Allow-Origin', origin)
-    } else if (process.env.NODE_ENV === 'development') {
-      res.header('Access-Control-Allow-Origin', '*')
+      res.header('Vary', 'Origin')
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
+      res.header('Access-Control-Max-Age', '86400') // 24 hours
     }
-    
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization')
-    res.header('Access-Control-Allow-Credentials', 'true')
-    res.header('Access-Control-Max-Age', '86400') // 24 hours
-    
+
     if (req.method === 'OPTIONS') {
-      res.sendStatus(200)
+      res.sendStatus(isAllowed ? 204 : 403)
     } else {
       next()
     }
@@ -93,7 +105,7 @@ export const securityMiddleware = [
  */
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 1000 : 5, // Very generous in development for testing
+  limit: process.env.NODE_ENV === 'development' ? 1000 : readPositiveInt('AUTH_RATE_LIMIT_MAX_REQUESTS', 5),
   message: {
     success: false,
     error: 'Too many authentication attempts, please try again later'

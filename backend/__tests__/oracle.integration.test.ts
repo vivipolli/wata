@@ -6,9 +6,30 @@ import { PrismaDatabase, getPrismaClient } from '../src/services/orm/prismaDatab
 import { HederaService } from '../src/services/hedera'
 import { OracleService } from '../src/services/oracle'
 import oracleRoutes from '../src/routes/oracle'
+import { AuthMiddleware } from '../src/middleware/auth'
 
 // Jest types
 declare const jest: any
+
+// HFS/HCS build real SDK clients at import time; the oracle flow only needs their results
+jest.mock('../src/services/hcs', () => ({
+  hcsService: {
+    async publishAuditRecord(): Promise<string> {
+      return `0.0.123456@${Date.now()}`
+    }
+  }
+}))
+
+jest.mock('../src/services/hfs', () => ({
+  hfsService: {
+    async createAuditReport(): Promise<string> {
+      return '0.0.789012'
+    }
+  }
+}))
+
+// Auth middleware refuses to start without a strong secret; use a fixed test-only value
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret-0123456789abcdef'
 
 // Mock Hedera service for testing
 class MockHederaService extends HederaService {
@@ -34,6 +55,7 @@ describe('Oracle Integration Tests', () => {
 let database: PrismaDatabase
   let hederaService: HederaService
   let oracleService: OracleService
+  let authToken: string
 
   beforeAll(async () => {
     // Setup test database
@@ -55,6 +77,19 @@ let database: PrismaDatabase
     app.use(cors())
     app.use(express.json())
     app.use('/api/oracle', oracleRoutes(database, hederaService))
+
+    // Oracle routes require authentication; processing requires MANAGER
+    const email = 'oracle-manager@test.local'
+    const prisma = getPrismaClient()
+    await prisma.users.deleteMany({ where: { email } })
+    const userId = await database.createUser({
+      email,
+      name: 'Oracle Manager',
+      password: 'unused',
+      role: 'MANAGER',
+      isActive: true
+    })
+    authToken = new AuthMiddleware(database).generateToken({ id: userId, email, role: 'MANAGER' })
   })
 
   afterAll(async () => {
@@ -114,6 +149,7 @@ let database: PrismaDatabase
 
       const response = await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId })
 
       expect(response.status).toBe(200)
@@ -128,6 +164,7 @@ let database: PrismaDatabase
     it('should return 404 for non-existent agreement', async () => {
       const response = await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId: 999 })
 
       expect(response.status).toBe(404)
@@ -138,6 +175,7 @@ let database: PrismaDatabase
     it('should return 400 for invalid agreement ID', async () => {
       const response = await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId: 'invalid' })
 
       expect(response.status).toBe(400)
@@ -172,6 +210,7 @@ let database: PrismaDatabase
 
       const response = await request(app)
         .post('/api/oracle/process-all')
+        .set('Authorization', `Bearer ${authToken}`)
 
       expect(response.status).toBe(200)
       expect(response.body.success).toBe(true)
@@ -203,6 +242,7 @@ let database: PrismaDatabase
       // Process batch
       const processResponse = await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId })
 
       expect(processResponse.status).toBe(200)
@@ -215,6 +255,7 @@ let database: PrismaDatabase
 
       const response = await request(app)
         .get(`/api/oracle/batch/${batchId}`)
+        .set('Authorization', `Bearer ${authToken}`)
 
       expect(response.status).toBe(200)
       expect(response.body.success).toBe(true)
@@ -226,6 +267,7 @@ let database: PrismaDatabase
     it('should return 404 for non-existent batch', async () => {
       const response = await request(app)
         .get('/api/oracle/batch/999')
+        .set('Authorization', `Bearer ${authToken}`)
 
       expect(response.status).toBe(404)
       expect(response.body.success).toBe(false)
@@ -254,10 +296,12 @@ let database: PrismaDatabase
 
       await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId })
 
       const response = await request(app)
         .get(`/api/oracle/batches/agreement/${agreementId}`)
+        .set('Authorization', `Bearer ${authToken}`)
 
       expect(response.status).toBe(200)
       expect(response.body.success).toBe(true)
@@ -287,10 +331,12 @@ let database: PrismaDatabase
 
       await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId })
 
       const response = await request(app)
         .get('/api/oracle/logs')
+        .set('Authorization', `Bearer ${authToken}`)
 
       expect(response.status).toBe(200)
       expect(response.body.success).toBe(true)
@@ -303,6 +349,7 @@ let database: PrismaDatabase
     it('should return oracle statistics', async () => {
       const response = await request(app)
         .get('/api/oracle/stats')
+        .set('Authorization', `Bearer ${authToken}`)
 
       expect(response.status).toBe(200)
       expect(response.body.success).toBe(true)
@@ -347,6 +394,7 @@ let database: PrismaDatabase
 
       const response = await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId })
 
       expect(response.status).toBe(200)
@@ -374,6 +422,7 @@ let database: PrismaDatabase
 
       const response = await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId })
 
       expect(response.status).toBe(200)
@@ -413,6 +462,7 @@ let database: PrismaDatabase
 
       const response = await request(app)
         .post('/api/oracle/process')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ agreementId })
 
       expect(response.status).toBe(200)

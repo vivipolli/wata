@@ -44,7 +44,7 @@ const ensureAuthenticated = async (req: AuthRequest, res: Response, next: NextFu
  * Register a new user
  */
 router.post('/register',
-  // authLimiter, // Temporarily disabled for testing
+  authLimiter,
   sanitizeInput,
   validateUserRegistration,
   handleValidationErrors,
@@ -93,7 +93,7 @@ router.post('/register',
  * Login user
  */
 router.post('/login',
-  // authLimiter, // Temporarily disabled for testing
+  authLimiter,
   sanitizeInput,
   validateUserLogin,
   handleValidationErrors,

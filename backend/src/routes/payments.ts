@@ -1,7 +1,9 @@
 import express, { Request, Response } from 'express'
 import { HederaService } from '../services/hedera'
-import { PrismaDatabase } from '../services/orm/prismaDatabase'
+import type { PrismaDatabase } from '../services/orm/prismaDatabase'
+import { AuthMiddleware } from '../middleware/auth'
 import { RelayerService } from '../services/relayer'
+import { isUniqueViolation } from '../utils/prismaErrors'
 import type { TriggerCheckRequest, ApiResponse } from '../types/index'
 
 interface PaymentCheckResult {
@@ -19,9 +21,14 @@ interface PaymentStats {
 
 export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService) {
   const router = express.Router()
+  const authMiddleware = new AuthMiddleware(database)
+  const requireManager = authMiddleware.requireRole('MANAGER')
+
+  // Every payments route requires an authenticated user
+  router.use(authMiddleware.authenticate)
 
   // Trigger payment check for an agreement
-  router.post('/trigger-check/:agreementId', async (req: Request, res: Response) => {
+  router.post('/trigger-check/:agreementId', requireManager, async (req: Request, res: Response) => {
     try {
       const agreementId = parseInt(req.params.agreementId)
 
@@ -64,23 +71,48 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
         return res.status(400).json(response)
       }
 
-      // Process payment manually (simplified for testing)
+      // Idempotency: one payment record per validated batch (keyed by audit hash)
+      const existingPayments = await database.getPaymentsByAgreement(agreementId)
+      const existing = existingPayments.find(p => p.audit_hash === latestBatch.audit_hash)
+      if (existing) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'A payment already exists for the latest validated batch',
+          data: { paymentId: existing.id, status: existing.status }
+        }
+        return res.status(409).json(response)
+      }
+
+      // Record an eligible payment as PENDING. No transfer happens here and no transaction
+      // hash is recorded: the payout must come from an actual on-ledger release, which will
+      // set the real hash when it executes.
       const paymentAmount = agreement.base_value * agreement.hectares
-      
-      // Record payment in database
-      const paymentId = await database.createPayment({
-        agreementId,
-        batchId: latestBatch.id,
-        amount: paymentAmount,
-        status: 'completed',
-        auditHash: latestBatch.audit_hash,
-        score: latestBatch.score,
-        transactionHash: 'test_transaction_' + Date.now()
-      })
-      
+      let paymentId: number
+      try {
+        paymentId = await database.createPayment({
+          agreementId,
+          batchId: latestBatch.id,
+          amount: paymentAmount,
+          status: 'pending',
+          auditHash: latestBatch.audit_hash,
+          score: latestBatch.score
+        })
+      } catch (error) {
+        // A concurrent request inserted the same (agreement, audit hash) between the check
+        // above and this insert; the unique index rejects the duplicate.
+        if (isUniqueViolation(error)) {
+          const response: ApiResponse = {
+            success: false,
+            error: 'A payment already exists for the latest validated batch'
+          }
+          return res.status(409).json(response)
+        }
+        throw error
+      }
+
       const result = {
         success: true,
-        message: `Payment of ${paymentAmount} HBAR approved for agreement ${agreementId}`,
+        message: `Agreement ${agreementId} is eligible: payment of ${paymentAmount} recorded as pending release`,
         amount: paymentAmount,
         paymentId
       }
@@ -147,47 +179,14 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
     }
   })
 
-  // Manual payment processing (for testing)
-  router.post('/process/:paymentId', async (req: Request, res: Response) => {
-    try {
-      const paymentId = parseInt(req.params.paymentId)
-      
-      // Get payment details
-      const payment = await database.getPayment(paymentId)
-      if (!payment) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Payment not found'
-        }
-        return res.status(404).json(response)
-      }
-
-      if (payment.status !== 'pending') {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Payment is not in pending status'
-        }
-        return res.status(400).json(response)
-      }
-
-      // Process payment through relayer
-      await (relayerService as any).processPayment(payment)
-
-      const response: ApiResponse = {
-        success: true,
-        message: 'Payment processed successfully'
-      }
-
-      res.json(response)
-    } catch (error) {
-      console.error('Error processing payment:', error)
-      const response: ApiResponse = {
-        success: false,
-        error: 'Failed to process payment',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      }
-      res.status(500).json(response)
+  // Payment release is not implemented yet. The previous handler called a non-existent
+  // relayer method and always failed with 500. Release will come from the escrow contract.
+  router.post('/process/:paymentId', requireManager, (req: Request, res: Response) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Payment release is not available yet: it will be executed by the escrow contract'
     }
+    res.status(501).json(response)
   })
 
   // Get payment history
@@ -280,110 +279,19 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
     }
   })
 
-  // Investor contribution to agreement (legacy - uses owner wallet)
-  router.post('/contribute/:agreementId', async (req: Request, res: Response) => {
-    try {
-      const agreementId = parseInt(req.params.agreementId)
-      const { amount, investorAddress } = req.body
-
-      if (isNaN(agreementId) || agreementId < 0) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Invalid agreement ID'
-        }
-        return res.status(400).json(response)
-      }
-
-      if (!amount || amount <= 0) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Investment amount must be greater than 0'
-        }
-        return res.status(400).json(response)
-      }
-
-      if (!investorAddress) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Investor address is required'
-        }
-        return res.status(400).json(response)
-      }
-
-      // Check if agreement exists and is active
-      const agreement = await database.getAgreement(agreementId)
-      if (!agreement) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Agreement not found'
-        }
-        return res.status(404).json(response)
-      }
-
-      if (!agreement.is_active) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Agreement is not active'
-        }
-        return res.status(400).json(response)
-      }
-
-      // Create investment record in database
-      const investmentId = await database.createInvestment({
-        agreementId,
-        investorAddress,
-        amount,
-        transactionHash: null
-      })
-
-      // Execute investment on Hedera blockchain
-      const hederaResult = await hederaService.investInAgreement(
-        agreementId,
-        amount,
-        investorAddress
-      )
-
-      if (hederaResult.success) {
-        // Update investment with transaction hash
-        await database.updateInvestmentTransactionHash(investmentId, hederaResult.transactionId)
-
-        const response: ApiResponse = {
-          success: true,
-          data: {
-            investmentId,
-            agreementId,
-            amount,
-            investorAddress,
-            transactionId: hederaResult.transactionId,
-            message: 'Investment successful'
-          }
-        }
-
-        res.json(response)
-      } else {
-        // Rollback database investment if blockchain fails
-        await database.deleteInvestment(investmentId)
-        
-        const response: ApiResponse = {
-          success: false,
-          error: 'Failed to execute investment on blockchain',
-          message: hederaResult.error
-        }
-        res.status(500).json(response)
-      }
-    } catch (error) {
-      console.error('Error processing investment:', error)
-      const response: ApiResponse = {
-        success: false,
-        error: 'Failed to process investment',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      }
-      res.status(500).json(response)
+  // Operator-funded investments are disabled. The previous handler signed and paid the
+  // investment with the system operator key, so any caller could drain the operator account.
+  // Investments must be signed and paid by the investor's own wallet.
+  router.post('/contribute/:agreementId', (req: Request, res: Response) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Operator-funded investments are disabled. The investor must sign and pay from their own wallet.'
     }
+    res.status(410).json(response)
   })
 
   // Create investment transaction for investor to sign
-  router.post('/create-investment-transaction/:agreementId', async (req: Request, res: Response) => {
+  router.post('/create-investment-transaction/:agreementId', authMiddleware.requireRole('INVESTOR'), async (req: Request, res: Response) => {
     try {
       const agreementId = parseInt(req.params.agreementId)
       const { amount, investorAddress } = req.body

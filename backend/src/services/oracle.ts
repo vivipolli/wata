@@ -313,9 +313,9 @@ export class OracleService {
         oracleAddress: this.oracleAddress
       })
 
-      // Get blockchain ID for the agreement
+      // Get blockchain ID for the agreement. On-chain IDs start at 0, so only null means "not deployed".
       const agreement = await this.database.getAgreement(agreementId)
-      if (!agreement || !agreement.blockchain_id) {
+      if (!agreement || agreement.blockchain_id == null) {
         console.warn(`Agreement ${agreementId} not found or not deployed to blockchain - skipping batch submission`)
         return 'skipped'
       }
@@ -346,7 +346,12 @@ export class OracleService {
         realTransactionHash = `${accountId}@${validStart.seconds}.${validStart.nanos}`
         console.log('Constructed Transaction ID manually:', realTransactionHash)
       } else {
-        realTransactionHash = txRecord.transactionId?.toString() || 'unknown'
+        const fallback = txRecord.transactionId?.toString()
+        if (!fallback) {
+          // Never record a placeholder as proof of submission; the batch stays 'validated'
+          throw new Error(`Ledger returned no transaction ID for batch ${batchId}`)
+        }
+        realTransactionHash = fallback
       }
       
       console.log('Final transaction hash being used:', realTransactionHash)

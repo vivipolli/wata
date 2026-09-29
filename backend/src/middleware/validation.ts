@@ -141,7 +141,10 @@ export const sanitizeInput = (req: Request, res: Response, next: NextFunction): 
  */
 export const authRateLimit = {
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
+  // Failed attempts per IP per window (AUTH_RATE_LIMIT_MAX_REQUESTS, default 5).
+  // Successful requests are not counted, so legitimate users are not locked out.
+  limit: Number.parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS ?? '5', 10) || 5,
+  skipSuccessfulRequests: true,
   message: {
     success: false,
     error: 'Too many authentication attempts, please try again later'

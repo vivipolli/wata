@@ -9,6 +9,7 @@ import {
   Status,
 } from '@hashgraph/sdk'
 import { config } from 'dotenv'
+import { createHederaClient } from '../utils/hederaNetwork'
 
 config()
 
@@ -38,7 +39,7 @@ export class HederaConsensusService {
       this.operatorKey = PrivateKey.fromString(privateKeyString)
     }
     
-    this.client = Client.forTestnet()
+    this.client = createHederaClient()
     this.client.setOperator(this.operatorId, this.operatorKey)
 
   }

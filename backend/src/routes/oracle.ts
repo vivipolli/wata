@@ -23,6 +23,10 @@ export default function oracleRoutes(database: PrismaDatabase, hederaService: He
   const router = express.Router()
   const oracleService = new OracleService(database, hederaService)
   const authMiddleware = new AuthMiddleware(database)
+  const requireManager = authMiddleware.requireRole('MANAGER')
+
+  // Every oracle route requires an authenticated user; triggering processing requires MANAGER
+  router.use(authMiddleware.authenticate)
 
   // ===== NEW HIERARCHICAL ROUTES: User Producer -> Contract -> Oracle Status =====
 
@@ -31,7 +35,6 @@ export default function oracleRoutes(database: PrismaDatabase, hederaService: He
    * Get oracle status for all contracts of a specific producer
    */
   router.get('/producer/:producerAddress/status',
-    authMiddleware.authenticate,
     async (req: Request, res: Response) => {
       try {
         const producerAddress = req.params.producerAddress
@@ -142,7 +145,6 @@ export default function oracleRoutes(database: PrismaDatabase, hederaService: He
    * Get detailed oracle status for a specific contract
    */
   router.get('/contract/:agreementId/status',
-    authMiddleware.authenticate,
     async (req: Request, res: Response) => {
       try {
         const agreementId = parseInt(req.params.agreementId)
@@ -259,7 +261,6 @@ export default function oracleRoutes(database: PrismaDatabase, hederaService: He
    * Get all batches for a specific contract with detailed oracle information
    */
   router.get('/contract/:agreementId/batches',
-    authMiddleware.authenticate,
     async (req: Request, res: Response) => {
       try {
         const agreementId = parseInt(req.params.agreementId)
@@ -328,7 +329,7 @@ export default function oracleRoutes(database: PrismaDatabase, hederaService: He
 
 
   // Process batch validation for a specific agreement
-  router.post('/process', async (req: Request, res: Response) => {
+  router.post('/process', requireManager, async (req: Request, res: Response) => {
     try {
       const { agreementId, hoursBack = 168 } = req.body as ProcessBatchRequest
 
@@ -384,7 +385,7 @@ export default function oracleRoutes(database: PrismaDatabase, hederaService: He
   })
 
   // Process all active agreements
-  router.post('/process-all', async (req: Request, res: Response) => {
+  router.post('/process-all', requireManager, async (req: Request, res: Response) => {
     try {
       const agreements = await database.getAgreementsWithRecentActivity(7)
       const results: BatchProcessResult[] = []

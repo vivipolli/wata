@@ -176,6 +176,29 @@ describe('Database Tests', () => {
     expect(payment?.score).toBe(75)
   })
 
+  it('should allow only one payment per (agreement, audit hash), even under concurrent inserts', async () => {
+    const agreementId = await database.createAgreement({
+      agreementHash: 'test-hash-payment-unique',
+      producerName: 'Test Producer',
+      producerAddress: '0.0.123456',
+      baseValue: 100,
+      hectares: 50
+    })
+    const auditHash = 'cd'.repeat(32)
+    const payment = { agreementId, amount: 5000, status: 'pending' as const, auditHash, score: 0.9 }
+
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => database.createPayment(payment)))
+
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1)
+    for (const r of results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')) {
+      expect(r.reason.code).toBe('P2002')
+    }
+    expect(await database.getPaymentsByAgreement(agreementId)).toHaveLength(1)
+
+    // A different audit hash for the same agreement is a different payment
+    await expect(database.createPayment({ ...payment, auditHash: 'ef'.repeat(32) })).resolves.toBeGreaterThan(0)
+  })
+
   it('should get investments by agreement', async () => {
     const agreementId = await database.createAgreement({
       agreementHash: 'test-hash-investments',

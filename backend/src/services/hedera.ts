@@ -17,15 +17,10 @@ import {
 import { ethers } from 'ethers'
 import crypto from 'crypto'
 import dotenv from 'dotenv'
+import { sha256HexToBytes32 } from '../utils/bytes32'
+import { createHederaClient } from '../utils/hederaNetwork'
 
 dotenv.config()
-
-function formatBytes32String(str: string): Uint8Array {
-  const hash = Buffer.from(str, 'utf8')
-  const padded = Buffer.alloc(32)
-  hash.copy(padded, 0, 0, Math.min(hash.length, 32))
-  return new Uint8Array(padded)
-}
 
 interface AgreementData {
   agreementHash: string
@@ -55,7 +50,7 @@ export class HederaService {
       }
       this.contractAddress = process.env.CONTRACT_ADDRESS!
 
-      this.client = Client.forTestnet().setOperator(this.accountId, this.privateKey)
+      this.client = createHederaClient().setOperator(this.accountId, this.privateKey)
       
       if (this.contractAddress.startsWith('0x')) {
         this.contractId = ContractId.fromEvmAddress(0, 0, this.contractAddress)
@@ -83,7 +78,7 @@ export class HederaService {
         .setFunction(
           'createAgreement',
           new ContractFunctionParameters()
-            .addBytes32(this.formatBytes32String(agreementHash))
+            .addBytes32(sha256HexToBytes32(agreementHash))
             .addAddress(contractAddress)
             .addUint256(baseValue)
             .addUint256(hectares)
@@ -95,11 +90,22 @@ export class HederaService {
       const response = await transaction.execute(this.client!)
       const receipt = await response.getReceipt(this.client!)
       const record = await response.getRecord(this.client!)
-      const result = record.contractFunctionResult?.getUint256(0)
       const transactionId = record.transactionId?.toString()
-      
+
+      // The agreement ID is the contract's return value. A missing or out-of-range result must
+      // fail loudly: defaulting to 0 would bind this agreement to on-chain agreement #0.
+      const functionResult = record.contractFunctionResult
+      if (!functionResult) {
+        throw new Error(`createAgreement returned no function result (transaction ${transactionId ?? 'unknown'})`)
+      }
+      const result = functionResult.getUint256(0)
+      const agreementId = result == null ? NaN : Number(result.toString())
+      if (!Number.isSafeInteger(agreementId) || agreementId < 0) {
+        throw new Error(`createAgreement returned an invalid agreement ID (transaction ${transactionId ?? 'unknown'})`)
+      }
+
       return {
-        agreementId: Number(result || 0),
+        agreementId,
         transactionId: transactionId
       }
     } catch (error) {
@@ -116,7 +122,7 @@ export class HederaService {
           'requestPayment',
           new ContractFunctionParameters()
             .addUint256(agreementId)
-            .addBytes32(formatBytes32String(auditHash))
+            .addBytes32(sha256HexToBytes32(auditHash))
         )
 
       const frozenTransaction = await transaction.freezeWith(this.client!)
@@ -139,7 +145,7 @@ export class HederaService {
           'submitValidatedBatch',
           new ContractFunctionParameters()
             .addUint256(agreementId)
-            .addBytes32(formatBytes32String(auditHash))
+            .addBytes32(sha256HexToBytes32(auditHash))
             .addUint256(score)
         )
 
@@ -209,7 +215,7 @@ export class HederaService {
         .setFunction(
           'recordAudit',
           new ContractFunctionParameters()
-            .addBytes32(formatBytes32String(auditHash))
+            .addBytes32(sha256HexToBytes32(auditHash))
         )
 
       const frozenTransaction = await transaction.freezeWith(this.client!)
@@ -384,12 +390,5 @@ export class HederaService {
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
-  }
-
-  private formatBytes32String(str: string): Uint8Array {
-    const hash = Buffer.from(str, 'utf8')
-    const padded = Buffer.alloc(32)
-    hash.copy(padded, 0, 0, Math.min(hash.length, 32))
-    return new Uint8Array(padded)
   }
 }

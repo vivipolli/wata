@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express'
 import crypto from 'crypto'
-import { PrismaDatabase } from '../services/orm/prismaDatabase'
+import type { PrismaDatabase } from '../services/orm/prismaDatabase'
+import { AuthMiddleware } from '../middleware/auth'
 import type { SubmitReadingRequest, SimulateReadingRequest, ApiResponse } from '../types/index'
 
 interface ReadingData {
@@ -34,9 +35,15 @@ interface ReadingStats {
 
 export default function readingRoutes(database: PrismaDatabase) {
   const router = express.Router()
+  const authMiddleware = new AuthMiddleware(database)
+
+  // Every readings route requires an authenticated user.
+  // Writing readings is restricted to MANAGER until device-signed ingestion (ECDSA) lands.
+  router.use(authMiddleware.authenticate)
+  const requireManager = authMiddleware.requireRole('MANAGER')
 
   // Submit a new reading
-  router.post('/submit', async (req: Request, res: Response) => {
+  router.post('/submit', requireManager, async (req: Request, res: Response) => {
     try {
       const {
         agreementId,
@@ -116,7 +123,7 @@ export default function readingRoutes(database: PrismaDatabase) {
   })
 
   // Simulate a reading
-  router.post('/simulate', async (req: Request, res: Response) => {
+  router.post('/simulate', requireManager, async (req: Request, res: Response) => {
     try {
       const { agreementId, locationLat, locationLng }: SimulateReadingRequest = req.body
 
