@@ -17,15 +17,9 @@ import {
 import { ethers } from 'ethers'
 import crypto from 'crypto'
 import dotenv from 'dotenv'
+import { sha256HexToBytes32 } from '../utils/bytes32'
 
 dotenv.config()
-
-function formatBytes32String(str: string): Uint8Array {
-  const hash = Buffer.from(str, 'utf8')
-  const padded = Buffer.alloc(32)
-  hash.copy(padded, 0, 0, Math.min(hash.length, 32))
-  return new Uint8Array(padded)
-}
 
 interface AgreementData {
   agreementHash: string
@@ -83,7 +77,7 @@ export class HederaService {
         .setFunction(
           'createAgreement',
           new ContractFunctionParameters()
-            .addBytes32(this.formatBytes32String(agreementHash))
+            .addBytes32(sha256HexToBytes32(agreementHash))
             .addAddress(contractAddress)
             .addUint256(baseValue)
             .addUint256(hectares)
@@ -116,7 +110,7 @@ export class HederaService {
           'requestPayment',
           new ContractFunctionParameters()
             .addUint256(agreementId)
-            .addBytes32(formatBytes32String(auditHash))
+            .addBytes32(sha256HexToBytes32(auditHash))
         )
 
       const frozenTransaction = await transaction.freezeWith(this.client!)
@@ -139,7 +133,7 @@ export class HederaService {
           'submitValidatedBatch',
           new ContractFunctionParameters()
             .addUint256(agreementId)
-            .addBytes32(formatBytes32String(auditHash))
+            .addBytes32(sha256HexToBytes32(auditHash))
             .addUint256(score)
         )
 
@@ -209,7 +203,7 @@ export class HederaService {
         .setFunction(
           'recordAudit',
           new ContractFunctionParameters()
-            .addBytes32(formatBytes32String(auditHash))
+            .addBytes32(sha256HexToBytes32(auditHash))
         )
 
       const frozenTransaction = await transaction.freezeWith(this.client!)
@@ -384,12 +378,5 @@ export class HederaService {
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
-  }
-
-  private formatBytes32String(str: string): Uint8Array {
-    const hash = Buffer.from(str, 'utf8')
-    const padded = Buffer.alloc(32)
-    hash.copy(padded, 0, 0, Math.min(hash.length, 32))
-    return new Uint8Array(padded)
   }
 }
