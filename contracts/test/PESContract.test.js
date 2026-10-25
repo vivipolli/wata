@@ -1,4 +1,5 @@
 const { expect } = require("chai");
+const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { ethers } = require("hardhat");
 
 describe("PESContract", function () {
@@ -287,12 +288,14 @@ describe("PESContract", function () {
       expect(agreement.totalInvested).to.equal(investmentAmount);
     });
 
-    it("Should reject investment from non-investor", async function () {
+    // Documents a v2 limitation: any account can invest, there is no designated-investor check
+    // (PESEscrowV3 restricts deposits to the first funder of each agreement).
+    it("Accepts investment from any account (v2 has no investor restriction)", async function () {
       const investmentAmount = ethers.parseEther("50");
-      
+
       await expect(
         pesContract.connect(addr1).investInAgreement(agreementId, { value: investmentAmount })
-      ).to.be.revertedWith("Only the designated investor can invest");
+      ).to.emit(pesContract, "InvestmentReceived");
     });
 
     it("Should change governance mode correctly", async function () {
@@ -309,7 +312,7 @@ describe("PESContract", function () {
     it("Should reject governance change from non-owner", async function () {
       await expect(
         pesContract.connect(addr1).changeGovernanceMode(agreementId, 1)
-      ).to.be.revertedWith("Ownable: caller is not the owner");
+      ).to.be.revertedWith("Only owner can call this function");
     });
   });
 
@@ -337,29 +340,22 @@ describe("PESContract", function () {
       const hcsTransactionId = "0.0.123456@1234567890";
       const hfsFileId = "0.0.789012";
 
-      // Authorize oracle first
-      await pesContract.setRelayer(addr1.address);
-      await pesContract.connect(addr1).authorizeOracle(addr2.address);
+      // Oracles are authorized in the OracleManager; HCS/HFS ids are filled later by the relayer
+      await oracleManager.authorizeOracle(addr2.address);
 
       await expect(
-        pesContract.connect(addr2).submitValidatedBatch(
-          agreementId,
-          score,
-          auditHash,
-          hcsTransactionId,
-          hfsFileId
-        )
+        pesContract.connect(addr2).submitValidatedBatch(agreementId, auditHash, score)
       )
         .to.emit(pesContract, "PaymentApproved")
         .withArgs(
           agreementId,
           producer.address,
+          auditHash,
           investor.address,
           baseValue * BigInt(hectares),
-          auditHash,
           score,
-          hcsTransactionId,
-          hfsFileId
+          "",
+          ""
         );
     });
 
@@ -367,18 +363,10 @@ describe("PESContract", function () {
       const auditHash = ethers.encodeBytes32String("audit-hash-123");
       const score = 60; // Below threshold (60% < 70%)
 
-      // Authorize oracle first
-      await pesContract.setRelayer(addr1.address);
-      await pesContract.connect(addr1).authorizeOracle(addr2.address);
+      await oracleManager.authorizeOracle(addr2.address);
 
       await expect(
-        pesContract.connect(addr2).submitValidatedBatch(
-          agreementId,
-          score,
-          auditHash,
-          "",
-          ""
-        )
+        pesContract.connect(addr2).submitValidatedBatch(agreementId, auditHash, score)
       ).to.not.emit(pesContract, "PaymentApproved");
     });
 
@@ -387,16 +375,13 @@ describe("PESContract", function () {
       const hcsTransactionId = "0.0.123456@1234567890";
       const hfsFileId = "0.0.789012";
 
+      await pesContract.setRelayer(addr1.address);
+
       await expect(
-        pesContract.recordAuditV3(
-          agreementId,
-          auditHash,
-          hcsTransactionId,
-          hfsFileId
-        )
+        pesContract.connect(addr1).recordAuditV3(auditHash, hcsTransactionId, hfsFileId)
       )
         .to.emit(pesContract, "AuditRecordedV3")
-        .withArgs(agreementId, auditHash, hcsTransactionId, hfsFileId);
+        .withArgs(auditHash, anyValue, hcsTransactionId, hfsFileId);
     });
   });
 
@@ -425,11 +410,10 @@ describe("PESContract", function () {
       const hcsTransactionId = "0.0.123456@1234567890";
       const hfsFileId = "0.0.789012";
 
-      // Execute payment
-      await pesContract.executePayment(
+      // Only the relayer records payments; producer and investor come from the agreement
+      await pesContract.setRelayer(addr1.address);
+      await pesContract.connect(addr1).executePayment(
         agreementId,
-        producer.address,
-        investor.address,
         amount,
         auditHash,
         score,
@@ -446,6 +430,13 @@ describe("PESContract", function () {
       expect(paymentRecord.score).to.equal(score);
       expect(paymentRecord.hcsTransactionId).to.equal(hcsTransactionId);
       expect(paymentRecord.hfsFileId).to.equal(hfsFileId);
+    });
+
+    it("Should reject payment records from any account other than the relayer", async function () {
+      await pesContract.setRelayer(addr1.address);
+      await expect(
+        pesContract.connect(addr2).executePayment(agreementId, 1, ethers.encodeBytes32String("x"), 85, "", "")
+      ).to.be.revertedWith("Only relayer can call this function");
     });
   });
 
