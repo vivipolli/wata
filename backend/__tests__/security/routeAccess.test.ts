@@ -9,7 +9,6 @@ import jwt from 'jsonwebtoken'
 
 jest.mock('../../src/services/orm/prismaDatabase', () => ({ PrismaDatabase: class {} }))
 jest.mock('../../src/services/hedera', () => ({ HederaService: class {} }))
-jest.mock('../../src/services/relayer', () => ({ RelayerService: class {} }))
 jest.mock('../../src/services/oracle', () => ({ OracleService: class {} }))
 jest.mock('../../src/services/hcs', () => ({ hcsService: {} }))
 jest.mock('../../src/services/hfs', () => ({ hfsService: {} }))
@@ -23,6 +22,8 @@ import paymentRoutes from '../../src/routes/payments'
 import oracleRoutes from '../../src/routes/oracle'
 import hederaRoutes from '../../src/routes/hedera'
 import batchSchedulerRoutes from '../../src/routes/batchScheduler'
+import certificateRoutes from '../../src/routes/certificates'
+import measurementRoutes from '../../src/routes/measurements'
 
 type Role = 'PRODUCER' | 'INVESTOR' | 'MANAGER'
 
@@ -65,10 +66,12 @@ function signRefresh(userId: number): string {
 const MOUNTS: Array<{ base: string; router: Router }> = [
   { base: '/api/agreements', router: agreementRoutes(fakeService, fakeDb) },
   { base: '/api/readings', router: readingRoutes(fakeDb) },
-  { base: '/api/payments', router: paymentRoutes(fakeService, fakeDb, fakeService) },
+  { base: '/api/payments', router: paymentRoutes(fakeService, fakeDb) },
   { base: '/api/oracle', router: oracleRoutes(fakeDb, fakeService) },
   { base: '/api/hedera', router: hederaRoutes(fakeService, fakeDb) },
-  { base: '/api/batch-scheduler', router: batchSchedulerRoutes(fakeService, fakeDb) }
+  { base: '/api/batch-scheduler', router: batchSchedulerRoutes(fakeService, fakeDb) },
+  { base: '/api/certificates', router: certificateRoutes(fakeService, fakeDb) },
+  { base: '/api/measurements', router: measurementRoutes(fakeDb) }
 ]
 
 const app = express()
@@ -97,10 +100,17 @@ const MUTATING_ROUTES = ALL_ROUTES.filter(r => r.method !== 'get')
 // Operational routes: spend operator funds, write readings/scores or change payout basis
 const MANAGER_ONLY = [
   'post /api/agreements/',
+  'post /api/agreements/1/link-onchain',
   'post /api/readings/submit',
   'post /api/readings/simulate',
   'post /api/payments/trigger-check/1',
   'post /api/payments/process/1',
+  'post /api/payments/reconcile',
+  'post /api/payments/approval-call/1',
+  'post /api/certificates/payment/1/prepare',
+  'post /api/certificates/1/confirm',
+  'post /api/measurements/',
+  'post /api/oracle/score-period',
   'post /api/oracle/process',
   'post /api/oracle/process-all',
   'post /api/hedera/hcs/publish',
@@ -109,6 +119,12 @@ const MANAGER_ONLY = [
   'post /api/batch-scheduler/start',
   'post /api/batch-scheduler/stop',
   'post /api/batch-scheduler/process/1'
+]
+
+// Investor wallet flows: the investor's own deposit, prepared and confirmed
+const INVESTOR_ONLY = [
+  'post /api/payments/deposit-call/1',
+  'post /api/payments/deposits/confirm'
 ]
 
 // Routes that are intentionally disabled regardless of role
@@ -122,7 +138,7 @@ describe('route inventory', () => {
   })
 
   it('classifies every mutating route', () => {
-    const known = new Set([...MANAGER_ONLY, ...DISABLED, 'post /api/payments/create-investment-transaction/1'])
+    const known = new Set([...MANAGER_ONLY, ...DISABLED, ...INVESTOR_ONLY])
     const unclassified = MUTATING_ROUTES.map(key).filter(k => !known.has(k))
     expect(unclassified).toEqual([])
   })
@@ -182,10 +198,10 @@ describe('operational routes require MANAGER', () => {
     expect([401, 403]).not.toContain(res.status)
   })
 
-  it('create-investment-transaction is restricted to INVESTOR', async () => {
+  it.each(INVESTOR_ONLY)('%s is restricted to INVESTOR', async route => {
+    const [method, path] = route.split(' ')
     for (const userId of [1, 3]) {
-      const res = await request(app).post('/api/payments/create-investment-transaction/1')
-        .set('Authorization', `Bearer ${signAccess(userId)}`).send({})
+      const res = await (request(app) as any)[method](path).set('Authorization', `Bearer ${signAccess(userId)}`).send({})
       expect(res.status).toBe(403)
     }
   })
@@ -206,9 +222,10 @@ describe('removed and disabled fund-moving routes', () => {
     }
   })
 
-  it('POST /api/payments/process returns 501 instead of a fake success', async () => {
+  it('POST /api/payments/process never reports success without the ledger', async () => {
     const res = await request(app).post('/api/payments/process/1')
       .set('Authorization', `Bearer ${signAccess(3)}`).send({})
-    expect(res.status).toBe(501)
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(res.body.success).toBe(false)
   })
 })

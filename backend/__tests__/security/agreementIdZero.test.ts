@@ -42,36 +42,38 @@ function fakeDatabase(blockchainId: number | null): any {
   }
 }
 
-function fakeHedera(): any {
+function fakeEscrow(): any {
   return {
-    submitValidatedBatch: jest.fn(async () => ({
-      transactionId: { accountId: { toString: () => '0.0.1001' }, validStart: { seconds: 1, nanos: 2 } }
-    }))
+    submitBatch: jest.fn(async () => ({ transactionId: '0.0.1001@1.2', transactionHash: '0x' + 'cd'.repeat(48), state: 'Approved' }))
   }
 }
+
+const savedScoreVersion = process.env.SCORE_VERSION
+beforeEach(() => { process.env.SCORE_VERSION = '1' })
+afterEach(() => { process.env.SCORE_VERSION = savedScoreVersion })
 
 describe('OracleService.submitValidatedBatch with on-chain agreement ID 0', () => {
   beforeEach(() => jest.spyOn(console, 'log').mockImplementation(() => undefined))
   afterEach(() => jest.restoreAllMocks())
 
   it('submits the batch for agreement 0 instead of skipping it', async () => {
-    const hedera = fakeHedera()
-    const oracle = new OracleService(fakeDatabase(0), hedera)
+    const escrow = fakeEscrow()
+    const oracle = new OracleService(fakeDatabase(0), {} as any, escrow)
 
     const tx = await oracle.submitValidatedBatch(1, batchResult())
 
     expect(tx).not.toBe('skipped')
     expect(tx).toBe('0.0.1001@1.2')
-    expect(hedera.submitValidatedBatch).toHaveBeenCalledWith(0, AUDIT_HASH, 80)
+    expect(escrow.submitBatch).toHaveBeenCalledWith(expect.objectContaining({ agreementId: 0, auditHash: AUDIT_HASH, score: 80 }))
   })
 
   it('still skips an agreement that was never deployed (null ID)', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
-    const hedera = fakeHedera()
-    const oracle = new OracleService(fakeDatabase(null), hedera)
+    const escrow = fakeEscrow()
+    const oracle = new OracleService(fakeDatabase(null), {} as any, escrow)
 
     await expect(oracle.submitValidatedBatch(1, batchResult())).resolves.toBe('skipped')
-    expect(hedera.submitValidatedBatch).not.toHaveBeenCalled()
+    expect(escrow.submitBatch).not.toHaveBeenCalled()
   })
 })
 
@@ -84,8 +86,8 @@ describe('OracleService.submitValidatedBatch without a ledger transaction ID', (
 
   it('fails instead of recording a placeholder hash, and does not mark the batch submitted', async () => {
     const db = fakeDatabase(0)
-    const hedera = { submitValidatedBatch: jest.fn(async () => ({ transactionId: undefined })) }
-    const oracle = new OracleService(db, hedera as any)
+    const escrow = { submitBatch: jest.fn(async () => ({ transactionId: '', transactionHash: null, state: 'Approved' })) }
+    const oracle = new OracleService(db, {} as any, escrow as any)
 
     await expect(oracle.submitValidatedBatch(1, batchResult())).rejects.toThrow('no transaction ID')
     expect(db.updateBatchStatus).not.toHaveBeenCalled()

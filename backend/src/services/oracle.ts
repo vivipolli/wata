@@ -3,6 +3,19 @@ import { PrismaDatabase } from './orm/prismaDatabase'
 import { HederaService } from './hedera'
 import { hfsService } from './hfs'
 import { hcsService } from './hcs'
+import type { EscrowService } from './escrow'
+
+/**
+ * Version of the score rule sent with each batch (uint16 on-chain), so every period records
+ * which rule produced its score. Required: there is no default rule version.
+ */
+export function readScoreVersion(): number {
+  const raw = process.env.SCORE_VERSION
+  if (raw === undefined || !/^\d+$/.test(raw) || Number(raw) > 0xffff) {
+    throw new Error('SCORE_VERSION must be set to an integer between 0 and 65535')
+  }
+  return Number(raw)
+}
 
 interface ReadingData {
   id: number
@@ -35,12 +48,15 @@ interface BatchValidationResult {
 export class OracleService {
   private database: PrismaDatabase
   private hederaService: HederaService
+  private escrow: Pick<EscrowService, 'submitBatch'> | null
   private oraclePrivateKey: string
   private oracleAddress: string
 
-  constructor(database: PrismaDatabase, hederaService: HederaService) {
+  constructor(database: PrismaDatabase, hederaService: HederaService, escrow?: Pick<EscrowService, 'submitBatch'>) {
     this.database = database
     this.hederaService = hederaService
+    // Resolved lazily from the Hedera service so a missing escrow address fails at submission, not at startup
+    this.escrow = escrow ?? null
     this.oraclePrivateKey = process.env.ORACLE_PRIVATE_KEY || ''
     this.oracleAddress = process.env.ORACLE_ADDRESS || ''
   }
@@ -287,6 +303,8 @@ export class OracleService {
   // Submit validated batch to smart contract
   async submitValidatedBatch(agreementId: number, batchResult: BatchValidationResult): Promise<string> {
     try {
+      const scoreVersion = readScoreVersion()
+
       // Store batch in database
       const batchId = await this.database.createBatch({
         agreementId,
@@ -320,50 +338,32 @@ export class OracleService {
         return 'skipped'
       }
 
-      // Submit to smart contract
+      // Submit to the escrow contract; the batch is the on-chain period.
       // Business Rule: Score is normalized 0-1, contract expects 0-100 for precision (0.7 = 70%)
-      const txRecord = await this.hederaService.submitValidatedBatch(
-        agreement.blockchain_id,
-        batchResult.auditHash,
-        Math.round(batchResult.score * 100) // Convert 0-1 to 0-100 for contract precision (0.7 = 70)
-      )
-
-      // Get the real transaction hash from the receipt
-      console.log('txRecord from HederaService:', {
-        transactionHash: txRecord.transactionHash,
-        transactionId: txRecord.transactionId?.toString(),
-        hasTransactionHash: !!txRecord.transactionHash,
-        hasTransactionId: !!txRecord.transactionId
+      const escrow = this.escrow ?? this.hederaService.getEscrowService()
+      const periodId = batchId
+      const submission = await escrow.submitBatch({
+        agreementId: agreement.blockchain_id,
+        periodId,
+        auditHash: batchResult.auditHash,
+        score: Math.round(batchResult.score * 100),
+        scoreVersion
       })
-      
-      // Force use of the correct Transaction ID format
-      let realTransactionHash: string
-      
-      // Always construct Transaction ID manually to ensure correct format
-      const accountId = txRecord.transactionId?.accountId?.toString()
-      const validStart = txRecord.transactionId?.validStart
-      if (accountId && validStart) {
-        realTransactionHash = `${accountId}@${validStart.seconds}.${validStart.nanos}`
-        console.log('Constructed Transaction ID manually:', realTransactionHash)
-      } else {
-        const fallback = txRecord.transactionId?.toString()
-        if (!fallback) {
-          // Never record a placeholder as proof of submission; the batch stays 'validated'
-          throw new Error(`Ledger returned no transaction ID for batch ${batchId}`)
-        }
-        realTransactionHash = fallback
+      // Transaction id and hash are taken from the ledger record as reported, never assembled here
+      const realTransactionHash = submission.transactionId
+      if (!realTransactionHash) {
+        // Never record a placeholder as proof of submission; the batch stays 'validated'
+        throw new Error(`Ledger returned no transaction ID for batch ${batchId}`)
       }
-      
-      console.log('Final transaction hash being used:', realTransactionHash)
 
       // Update batch status and log submission
-      await this.database.updateBatchStatus(batchId, 'submitted', new Date())
+      await this.database.updateBatchStatus(batchId, 'submitted', new Date(), periodId)
       await this.database.createOracleLog({
         batchId,
         action: 'batch_submitted',
-        details: 'Batch submitted to smart contract',
+        details: JSON.stringify({ transactionId: submission.transactionId, periodId, onchainState: submission.state }),
         oracleAddress: this.oracleAddress,
-        transactionHash: realTransactionHash
+        transactionHash: submission.transactionHash ?? undefined
       })
 
       // Mark readings as validated

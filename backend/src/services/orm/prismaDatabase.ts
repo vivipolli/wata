@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import type { MeasurementInput } from '../../score/measurements'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -39,6 +40,11 @@ export interface AgreementData {
   locationLat?: number
   locationLng?: number
   durationDays?: number
+  // Escrow v3 terms: decimal string in the contract's native unit, threshold 1-100
+  periodAmount?: string | null
+  scoreThreshold?: number | null
+  governanceMode?: 'AUTO' | 'HYBRID'
+  stationCode?: string | null
 }
 
 export interface ReadingData {
@@ -53,14 +59,19 @@ export interface ReadingData {
 export interface PaymentData {
   agreementId: number
   batchId?: number | null
-  amount: number
+  // Decimal string in the contract's native unit
+  amount: string
   transactionHash?: string | null
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  // deferred: released on-chain, payout held by the contract for the producer to withdraw
+  status: 'pending' | 'processing' | 'completed' | 'deferred' | 'failed'
   auditHash?: string | null
   score?: number | null
   hcsTransactionId?: string | null
   hfsFileId?: string | null
   investorAddress?: string | null
+  periodId?: number | null
+  transactionId?: string | null
+  onchainState?: string | null
 }
 
 export interface BatchData {
@@ -121,7 +132,11 @@ export class PrismaDatabase {
         hectares: data.hectares,
         location_lat: data.locationLat ?? null,
         location_lng: data.locationLng ?? null,
-        duration_days: data.durationDays ?? null
+        duration_days: data.durationDays ?? null,
+        period_amount: data.periodAmount ?? null,
+        score_threshold: data.scoreThreshold ?? null,
+        governance_mode: data.governanceMode ?? 'AUTO',
+        station_code: data.stationCode ?? null
       }
     })
     return agreement.id
@@ -140,6 +155,18 @@ export class PrismaDatabase {
       where: { id },
       data: { blockchain_id: blockchainId }
     })
+  }
+
+  /**
+   * Links a local agreement to its on-chain agreement. Only an unlinked agreement can be linked;
+   * returns false otherwise. A second link to the same on-chain ID fails on the unique index.
+   */
+  async linkAgreementOnchain(id: number, blockchainId: number, transactionId?: string | null): Promise<boolean> {
+    const { count } = await this.prisma.agreements.updateMany({
+      where: { id, blockchain_id: null },
+      data: { blockchain_id: blockchainId, transaction_id: transactionId ?? undefined }
+    })
+    return count === 1
   }
 
   async updateAgreementTransactionId(id: number, transactionId: string): Promise<void> {
@@ -245,10 +272,73 @@ export class PrismaDatabase {
         score: data.score ?? null,
         hcs_transaction_id: data.hcsTransactionId ?? null,
         hfs_file_id: data.hfsFileId ?? null,
-        investor_address: data.investorAddress ?? null
+        investor_address: data.investorAddress ?? null,
+        period_id: data.periodId ?? null,
+        transaction_id: data.transactionId ?? null,
+        onchain_state: data.onchainState ?? null
       }
     })
     return payment.id
+  }
+
+  /** Moves a pending or failed payment to 'processing'. Returns false if another request got there first. */
+  async claimPaymentForRelease(paymentId: number): Promise<boolean> {
+    const { count } = await this.prisma.payments.updateMany({
+      where: { id: paymentId, status: { in: ['pending', 'failed'] } },
+      data: { status: 'processing' }
+    })
+    return count === 1
+  }
+
+  /** Stores the release transaction id before it is sent; only on a payment that is being processed. */
+  async setPaymentTransactionId(paymentId: number, transactionId: string): Promise<boolean> {
+    const { count } = await this.prisma.payments.updateMany({
+      where: { id: paymentId, status: 'processing' },
+      data: { transaction_id: transactionId }
+    })
+    return count === 1
+  }
+
+  /** Payments whose release outcome may be missing: processing, or failed with a transaction id. */
+  async getPaymentsToReconcile(): Promise<payments[]> {
+    return this.prisma.payments.findMany({
+      where: { OR: [{ status: 'processing' }, { status: 'failed', transaction_id: { not: null } }] },
+      orderBy: { created_at: 'asc' }
+    })
+  }
+
+  /**
+   * Records the ledger outcome of a release. Applies only while the payment is still in fromStatus
+   * and, when given, still bound to expectedTransactionId (a retry may have replaced it).
+   */
+  async recordPaymentRelease(
+    paymentId: number,
+    outcome: { status: 'completed' | 'deferred'; transactionId: string; transactionHash: string; onchainState: string },
+    fromStatus: 'processing' | 'failed' = 'processing',
+    expectedTransactionId?: string
+  ): Promise<void> {
+    await this.prisma.payments.updateMany({
+      where: { id: paymentId, status: fromStatus, ...(expectedTransactionId !== undefined ? { transaction_id: expectedTransactionId } : {}) },
+      data: {
+        status: outcome.status,
+        transaction_id: outcome.transactionId,
+        transaction_hash: outcome.transactionHash,
+        onchain_state: outcome.onchainState,
+        processed_at: new Date()
+      }
+    })
+  }
+
+  async attachPaymentHcs(paymentId: number, hcsTransactionId: string): Promise<void> {
+    await this.prisma.payments.update({ where: { id: paymentId }, data: { hcs_transaction_id: hcsTransactionId } })
+  }
+
+  /** Marks a payment that is being processed as failed, so it can be retried; optionally only if still bound to expectedTransactionId. */
+  async markPaymentFailed(paymentId: number, expectedTransactionId?: string | null): Promise<void> {
+    await this.prisma.payments.updateMany({
+      where: { id: paymentId, status: 'processing', ...(expectedTransactionId !== undefined ? { transaction_id: expectedTransactionId } : {}) },
+      data: { status: 'failed' }
+    })
   }
 
   async updatePaymentStatus(paymentId: number, status: string, transactionHash?: string): Promise<void> {
@@ -340,6 +430,40 @@ export class PrismaDatabase {
     return batch.id
   }
 
+  /**
+   * Reserves the batch of a measurement-based score period. In one transaction: a period overlapping
+   * another period of the agreement is refused, except the same unsubmitted period (same audit hash),
+   * which is resumed so a failed submission can be retried.
+   */
+  async reserveScoreBatch(data: {
+    agreementId: number; auditHash: string; score: number; readingsCount: number
+    periodStart: Date; periodEnd: Date; scoreVersion: number; auditDocument: string
+  }): Promise<{ batchId: number; resumed: boolean } | { overlap: number }> {
+    return this.prisma.$transaction(async tx => {
+      const overlapping = await tx.batches.findFirst({
+        where: { agreement_id: data.agreementId, period_start: { lte: data.periodEnd }, period_end: { gte: data.periodStart } }
+      })
+      if (overlapping) {
+        const resumable = overlapping.audit_hash === data.auditHash && overlapping.validation_status !== 'submitted'
+        return resumable ? { batchId: overlapping.id, resumed: true } : { overlap: overlapping.id }
+      }
+      const batch = await tx.batches.create({
+        data: {
+          agreement_id: data.agreementId,
+          audit_hash: data.auditHash,
+          score: data.score,
+          readings_count: data.readingsCount,
+          validation_status: 'validated',
+          period_start: data.periodStart,
+          period_end: data.periodEnd,
+          score_version: data.scoreVersion,
+          audit_document: data.auditDocument
+        }
+      })
+      return { batchId: batch.id, resumed: false }
+    })
+  }
+
   async attachBatchLedgerReferences(batchId: number, info: { hfsFileId?: string | null; hcsTransactionId?: string | null }): Promise<void> {
     await this.prisma.batches.update({
       where: { id: batchId },
@@ -366,12 +490,13 @@ export class PrismaDatabase {
     })
   }
 
-  async updateBatchStatus(batchId: number, status: string, submittedAt?: Date): Promise<void> {
+  async updateBatchStatus(batchId: number, status: string, submittedAt?: Date, periodId?: number): Promise<void> {
     await this.prisma.batches.update({
       where: { id: batchId },
       data: {
         validation_status: status,
-        submitted_at: submittedAt ?? undefined
+        submitted_at: submittedAt ?? undefined,
+        period_id: periodId ?? undefined
       }
     })
   }
@@ -449,13 +574,15 @@ export class PrismaDatabase {
     })
   }
 
-  async createInvestment(data: { agreementId: number; investorAddress: string; amount: number; transactionHash?: string | null }): Promise<number> {
+  async createInvestment(data: { agreementId: number; investorAddress: string; amount: string; transactionId?: string | null; transactionHash?: string | null; status?: string }): Promise<number> {
     const investment = await this.prisma.investments.create({
       data: {
         agreement_id: data.agreementId,
         investor_address: data.investorAddress,
         amount: data.amount,
-        transaction_hash: data.transactionHash ?? null
+        transaction_id: data.transactionId ?? null,
+        transaction_hash: data.transactionHash ?? null,
+        status: data.status ?? undefined
       }
     })
     return investment.id
@@ -485,6 +612,90 @@ export class PrismaDatabase {
 
   async deleteInvestment(investmentId: number): Promise<void> {
     await this.prisma.investments.delete({ where: { id: investmentId } })
+  }
+
+  async createCertificate(data: { paymentId: number; metadataJson: string; metadataSha256: string }): Promise<number> {
+    const certificate = await this.prisma.certificates.create({
+      data: { payment_id: data.paymentId, metadata_json: data.metadataJson, metadata_sha256: data.metadataSha256 }
+    })
+    return certificate.id
+  }
+
+  async getCertificate(id: number) {
+    return this.prisma.certificates.findUnique({ where: { id } })
+  }
+
+  async getCertificateByPayment(paymentId: number) {
+    return this.prisma.certificates.findUnique({ where: { payment_id: paymentId } })
+  }
+
+  /** prepared or failed -> scheduled. Returns false if the certificate was not in one of those states. */
+  async markCertificateScheduled(id: number, data: { cid: string; uri: string; tokenId: string; scheduleId: string; scheduledTransactionId: string }): Promise<boolean> {
+    const { count } = await this.prisma.certificates.updateMany({
+      where: { id, status: { in: ['prepared', 'failed'] } },
+      data: {
+        status: 'scheduled',
+        metadata_cid: data.cid,
+        metadata_uri: data.uri,
+        token_id: data.tokenId,
+        schedule_id: data.scheduleId,
+        scheduled_transaction_id: data.scheduledTransactionId
+      }
+    })
+    return count === 1
+  }
+
+  /** scheduled -> minted, only for the schedule the certificate is bound to. */
+  async markCertificateMinted(id: number, scheduleId: string, data: { serialNumber: number; mintTransactionHash: string | null }): Promise<boolean> {
+    const { count } = await this.prisma.certificates.updateMany({
+      where: { id, status: 'scheduled', schedule_id: scheduleId },
+      data: { status: 'minted', serial_number: data.serialNumber, mint_transaction_hash: data.mintTransactionHash, minted_at: new Date() }
+    })
+    return count === 1
+  }
+
+  /** scheduled -> failed (schedule expired, deleted or its mint failed), so it can be scheduled again. */
+  async markCertificateFailed(id: number, scheduleId: string): Promise<boolean> {
+    const { count } = await this.prisma.certificates.updateMany({
+      where: { id, status: 'scheduled', schedule_id: scheduleId },
+      data: { status: 'failed' }
+    })
+    return count === 1
+  }
+
+  /** Stores measurements; a record already stored for the same source, ref and parameter is counted, not duplicated. */
+  async insertMeasurements(rows: MeasurementInput[]): Promise<{ inserted: number; duplicates: number }> {
+    let inserted = 0
+    let duplicates = 0
+    for (const m of rows) {
+      try {
+        await this.prisma.measurements.create({
+          data: {
+            station_code: m.stationCode,
+            parameter: m.parameter,
+            value: m.value,
+            unit: m.unit,
+            qualifier: m.qualifier,
+            sampled_at: new Date(m.sampledAt),
+            source: m.source,
+            source_ref: m.sourceRef
+          }
+        })
+        inserted++
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'P2002') throw error
+        duplicates++
+      }
+    }
+    return { inserted, duplicates }
+  }
+
+  /** Measurements of a station sampled in [from, to], in sampling order. */
+  async getMeasurements(stationCode: string, from: Date, to: Date) {
+    return this.prisma.measurements.findMany({
+      where: { station_code: stationCode, sampled_at: { gte: from, lte: to } },
+      orderBy: [{ sampled_at: 'asc' }, { id: 'asc' }]
+    })
   }
 
   async getInvestment(investmentId: number): Promise<investments | null> {

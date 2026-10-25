@@ -122,7 +122,6 @@ export interface HealthStatus {
   services: {
     database: boolean
     hedera: boolean
-    relayer: boolean
   }
   version: string
 }

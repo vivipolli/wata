@@ -43,6 +43,12 @@ class MockHederaService extends HederaService {
     }
   }
 
+  getEscrowService(): any {
+    return {
+      submitBatch: async () => ({ transactionId: `0.0.123456@${Date.now()}`, transactionHash: '0x' + 'cd'.repeat(48), state: 'Approved' })
+    }
+  }
+
   async recordAudit(auditHash: string): Promise<any> {
     return {
       transactionId: { toString: () => `0.0.123456@${Date.now()}` }
@@ -70,6 +76,7 @@ let database: PrismaDatabase
     // Setup Oracle service
     process.env.ORACLE_PRIVATE_KEY = 'test-private-key'
     process.env.ORACLE_ADDRESS = '0.0.123456'
+    process.env.SCORE_VERSION = '1'
     oracleService = new OracleService(database, hederaService)
 
     // Setup Express app

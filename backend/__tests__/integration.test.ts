@@ -23,20 +23,6 @@ const prismaCleanup = async () => {
     // Ignore errors if tables don't exist yet
   }
 }
-// Mock RelayerService to avoid HederaService import issues
-class MockRelayerService {
-  async initialize(): Promise<void> {
-    console.log('Mock RelayerService initialized')
-  }
-
-  async start(): Promise<void> {
-    console.log('Mock RelayerService started')
-  }
-
-  async stop(): Promise<void> {
-    console.log('Mock RelayerService stopped')
-  }
-}
 // Auth middleware refuses to start without a strong secret; use a fixed test-only value
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret-0123456789abcdef'
 
@@ -74,6 +60,21 @@ class MockHederaService extends HederaService {
   async submitValidatedBatch(agreementId: number, auditHash: string, score: number): Promise<any> {
     return {
       transactionId: '0.0.123456@1758983593753'
+    }
+  }
+
+  // Escrow v3 stand-in: every submitted batch is an Approved period whose audit hash is the batch's
+  getEscrowService(): any {
+    return {
+      getPeriod: async (_agreementId: number, periodId: number) => {
+        const batch = await getPrismaClient().batches.findUnique({ where: { id: periodId } })
+        return { state: 'Approved', auditHash: batch!.audit_hash, score: 80, scoreVersion: 1, approvalDeadline: 0 }
+      },
+      getAgreement: async () => ({ periodAmount: '50000', scoreThreshold: 70 }),
+      release: async () => ({
+        outcome: 'released', amount: '50000', producer: '0xp',
+        transactionId: '0.0.123456@1758983593.000000001', transactionHash: '0x' + 'cd'.repeat(48)
+      })
     }
   }
 
@@ -136,7 +137,6 @@ describe('W.A.T.A. Chain Integration Tests', () => {
   let app: express.Application
   let database: PrismaDatabase
   let hederaService: HederaService
-  let relayerService: MockRelayerService
   let authToken: string
 
   beforeAll(async () => {
@@ -153,7 +153,6 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     hederaService = new MockHederaService()
     await hederaService.initialize()
 
-    relayerService = new MockRelayerService()
 
     // Health check endpoint (must be before error handling)
     app.get('/api/health', (req, res) => {
@@ -169,7 +168,9 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     app.use('/api/auth', authRoutes)
     app.use('/api/agreements', agreementRoutes(hederaService, database))
     app.use('/api/readings', readingRoutes(database))
-    app.use('/api/payments', paymentRoutes(hederaService, database, relayerService as any))
+    // HCS publication is stubbed: no network in tests
+    const audit = { publishAuditRecord: async () => '0.0.7@1758983593.000000002' }
+    app.use('/api/payments', paymentRoutes(hederaService, database, { audit }))
 
     // Add error handling middleware (must be last)
     app.use((req: express.Request, res: express.Response) => {
@@ -274,7 +275,6 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         success: true,
         data: expect.objectContaining({
           id: expect.any(Number),
-          blockchainId: expect.any(Number),
           agreementHash: expect.any(String),
           producerName: validAgreementData.producerName,
           producerAddress: validAgreementData.producerAddress,
@@ -490,6 +490,8 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         .send(agreementData)
 
       agreementId = response.body.data.id
+      // The escrow admin creates the on-chain agreement; the link is made directly in these tests
+      await database.linkAgreementOnchain(agreementId, agreementId)
     })
 
     it('should return automatic payment processing message for V3', async () => {
@@ -509,13 +511,15 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       }
 
       // Create a batch for testing
-      await database.createBatch({
+      const batchId = await database.createBatch({
         agreementId: agreementId,
         auditHash: 'test-audit-hash',
         score: 0.8,
         readingsCount: compliantReadings.length,
         averageTurbidity: compliantReadings.reduce((a, b) => a + b, 0) / compliantReadings.length
       })
+      // The oracle submits the batch to the escrow; the batch is the on-chain period
+      await database.updateBatchStatus(batchId, 'submitted', new Date(), batchId)
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
@@ -548,13 +552,14 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       }
 
       // Create a batch for testing with low score
-      await database.createBatch({
+      const batchId = await database.createBatch({
         agreementId: agreementId,
         auditHash: 'test-audit-hash-2',
         score: 0.8,
         readingsCount: nonCompliantReadings.length,
         averageTurbidity: nonCompliantReadings.reduce((a, b) => a + b, 0) / nonCompliantReadings.length
       })
+      await database.updateBatchStatus(batchId, 'submitted', new Date(), batchId)
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
@@ -601,13 +606,15 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       }
 
       // Create a batch for testing
-      await database.createBatch({
+      const batchId = await database.createBatch({
         agreementId: agreementId,
         auditHash: 'test-audit-hash-3',
         score: 0.9,
         readingsCount: compliantReadings.length,
         averageTurbidity: compliantReadings.reduce((a, b) => a + b, 0) / compliantReadings.length
       })
+      // The oracle submits the batch to the escrow; the batch is the on-chain period
+      await database.updateBatchStatus(batchId, 'submitted', new Date(), batchId)
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
@@ -622,8 +629,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         })
       })
 
-      // Note: In V3, payment records are created automatically by the relayer
-      // when it processes PaymentApproved events from the smart contract
+      // The payment is created by trigger-check and paid only by the escrow release
     })
   })
 
@@ -751,7 +757,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         success: true,
         data: expect.objectContaining({
           pendingPayments: expect.any(Number),
-          totalPendingAmount: expect.any(Number)
+          totalPendingAmount: expect.any(String)
         })
       })
     })

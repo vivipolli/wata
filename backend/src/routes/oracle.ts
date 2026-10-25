@@ -3,7 +3,13 @@ import { PrismaDatabase } from '../services/orm/prismaDatabase'
 import { HederaService } from '../services/hedera'
 import { OracleService } from '../services/oracle'
 import { AuthMiddleware } from '../middleware/auth'
+import { ScorePeriodOracle, ScorePeriodError, type ScorePeriodErrorCode } from '../services/scorePeriod'
 import type { ApiResponse } from '../types/index'
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/
+const SCORE_PERIOD_STATUS: Record<ScorePeriodErrorCode, number> = {
+  INVALID_PERIOD: 400, NOT_FOUND: 404, NOT_READY: 409, OVERLAP: 409, LEDGER: 502
+}
 
 interface ProcessBatchRequest {
   agreementId: number
@@ -19,14 +25,44 @@ interface BatchProcessResult {
   transactionHash: string
 }
 
-export default function oracleRoutes(database: PrismaDatabase, hederaService: HederaService) {
+export default function oracleRoutes(
+  database: PrismaDatabase,
+  hederaService: HederaService,
+  deps: { scorePeriod?: Pick<ScorePeriodOracle, 'scorePeriod'> } = {}
+) {
   const router = express.Router()
   const oracleService = new OracleService(database, hederaService)
+  // The HCS service builds its client from the environment on import, so it is loaded on first use
+  const scorePeriodOracle = deps.scorePeriod ?? new ScorePeriodOracle(
+    database as any, () => hederaService.getEscrowService(), async () => (await import('../services/hcs')).hcsService
+  )
   const authMiddleware = new AuthMiddleware(database)
   const requireManager = authMiddleware.requireRole('MANAGER')
 
   // Every oracle route requires an authenticated user; triggering processing requires MANAGER
   router.use(authMiddleware.authenticate)
+
+  /**
+   * POST /api/oracle/score-period (MANAGER)
+   * Scores the agreement's station over [from, to] from stored measurements with the pilot rule and,
+   * when there is a score, submits it to the escrow. No score: 200 with the report, nothing on-chain.
+   */
+  router.post('/score-period', requireManager, async (req: Request, res: Response) => {
+    const { agreementId, from, to } = req.body ?? {}
+    if (!Number.isSafeInteger(agreementId) || agreementId < 0 || typeof from !== 'string' || typeof to !== 'string' || !ISO_DATE.test(from) || !ISO_DATE.test(to)) {
+      return res.status(400).json({ success: false, error: 'agreementId (integer) and ISO from/to dates are required' } as ApiResponse)
+    }
+    try {
+      const outcome = await scorePeriodOracle.scorePeriod(agreementId, new Date(from), new Date(to))
+      res.status(outcome.status === 'submitted' ? 201 : 200).json({ success: true, data: outcome } as ApiResponse)
+    } catch (error) {
+      if (error instanceof ScorePeriodError) {
+        return res.status(SCORE_PERIOD_STATUS[error.code]).json({ success: false, error: error.message, data: { code: error.code } } as ApiResponse)
+      }
+      console.error('Error scoring period:', error)
+      res.status(500).json({ success: false, error: 'Failed to score period', message: error instanceof Error ? error.message : 'Unknown error' } as ApiResponse)
+    }
+  })
 
   // ===== NEW HIERARCHICAL ROUTES: User Producer -> Contract -> Oracle Status =====
 

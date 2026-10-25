@@ -5,20 +5,23 @@ import {
   ContractFunctionParameters,
   ContractCallQuery,
   ContractExecuteTransaction,
-  Hbar,
   ContractId,
   AccountBalanceQuery,
   TransactionRecord,
-  TransferTransaction,
   AccountInfoQuery,
   TransactionId,
-  TransactionRecordQuery
+  TransactionRecordQuery,
+  ScheduleCreateTransaction,
+  TokenMintTransaction,
+  TokenId
 } from '@hashgraph/sdk'
 import { ethers } from 'ethers'
 import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { sha256HexToBytes32 } from '../utils/bytes32'
 import { createHederaClient } from '../utils/hederaNetwork'
+import { EscrowService, type EscrowLedger, type ContractExecution, type OnPrepared } from './escrow'
+import type { CertificateLedger, ScheduledMint } from './certificate'
 
 dotenv.config()
 
@@ -31,7 +34,35 @@ interface AgreementData {
   createdAt: bigint
 }
 
-export class HederaService {
+// Gas limits for escrow v3 calls. Hedera charges at least 80% of the gas limit, so these stay tight;
+// they are to be confirmed against measured usage on a local network.
+const ESCROW_EXECUTE_GAS = 300000
+const ESCROW_QUERY_GAS = 100000
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/
+const SDK_TRANSACTION_ID = /^(\d+\.\d+\.\d+)@(\d+)\.(\d{1,9})$/
+
+// 0.0.1001@1700000000.42 -> 0.0.1001-1700000000-000000042 (Mirror Node format)
+function toMirrorTransactionId(transactionId: string): string {
+  const match = SDK_TRANSACTION_ID.exec(transactionId)
+  if (!match) throw new Error(`Malformed transaction id: ${transactionId}`)
+  return `${match[1]}-${match[2]}-${match[3].padStart(9, '0')}`
+}
+
+function mirrorBaseUrl(): string {
+  const url = process.env.MIRROR_NODE_URL
+  if (!url || !/^https?:\/\/[^\s/]+(:\d+)?\/?$/.test(url)) {
+    throw new Error('MIRROR_NODE_URL must be set to the http(s) base URL of the Mirror Node REST API')
+  }
+  return url.replace(/\/$/, '')
+}
+
+function toHex(bytes: Uint8Array): string {
+  return '0x' + Buffer.from(bytes).toString('hex')
+}
+
+const ENTITY_ID = /^\d+\.\d+\.\d+$/
+
+export class HederaService implements EscrowLedger, CertificateLedger {
   private client: Client | null = null
   private accountId: AccountId | null = null
   private privateKey: PrivateKey | null = null
@@ -60,6 +91,153 @@ export class HederaService {
     } catch (error) {
       throw error
     }
+  }
+
+  /** EscrowService bound to ESCROW_CONTRACT_ADDRESS, using this service as the ledger. */
+  getEscrowService(): EscrowService {
+    const address = process.env.ESCROW_CONTRACT_ADDRESS
+    if (!address || !EVM_ADDRESS.test(address)) {
+      throw new Error('ESCROW_CONTRACT_ADDRESS must be set to the 0x-prefixed EVM address of PESEscrowV3')
+    }
+    return new EscrowService(this, address)
+  }
+
+  // EscrowLedger: executes a contract call and reports the outcome from the receipt and record.
+  // A failed receipt is returned as is (no logs, no hash) so the caller decides; nothing is fabricated.
+  // The transaction id is generated here and handed to onPrepared before sending, so a lost outcome
+  // can be reconciled from the ledger. If onPrepared throws, the transaction is never sent.
+  async execute(contractAddress: string, callData: string, onPrepared?: OnPrepared): Promise<ContractExecution> {
+    const transaction = new ContractExecuteTransaction()
+      .setTransactionId(TransactionId.generate(this.client!.operatorAccountId!))
+      .setContractId(ContractId.fromEvmAddress(0, 0, contractAddress))
+      .setGas(ESCROW_EXECUTE_GAS)
+      .setFunctionParameters(Buffer.from(callData.slice(2), 'hex'))
+      .freezeWith(this.client!)
+    const transactionId = transaction.transactionId!.toString()
+    if (onPrepared) await onPrepared(transactionId)
+    const response = await transaction.execute(this.client!)
+    const receipt = await response.getReceiptQuery().setValidateStatus(false).execute(this.client!)
+    const status = receipt.status.toString()
+    if (status !== 'SUCCESS') {
+      return { transactionId, status, transactionHash: null, logs: [] }
+    }
+
+    const record = await response.getRecord(this.client!)
+    const hash = record.transactionHash
+    return {
+      transactionId,
+      status,
+      transactionHash: hash && hash.length > 0 ? toHex(hash) : null,
+      logs: (record.contractFunctionResult?.logs ?? []).map(log => ({
+        address: '0x' + log.contractId.toEvmAddress(),
+        topics: log.topics.map(toHex),
+        data: toHex(log.data)
+      }))
+    }
+  }
+
+  // EscrowLedger: outcome of an earlier transaction from the Mirror Node. The hash is the full record
+  // hash (same as the SDK record); logs come from the contract result. Unknown transaction -> null.
+  async lookup(transactionId: string): Promise<ContractExecution | null> {
+    const id = toMirrorTransactionId(transactionId)
+    const base = mirrorBaseUrl()
+    const txResponse = await fetch(`${base}/api/v1/transactions/${id}`)
+    if (txResponse.status === 404) return null
+    if (!txResponse.ok) throw new Error(`Mirror Node returned ${txResponse.status} for transaction ${transactionId}`)
+    const body = await txResponse.json() as { transactions?: Array<Record<string, any>> }
+    // The top-level transaction, not a child record it may have produced
+    const tx = (body.transactions ?? []).find(t => t.parent_consensus_timestamp == null && (t.nonce ?? 0) === 0)
+    if (!tx) return null
+    const status = String(tx.result)
+    if (status !== 'SUCCESS') {
+      return { transactionId, status, transactionHash: null, logs: [] }
+    }
+
+    const resultResponse = await fetch(`${base}/api/v1/contracts/results/${id}`)
+    if (!resultResponse.ok) throw new Error(`Mirror Node returned ${resultResponse.status} for contract result ${transactionId}`)
+    const result = await resultResponse.json() as { logs?: Array<{ address: string; topics: string[]; data: string }> }
+    const hash = Buffer.from(String(tx.transaction_hash ?? ''), 'base64')
+    return {
+      transactionId,
+      status,
+      transactionHash: hash.length > 0 ? toHex(hash) : null,
+      logs: (result.logs ?? []).map(log => ({ address: log.address, topics: log.topics, data: log.data }))
+    }
+  }
+
+  // CertificateLedger: schedules a TokenMint of one serial carrying the given metadata. The server only
+  // pays for the schedule; the mint executes when the token's supply key (2-of-3) has signed it.
+  async scheduleMint(tokenId: string, metadata: string, memo: string): Promise<{ scheduleId: string; scheduledTransactionId: string }> {
+    const mint = new TokenMintTransaction()
+      .setTokenId(TokenId.fromString(tokenId))
+      .addMetadata(Buffer.from(metadata, 'utf8'))
+    const response = await new ScheduleCreateTransaction()
+      .setScheduledTransaction(mint)
+      .setScheduleMemo(memo)
+      .execute(this.client!)
+    const receipt = await response.getReceiptQuery().setValidateStatus(false).execute(this.client!)
+    const status = receipt.status.toString()
+    // An identical pending schedule is not created twice: the ledger returns the existing one
+    if ((status !== 'SUCCESS' && status !== 'IDENTICAL_SCHEDULE_ALREADY_CREATED') || !receipt.scheduleId) {
+      throw new Error(`Scheduling the certificate mint failed with status ${status}`)
+    }
+    return {
+      scheduleId: receipt.scheduleId.toString(),
+      scheduledTransactionId: receipt.scheduledTransactionId?.toString() ?? ''
+    }
+  }
+
+  // CertificateLedger: outcome of a scheduled mint from the Mirror Node.
+  async findScheduledMint(scheduleId: string): Promise<ScheduledMint> {
+    if (!ENTITY_ID.test(scheduleId)) throw new Error(`Malformed schedule id: ${scheduleId}`)
+    const base = mirrorBaseUrl()
+    const response = await fetch(`${base}/api/v1/schedules/${scheduleId}`)
+    if (!response.ok) throw new Error(`Mirror Node returned ${response.status} for schedule ${scheduleId}`)
+    const schedule = await response.json() as { deleted?: boolean; executed_timestamp?: string | null; expiration_time?: string | null }
+    if (schedule.deleted) return { status: 'deleted' }
+
+    if (!schedule.executed_timestamp) {
+      const expiresAt = schedule.expiration_time ? Math.floor(Number(schedule.expiration_time)) : null
+      if (expiresAt !== null && Date.now() / 1000 > expiresAt) return { status: 'expired' }
+      return { status: 'pending', expiresAt }
+    }
+
+    const txResponse = await fetch(`${base}/api/v1/transactions?timestamp=${schedule.executed_timestamp}`)
+    if (!txResponse.ok) throw new Error(`Mirror Node returned ${txResponse.status} for the executed schedule ${scheduleId}`)
+    const body = await txResponse.json() as { transactions?: Array<Record<string, any>> }
+    const tx = (body.transactions ?? [])[0]
+    if (!tx) throw new Error(`Executed transaction of schedule ${scheduleId} not found on the Mirror Node`)
+    // Mints are NFT transfers without a sender
+    const mints = (tx.nft_transfers ?? []).filter((t: any) => t.sender_account_id == null)
+    const hash = Buffer.from(String(tx.transaction_hash ?? ''), 'base64')
+    return {
+      status: 'executed',
+      result: String(tx.result),
+      tokenId: mints[0]?.token_id ?? '',
+      serials: mints.map((t: any) => Number(t.serial_number)),
+      transactionHash: hash.length > 0 ? toHex(hash) : null
+    }
+  }
+
+  // CertificateLedger: metadata of a minted serial, from the Mirror Node.
+  async getNftMetadata(tokenId: string, serialNumber: number): Promise<string | null> {
+    if (!ENTITY_ID.test(tokenId)) throw new Error(`Malformed token id: ${tokenId}`)
+    if (!Number.isSafeInteger(serialNumber) || serialNumber < 1) throw new Error(`Malformed serial number: ${serialNumber}`)
+    const response = await fetch(`${mirrorBaseUrl()}/api/v1/tokens/${tokenId}/nfts/${serialNumber}`)
+    if (response.status === 404) return null
+    if (!response.ok) throw new Error(`Mirror Node returned ${response.status} for ${tokenId} serial ${serialNumber}`)
+    const nft = await response.json() as { metadata?: string }
+    return Buffer.from(String(nft.metadata ?? ''), 'base64').toString('utf8')
+  }
+
+  // EscrowLedger: read-only call; returns the raw ABI-encoded result.
+  async query(contractAddress: string, callData: string): Promise<string> {
+    const result = await new ContractCallQuery()
+      .setContractId(ContractId.fromEvmAddress(0, 0, contractAddress))
+      .setGas(ESCROW_QUERY_GAS)
+      .setFunctionParameters(Buffer.from(callData.slice(2), 'hex'))
+      .execute(this.client!)
+    return toHex(result.bytes)
   }
 
   async createAgreementWithSystem(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<{ agreementId: number, transactionId: string }> {
@@ -269,31 +447,6 @@ export class HederaService {
     }
   }
 
-  async transferHBAR(toAddress: string, amountInTinybars: number): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
-    try {
-      const transferTransaction = new TransferTransaction()
-        .addHbarTransfer(AccountId.fromString(process.env.HEDERA_ACCOUNT_ID!), new Hbar(-amountInTinybars / 100000000))
-        .addHbarTransfer(AccountId.fromString(toAddress), new Hbar(amountInTinybars / 100000000))
-        .setMaxTransactionFee(new Hbar(5))
-
-      const frozenTransaction = await transferTransaction.freezeWith(this.client!)
-      const response = await frozenTransaction.execute(this.client!)
-      const receipt = await response.getReceipt(this.client!)
-      
-      const transactionId = response.transactionId.toString()
-
-      return {
-        success: true,
-        transactionHash: transactionId
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
-    }
-  }
-
   async getAccountInfo(accountId: string): Promise<any> {
     try {
       const accountInfo = await new AccountInfoQuery()
@@ -310,85 +463,6 @@ export class HederaService {
       }
     } catch (error) {
       throw error
-    }
-  }
-
-  async investInAgreement(agreementId: number, amount: number, investorAddress: string): Promise<{ success: boolean; transactionId?: string; error?: string }> {
-    try {
-      if (!this.client || !this.contractId || !this.accountId || !this.privateKey) {
-        throw new Error('Hedera service not initialized')
-      }
-
-      // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
-      const amountInTinybars = Math.floor(amount * 100000000)
-
-      // Create investment transaction
-      const transaction = new ContractExecuteTransaction()
-        .setContractId(this.contractId)
-        .setGas(1000000)
-        .setFunction('investInAgreement', new ContractFunctionParameters().addUint256(agreementId))
-        .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
-        .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`)
-
-      // Freeze, sign and execute transaction
-      const frozenTransaction = await transaction.freezeWith(this.client!)
-      const signedTransaction = await frozenTransaction.sign(this.privateKey)
-      const txResponse = await signedTransaction.execute(this.client)
-
-      // Get transaction receipt
-      const receipt = await txResponse.getReceipt(this.client)
-      const transactionId = txResponse.transactionId.toString()
-
-      console.log(`Investment successful for agreement ${agreementId}: ${transactionId}`)
-      console.log(`Investment made by server on behalf of investor: ${investorAddress}`)
-
-      return {
-        success: true,
-        transactionId
-      }
-    } catch (error) {
-      console.error('Error investing in agreement:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
-    }
-  }
-
-  // New method: Create investment transaction for investor to sign
-  async createInvestmentTransaction(agreementId: number, amount: number, investorAddress: string): Promise<{ success: boolean; transactionBytes?: string; error?: string }> {
-    try {
-      if (!this.client || !this.contractId) {
-        throw new Error('Hedera service not initialized')
-      }
-
-      // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
-      const amountInTinybars = Math.floor(amount * 100000000)
-
-      // Create investment transaction
-      const transaction = new ContractExecuteTransaction()
-        .setContractId(this.contractId)
-        .setGas(1000000)
-        .setFunction('investInAgreement', new ContractFunctionParameters().addUint256(agreementId))
-        .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
-        .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`)
-
-      // Freeze transaction for investor to sign
-      const frozenTransaction = await transaction.freezeWith(this.client!)
-      
-      // Convert to bytes for investor to sign
-      const transactionBytes = frozenTransaction.toBytes()
-
-      return {
-        success: true,
-        transactionBytes: Buffer.from(transactionBytes).toString('hex')
-      }
-    } catch (error) {
-      console.error('Error creating investment transaction:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
     }
   }
 }

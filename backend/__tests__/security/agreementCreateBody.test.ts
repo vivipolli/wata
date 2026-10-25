@@ -70,22 +70,55 @@ describe('POST /api/agreements rejects client-supplied on-chain identifiers', ()
   })
 })
 
-describe('POST /api/agreements takes the ID from the transaction record', () => {
-  it('stores the contract-issued ID (including 0)', async () => {
+describe('POST /api/agreements with escrow v3', () => {
+  const TERMS = { periodAmount: '1000000000000000000000', scoreThreshold: 70, governanceMode: 'HYBRID' }
+
+  it('creates the local agreement without any ledger call or on-chain ID', async () => {
     const res = await post(VALID_BODY)
 
     expect(res.status).toBe(201)
-    expect(res.body.data).toMatchObject({ id: 17, blockchainId: 0, transactionId: '0.0.1001@1.2' })
-    expect(hedera.createAgreementWithSystem).toHaveBeenCalledTimes(1)
-    expect(db.updateAgreementBlockchainId).toHaveBeenCalledWith(17, 0)
+    expect(res.body.data).toMatchObject({ id: 17 })
+    expect(res.body.data.blockchainId).toBeUndefined()
+    expect(hedera.createAgreementWithSystem).not.toHaveBeenCalled()
+    expect(db.updateAgreementBlockchainId).not.toHaveBeenCalled()
   })
 
-  it('does not store any on-chain ID when the ledger call fails', async () => {
-    hedera.createAgreementWithSystem.mockRejectedValueOnce(new Error('createAgreement returned no function result'))
+  it('stores the escrow terms and returns the createAgreement call for the admin account to sign', async () => {
+    const res = await post({ ...VALID_BODY, ...TERMS })
 
-    const res = await post(VALID_BODY)
+    expect(res.status).toBe(201)
+    expect(db.createAgreement).toHaveBeenCalledWith(expect.objectContaining({
+      periodAmount: TERMS.periodAmount, scoreThreshold: 70, governanceMode: 'HYBRID'
+    }))
+    expect(res.body.data.escrowCall).toEqual({
+      function: 'createAgreement',
+      args: { producer: VALID_BODY.producerAddress.toLowerCase(), periodAmount: TERMS.periodAmount, scoreThreshold: 70, mode: 'HYBRID' }
+    })
+  })
 
-    expect(res.status).toBe(500)
-    expect(db.updateAgreementBlockchainId).not.toHaveBeenCalled()
+  it('stores the monitoring station that scores the agreement', async () => {
+    const res = await post({ ...VALID_BODY, stationCode: '00RJ24MC0010' })
+    expect(res.status).toBe(201)
+    expect(db.createAgreement).toHaveBeenCalledWith(expect.objectContaining({ stationCode: '00RJ24MC0010' }))
+  })
+
+  it('rejects a malformed station code', async () => {
+    expect((await post({ ...VALID_BODY, stationCode: 'mc 10' })).status).toBe(400)
+    expect(db.createAgreement).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['zero period amount', { periodAmount: '0' }],
+    ['numeric period amount (precision loss)', { periodAmount: 1000 }],
+    ['period amount with decimals', { periodAmount: '1.5' }],
+    ['threshold 0', { scoreThreshold: 0 }],
+    ['threshold above 100', { scoreThreshold: 101 }],
+    ['unknown governance mode', { governanceMode: 'MANUAL' }],
+    ['non-EVM producer address', { producerAddress: '0.0.123456' }]
+  ])('rejects %s → 400 and nothing is written', async (_label, override) => {
+    const res = await post({ ...VALID_BODY, ...TERMS, ...override })
+
+    expect(res.status).toBe(400)
+    expect(db.createAgreement).not.toHaveBeenCalled()
   })
 })

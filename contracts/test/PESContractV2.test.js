@@ -165,7 +165,7 @@ describe("PESContract V2", function () {
 
       await expect(
         pesContract.connect(oracle).submitValidatedBatch(agreementId, auditHash, 150)
-      ).to.be.revertedWith("Score must be between 0 and 100");
+      ).to.be.revertedWith("Score must be between 0 and 100 (0-1 normalized, 0.7 = 70%)");
     });
 
     it("Should revert when agreement is not active", async function () {

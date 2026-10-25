@@ -9,7 +9,6 @@ import jwt from 'jsonwebtoken'
 
 jest.mock('../../src/services/orm/prismaDatabase', () => ({ PrismaDatabase: class {} }))
 jest.mock('../../src/services/hedera', () => ({ HederaService: class {} }))
-jest.mock('../../src/services/relayer', () => ({ RelayerService: class {} }))
 
 const JWT_SECRET = 'test-secret-that-is-long-enough-for-hs256-0123456789'
 process.env.JWT_SECRET = JWT_SECRET
@@ -29,15 +28,24 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
   db = {
     getUserById: jest.fn(async (id: number) => (id === MANAGER.id ? MANAGER : null)),
-    getAgreement: jest.fn(async () => ({ id: 1, base_value: 10, hectares: 5 })),
-    getBatchesByAgreement: jest.fn(async () => [{ id: 9, score: 0.9, audit_hash: 'ab'.repeat(32) }]),
+    getAgreement: jest.fn(async () => ({ id: 1, base_value: 10, hectares: 5, blockchain_id: 0 })),
+    getBatchesByAgreement: jest.fn(async () => [{ id: 9, score: 0.9, audit_hash: 'ab'.repeat(32), period_id: 9 }]),
     // Empty: simulates the race where the existence check runs before the other insert commits
     getPaymentsByAgreement: jest.fn(async () => []),
-    createPayment: jest.fn(async () => 1)
+    createPayment: jest.fn(async () => 1),
+    recordPaymentRelease: jest.fn(async () => undefined),
+    markPaymentFailed: jest.fn(async () => undefined),
+    attachPaymentHcs: jest.fn(async () => undefined)
+  }
+  const escrow = {
+    getPeriod: jest.fn(async () => ({ state: 'Approved', auditHash: 'ab'.repeat(32), score: 90, scoreVersion: 1, approvalDeadline: 0 })),
+    getAgreement: jest.fn(async () => ({ periodAmount: '50', scoreThreshold: 70 })),
+    release: jest.fn(async () => ({ outcome: 'released', amount: '50', producer: '0xp', transactionId: '0.0.1@1.2', transactionHash: '0x' + 'cd'.repeat(48) }))
   }
   app = express()
   app.use(express.json())
-  app.use('/api/payments', paymentRoutes({} as any, db, {} as any))
+  const audit = { publishAuditRecord: jest.fn(async () => '0.0.7@1.2') }
+  app.use('/api/payments', paymentRoutes({} as any, db, { escrow: escrow as any, audit }))
 })
 
 afterEach(() => jest.restoreAllMocks())
@@ -63,12 +71,12 @@ describe('POST /api/payments/trigger-check under a concurrent duplicate', () => 
     expect(res.status).toBe(500)
   })
 
-  it('records a pending payment when there is no duplicate', async () => {
+  it('reserves the payment before releasing when there is no duplicate', async () => {
     const res = await trigger()
 
     expect(res.status).toBe(200)
     expect(db.createPayment).toHaveBeenCalledWith(expect.objectContaining({
-      agreementId: 1, batchId: 9, amount: 50, status: 'pending', auditHash: 'ab'.repeat(32)
+      agreementId: 1, batchId: 9, amount: '50', status: 'processing', auditHash: 'ab'.repeat(32)
     }))
   })
 })

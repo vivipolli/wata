@@ -25,12 +25,18 @@ model agreements {
   duration_days    Int?
   created_at       DateTime  @default(now())
   is_active        Boolean   @default(true)
-  blockchain_id    Int?
+  // One local agreement per on-chain escrow agreement
+  blockchain_id    Int?      @unique
+  // Monitoring station whose measurements score this agreement (e.g. INEA 00RJ24MC0010)
+  station_code     String?
   transaction_id   String?
   investor_address String?
   governance_mode  String    @default("AUTO")
   total_invested   Float     @default(0)
   total_paid       Float     @default(0)
+  // Escrow v3 terms, read from the contract; values are decimal strings in the contract's native unit
+  period_amount    String?
+  score_threshold  Int?
   batches          batches[]
   payments         payments[]
   readings         readings[]
@@ -63,7 +69,8 @@ model batches {
   oracle_signature  String?
   score             Float
   readings_count    Int
-  average_turbidity Float
+  // Legacy turbidity-only flow; empty for scores computed from measurements
+  average_turbidity Float?
   median_turbidity  Float?
   outliers_detected Int?      @default(0)
   validation_status String    @default("pending")
@@ -72,6 +79,13 @@ model batches {
   oracle_address    String?
   hcs_transaction_id String?
   hfs_file_id        String?
+  period_id          Int?
+  // Measurement-based score (F3): scored period, rule version (on-chain scoreVersion) and the
+  // canonical audit document whose SHA-256 is audit_hash
+  period_start       DateTime?
+  period_end         DateTime?
+  score_version      Int?
+  audit_document     String?
   agreement         agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   readings          readings[]
   payments          payments[]
@@ -85,7 +99,8 @@ model payments {
   id                 Int       @id @default(autoincrement())
   agreement_id       Int
   batch_id           Int?
-  amount             Int
+  // Decimal string in the contract's native unit: uint256 values overflow any integer column
+  amount             String
   transaction_hash   String?
   status             String    @default("pending")
   created_at         DateTime  @default(now())
@@ -95,6 +110,10 @@ model payments {
   hcs_transaction_id String?
   hfs_file_id        String?
   investor_address   String?
+  period_id          Int?
+  transaction_id     String?
+  onchain_state      String?
+  certificate        certificates?
   agreement          agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   batch              batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
 
@@ -120,7 +139,10 @@ model investments {
   id               Int       @id @default(autoincrement())
   agreement_id     Int
   investor_address String
-  amount           Float
+  // Decimal string in the contract's native unit (tinybar), read from the Deposited event
+  amount           String
+  // Ledger transaction of the deposit: a deposit is recorded once
+  transaction_id   String?   @unique
   transaction_hash String?
   status           String?   @default("pending")
   created_at       DateTime  @default(now())
@@ -155,4 +177,47 @@ model users {
   last_login DateTime?
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
+}
+
+// NFT certificate of a released payment (HIP-412 metadata on IPFS, minted by a scheduled
+// TokenMint that the 2-of-3 supply key signs). One certificate per payment.
+model certificates {
+  id                       Int       @id @default(autoincrement())
+  payment_id               Int       @unique
+  // prepared -> scheduled -> minted; failed when the schedule expired or was deleted
+  status                   String    @default("prepared")
+  metadata_json            String
+  metadata_sha256          String
+  metadata_cid             String?
+  metadata_uri             String?
+  token_id                 String?
+  schedule_id              String?
+  scheduled_transaction_id String?
+  serial_number            Int?
+  mint_transaction_hash    String?
+  created_at               DateTime  @default(now())
+  minted_at                DateTime?
+  payment                  payments  @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+}
+
+// Water-quality measurement from an official source, scored against the CONAMA catalog.
+// One row per source record and parameter, so imports are idempotent.
+model measurements {
+  id           Int      @id @default(autoincrement())
+  station_code String
+  // CONAMA catalog parameter id (src/score/conama357.ts)
+  parameter    String
+  // Reported value, or the detection limit when qualifier is set; null when not reported
+  value        Float?
+  unit         String
+  // '<' below, '>' above, '?' censored with no direction; null when measured
+  qualifier    String?
+  sampled_at   DateTime
+  source       String
+  // Locator of the record in the source (e.g. spreadsheet hash, sheet and row)
+  source_ref   String
+  created_at   DateTime @default(now())
+
+  @@unique([source, source_ref, parameter])
+  @@index([station_code, sampled_at])
 }
