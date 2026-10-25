@@ -31,6 +31,9 @@ model agreements {
   governance_mode  String    @default("AUTO")
   total_invested   Float     @default(0)
   total_paid       Float     @default(0)
+  // Escrow v3 terms, read from the contract; values are decimal strings in the contract's native unit
+  period_amount    String?
+  score_threshold  Int?
   batches          batches[]
   payments         payments[]
   readings         readings[]
@@ -72,6 +75,7 @@ model batches {
   oracle_address    String?
   hcs_transaction_id String?
   hfs_file_id        String?
+  period_id          Int?
   agreement         agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   readings          readings[]
   payments          payments[]
@@ -85,7 +89,8 @@ model payments {
   id                 Int       @id @default(autoincrement())
   agreement_id       Int
   batch_id           Int?
-  amount             Int
+  // Decimal string in the contract's native unit: uint256 values overflow any integer column
+  amount             String
   transaction_hash   String?
   status             String    @default("pending")
   created_at         DateTime  @default(now())
@@ -95,6 +100,9 @@ model payments {
   hcs_transaction_id String?
   hfs_file_id        String?
   investor_address   String?
+  period_id          Int?
+  transaction_id     String?
+  onchain_state      String?
   agreement          agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   batch              batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
 

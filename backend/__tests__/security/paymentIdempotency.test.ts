@@ -68,7 +68,7 @@ describe('POST /api/payments/trigger-check under a concurrent duplicate', () => 
 
     expect(res.status).toBe(200)
     expect(db.createPayment).toHaveBeenCalledWith(expect.objectContaining({
-      agreementId: 1, batchId: 9, amount: 50, status: 'pending', auditHash: 'ab'.repeat(32)
+      agreementId: 1, batchId: 9, amount: '50', status: 'pending', auditHash: 'ab'.repeat(32)
     }))
   })
 })

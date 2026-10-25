@@ -136,7 +136,7 @@ describe('Relayer Integration Tests', () => {
       expect(payments).toHaveLength(1)
       expect(payments[0].batch_id).toBe(batchId)
       expect(payments[0].score).toBe(85)
-      expect(payments[0].amount).toBe(5000)
+      expect(payments[0].amount).toBe('5000')
       expect(payments[0].status).toBe('completed')
       expect(payments[0].transaction_hash).toBeDefined()
     })

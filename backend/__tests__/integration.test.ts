@@ -751,7 +751,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         success: true,
         data: expect.objectContaining({
           pendingPayments: expect.any(Number),
-          totalPendingAmount: expect.any(Number)
+          totalPendingAmount: expect.any(String)
         })
       })
     })

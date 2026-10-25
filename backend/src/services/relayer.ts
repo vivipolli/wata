@@ -218,7 +218,7 @@ export class RelayerService {
         paymentId = await this.database.createPayment({
           agreementId,
           batchId: batch?.id ?? null,
-          amount,
+          amount: String(amount),
           status: 'pending',
           auditHash,
           score,

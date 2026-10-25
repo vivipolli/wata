@@ -16,7 +16,8 @@ interface PaymentCheckResult {
 
 interface PaymentStats {
   pendingPayments: number
-  totalPendingAmount: number
+  // Decimal string: amounts are summed exactly
+  totalPendingAmount: string
 }
 
 export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService) {
@@ -92,7 +93,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
         paymentId = await database.createPayment({
           agreementId,
           batchId: latestBatch.id,
-          amount: paymentAmount,
+          amount: String(paymentAmount),
           status: 'pending',
           auditHash: latestBatch.audit_hash,
           score: latestBatch.score
@@ -257,7 +258,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
     try {
       const pendingPayments = await database.getPendingPayments()
       
-      const totalPendingAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0)
+      const totalPendingAmount = pendingPayments.reduce((sum, p) => sum + BigInt(p.amount), 0n).toString()
 
       const response: ApiResponse<PaymentStats> = {
         success: true,

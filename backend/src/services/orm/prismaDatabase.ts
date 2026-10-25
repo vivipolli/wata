@@ -53,7 +53,8 @@ export interface ReadingData {
 export interface PaymentData {
   agreementId: number
   batchId?: number | null
-  amount: number
+  // Decimal string in the contract's native unit
+  amount: string
   transactionHash?: string | null
   status: 'pending' | 'processing' | 'completed' | 'failed'
   auditHash?: string | null
@@ -61,6 +62,9 @@ export interface PaymentData {
   hcsTransactionId?: string | null
   hfsFileId?: string | null
   investorAddress?: string | null
+  periodId?: number | null
+  transactionId?: string | null
+  onchainState?: string | null
 }
 
 export interface BatchData {
@@ -245,7 +249,10 @@ export class PrismaDatabase {
         score: data.score ?? null,
         hcs_transaction_id: data.hcsTransactionId ?? null,
         hfs_file_id: data.hfsFileId ?? null,
-        investor_address: data.investorAddress ?? null
+        investor_address: data.investorAddress ?? null,
+        period_id: data.periodId ?? null,
+        transaction_id: data.transactionId ?? null,
+        onchain_state: data.onchainState ?? null
       }
     })
     return payment.id

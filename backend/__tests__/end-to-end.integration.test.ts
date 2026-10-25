@@ -151,7 +151,7 @@ describe('W.A.T.A. Chain End-to-End Integration Tests', () => {
 
       const payments = await database.getPaymentsByAgreement(agreementId)
       expect(payments).toHaveLength(1)
-      expect(payments[0].amount).toBe(paymentAmount)
+      expect(payments[0].amount).toBe(String(paymentAmount))
       expect(payments[0].status).toBe('completed')
       expect(payments[0].score).toBe(score)
       expect(payments[0].audit_hash).toBe(auditHash)

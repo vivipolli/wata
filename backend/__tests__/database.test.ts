@@ -159,7 +159,7 @@ describe('Database Tests', () => {
     const paymentId = await database.createPayment({
       agreementId,
       batchId,
-      amount: 5000,
+      amount: '5000',
       status: 'pending',
       auditHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
       score: 75
@@ -171,7 +171,7 @@ describe('Database Tests', () => {
     expect(payment).toBeDefined()
     expect(payment?.agreement_id).toBe(agreementId)
     expect(payment?.batch_id).toBe(batchId)
-    expect(payment?.amount).toBe(5000)
+    expect(payment?.amount).toBe('5000')
     expect(payment?.status).toBe('pending')
     expect(payment?.score).toBe(75)
   })
@@ -185,7 +185,7 @@ describe('Database Tests', () => {
       hectares: 50
     })
     const auditHash = 'cd'.repeat(32)
-    const payment = { agreementId, amount: 5000, status: 'pending' as const, auditHash, score: 0.9 }
+    const payment = { agreementId, amount: '5000', status: 'pending' as const, auditHash, score: 0.9 }
 
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => database.createPayment(payment)))
 
