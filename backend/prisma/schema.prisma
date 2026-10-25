@@ -27,6 +27,8 @@ model agreements {
   is_active        Boolean   @default(true)
   // One local agreement per on-chain escrow agreement
   blockchain_id    Int?      @unique
+  // Monitoring station whose measurements score this agreement (e.g. INEA 00RJ24MC0010)
+  station_code     String?
   transaction_id   String?
   investor_address String?
   governance_mode  String    @default("AUTO")
@@ -189,4 +191,26 @@ model certificates {
   created_at               DateTime  @default(now())
   minted_at                DateTime?
   payment                  payments  @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+}
+
+// Water-quality measurement from an official source, scored against the CONAMA catalog.
+// One row per source record and parameter, so imports are idempotent.
+model measurements {
+  id           Int      @id @default(autoincrement())
+  station_code String
+  // CONAMA catalog parameter id (src/score/conama357.ts)
+  parameter    String
+  // Reported value, or the detection limit when qualifier is set; null when not reported
+  value        Float?
+  unit         String
+  // '<' below, '>' above, '?' censored with no direction; null when measured
+  qualifier    String?
+  sampled_at   DateTime
+  source       String
+  // Locator of the record in the source (e.g. spreadsheet hash, sheet and row)
+  source_ref   String
+  created_at   DateTime @default(now())
+
+  @@unique([source, source_ref, parameter])
+  @@index([station_code, sampled_at])
 }

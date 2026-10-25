@@ -42,7 +42,7 @@ describe('INEA rows to measurements', () => {
   })
 
   it('maps oxygen and BOD mg/L to mg/L O2, keeps nutrients without a base, and maps qualifiers', () => {
-    expect(fromInea(row({}))).toEqual({ parameter: 'OD_mg_L_O2', value: 7.5, unit: 'mg/L O2', qualifier: null, station: '00RJ24MC0010', sampledAt: '2025-01-21' })
+    expect(fromInea(row({}))).toEqual({ parameter: 'OD_mg_L_O2', value: 7.5, unit: 'mg/L O2', qualifier: null, station: 'MC0010', sampledAt: '2025-01-21' })
     expect(fromInea(row({ parametro_id: 'dbo', qualificador: 'ABAIXO_LD', valor_num: '2' }))).toMatchObject({ parameter: 'DBO_5d_20C_mg_L_O2', unit: 'mg/L O2', qualifier: '<' })
     expect(fromInea(row({ parametro_id: 'nitrato', valor_num: '0.5' }))).toMatchObject({ parameter: 'nitrato_mg_L_N', unit: 'mg/L' })
     expect(fromInea(row({ parametro_id: 'ph', unidade: '', valor_num: '7.1' }))).toMatchObject({ parameter: 'pH', unit: 'pH' })

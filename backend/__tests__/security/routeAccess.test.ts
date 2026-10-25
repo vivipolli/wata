@@ -23,6 +23,7 @@ import oracleRoutes from '../../src/routes/oracle'
 import hederaRoutes from '../../src/routes/hedera'
 import batchSchedulerRoutes from '../../src/routes/batchScheduler'
 import certificateRoutes from '../../src/routes/certificates'
+import measurementRoutes from '../../src/routes/measurements'
 
 type Role = 'PRODUCER' | 'INVESTOR' | 'MANAGER'
 
@@ -69,7 +70,8 @@ const MOUNTS: Array<{ base: string; router: Router }> = [
   { base: '/api/oracle', router: oracleRoutes(fakeDb, fakeService) },
   { base: '/api/hedera', router: hederaRoutes(fakeService, fakeDb) },
   { base: '/api/batch-scheduler', router: batchSchedulerRoutes(fakeService, fakeDb) },
-  { base: '/api/certificates', router: certificateRoutes(fakeService, fakeDb) }
+  { base: '/api/certificates', router: certificateRoutes(fakeService, fakeDb) },
+  { base: '/api/measurements', router: measurementRoutes(fakeDb) }
 ]
 
 const app = express()
@@ -107,6 +109,7 @@ const MANAGER_ONLY = [
   'post /api/payments/approval-call/1',
   'post /api/certificates/payment/1/prepare',
   'post /api/certificates/1/confirm',
+  'post /api/measurements/',
   'post /api/oracle/process',
   'post /api/oracle/process-all',
   'post /api/hedera/hcs/publish',

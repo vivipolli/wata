@@ -96,6 +96,17 @@ describe('POST /api/agreements with escrow v3', () => {
     })
   })
 
+  it('stores the monitoring station that scores the agreement', async () => {
+    const res = await post({ ...VALID_BODY, stationCode: '00RJ24MC0010' })
+    expect(res.status).toBe(201)
+    expect(db.createAgreement).toHaveBeenCalledWith(expect.objectContaining({ stationCode: '00RJ24MC0010' }))
+  })
+
+  it('rejects a malformed station code', async () => {
+    expect((await post({ ...VALID_BODY, stationCode: 'mc 10' })).status).toBe(400)
+    expect(db.createAgreement).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['zero period amount', { periodAmount: '0' }],
     ['numeric period amount (precision loss)', { periodAmount: 1000 }],

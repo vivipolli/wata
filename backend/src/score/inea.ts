@@ -1,4 +1,6 @@
 import type { Measurement } from './engine'
+import type { MeasurementInput } from './measurements'
+import { bulletinStation } from './stations'
 
 /** A normalized row of the public INEA spreadsheet (dMRV engine output). */
 export interface IneaRow {
@@ -8,6 +10,9 @@ export interface IneaRow {
   unidade: string
   qualificador: string
   valor_num: string
+  // Sheet and row in the INEA spreadsheet (dMRV engine output)
+  aba?: string
+  linha?: string
 }
 
 /**
@@ -44,7 +49,32 @@ export function fromInea(row: IneaRow): Measurement | null {
     unit: map.unit ? map.unit(row.unidade) : row.unidade,
     // An unknown qualifier code is treated as censored with no direction (never as measured)
     qualifier: row.qualificador in QUALIFIERS ? QUALIFIERS[row.qualificador] : '?',
-    station: row.estacao,
+    // Bulletin code where the raw code is a known rename (G-33)
+    station: bulletinStation(row.estacao),
     sampledAt: row.data
   }
+}
+
+/**
+ * INEA rows to records for storage. The source ref locates the record in the spreadsheet (file hash,
+ * sheet, row) and keeps the raw station code, so re-importing the same file never duplicates it and
+ * the original identity is never lost. Unmapped parameters and rows without a value are skipped.
+ */
+export function ineaRowsToMeasurementInputs(rows: IneaRow[], spreadsheetSha: string): MeasurementInput[] {
+  const out: MeasurementInput[] = []
+  for (const row of rows) {
+    const m = fromInea(row)
+    if (!m || m.value === null || !Number.isFinite(m.value)) continue
+    out.push({
+      stationCode: m.station,
+      sampledAt: m.sampledAt,
+      parameter: m.parameter,
+      value: m.value,
+      unit: m.unit,
+      qualifier: m.qualifier,
+      source: 'INEA',
+      sourceRef: `xlsx:${spreadsheetSha}:${row.aba}:${row.linha}:${row.estacao}`
+    })
+  }
+  return out
 }

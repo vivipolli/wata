@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import type { MeasurementInput } from '../../score/measurements'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -43,6 +44,7 @@ export interface AgreementData {
   periodAmount?: string | null
   scoreThreshold?: number | null
   governanceMode?: 'AUTO' | 'HYBRID'
+  stationCode?: string | null
 }
 
 export interface ReadingData {
@@ -133,7 +135,8 @@ export class PrismaDatabase {
         duration_days: data.durationDays ?? null,
         period_amount: data.periodAmount ?? null,
         score_threshold: data.scoreThreshold ?? null,
-        governance_mode: data.governanceMode ?? 'AUTO'
+        governance_mode: data.governanceMode ?? 'AUTO',
+        station_code: data.stationCode ?? null
       }
     })
     return agreement.id
@@ -624,6 +627,41 @@ export class PrismaDatabase {
       data: { status: 'failed' }
     })
     return count === 1
+  }
+
+  /** Stores measurements; a record already stored for the same source, ref and parameter is counted, not duplicated. */
+  async insertMeasurements(rows: MeasurementInput[]): Promise<{ inserted: number; duplicates: number }> {
+    let inserted = 0
+    let duplicates = 0
+    for (const m of rows) {
+      try {
+        await this.prisma.measurements.create({
+          data: {
+            station_code: m.stationCode,
+            parameter: m.parameter,
+            value: m.value,
+            unit: m.unit,
+            qualifier: m.qualifier,
+            sampled_at: new Date(m.sampledAt),
+            source: m.source,
+            source_ref: m.sourceRef
+          }
+        })
+        inserted++
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'P2002') throw error
+        duplicates++
+      }
+    }
+    return { inserted, duplicates }
+  }
+
+  /** Measurements of a station sampled in [from, to], in sampling order. */
+  async getMeasurements(stationCode: string, from: Date, to: Date) {
+    return this.prisma.measurements.findMany({
+      where: { station_code: stationCode, sampled_at: { gte: from, lte: to } },
+      orderBy: [{ sampled_at: 'asc' }, { id: 'asc' }]
+    })
   }
 
   async getInvestment(investmentId: number): Promise<investments | null> {

@@ -6,6 +6,7 @@ import { AuthMiddleware } from '../middleware/auth'
 import { isUniqueViolation } from '../utils/prismaErrors'
 import type { ApiResponse, CreateAgreementWithSignatureRequest } from '../types/index'
 import type { EscrowService, GovernanceMode } from '../services/escrow'
+import { STATION_CODE } from '../score/measurements'
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/
 // Positive integer as a decimal string: uint256 values do not fit a JSON number
@@ -122,6 +123,12 @@ export default function agreementRoutes(hederaService: HederaService, database: 
       }
       const terms = parsedTerms && 'terms' in parsedTerms ? parsedTerms.terms : null
 
+      // Monitoring station whose measurements score this agreement (optional at creation)
+      const stationCode = body.stationCode
+      if (stationCode !== undefined && (typeof stationCode !== 'string' || !STATION_CODE.test(stationCode))) {
+        return res.status(400).json({ success: false, error: 'stationCode must be 6-20 upper-case letters or digits' } as ApiResponse)
+      }
+
       // Update user address for producers (always update to match the agreement)
       const user = (req as any).user
       if (user && user.role === 'PRODUCER') {
@@ -156,7 +163,8 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         durationDays,
         periodAmount: terms?.periodAmount ?? null,
         scoreThreshold: terms?.scoreThreshold ?? null,
-        governanceMode: terms?.governanceMode
+        governanceMode: terms?.governanceMode,
+        stationCode: stationCode ?? null
       })
 
       // The server never creates the escrow agreement: createAgreement is restricted to the admin

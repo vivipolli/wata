@@ -13,6 +13,7 @@ import hederaRoutes from './routes/hedera.js'
 import batchSchedulerRoutes from './routes/batchScheduler.js'
 import authRoutes from './routes/auth.js'
 import certificateRoutes from './routes/certificates.js'
+import measurementRoutes from './routes/measurements.js'
 import { 
   securityMiddleware, 
   requestLogger, 
@@ -65,6 +66,7 @@ app.use('/api/oracle', oracleRoutes(db, hederaService))
 app.use('/api/hedera', hederaRoutes(hederaService, db))
 app.use('/api/batch-scheduler', batchSchedulerRoutes(batchSchedulerService, db))
 app.use('/api/certificates', certificateRoutes(hederaService, db))
+app.use('/api/measurements', measurementRoutes(db))
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {

@@ -20,3 +20,8 @@ export const AMBIGUOUS_BASE: Record<string, { unit: string; factor: number; comp
   // PO4 / P = 94.9714 / 30.9738
   fosforo_total_mg_L_P: { unit: 'mg/L', factor: 94.9714 / 30.9738, compound: 'PO4' }
 }
+
+/** Whether a reported unit can be scored for a catalog parameter (exact, sourced alias, or known ambiguity). */
+export function isAcceptedUnit(parameter: string, unit: string, catalogUnit: string): boolean {
+  return unit === catalogUnit || (UNIT_ALIASES[parameter] ?? []).includes(unit) || AMBIGUOUS_BASE[parameter]?.unit === unit
+}
