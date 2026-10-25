@@ -56,7 +56,8 @@ export interface PaymentData {
   // Decimal string in the contract's native unit
   amount: string
   transactionHash?: string | null
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  // deferred: released on-chain, payout held by the contract for the producer to withdraw
+  status: 'pending' | 'processing' | 'completed' | 'deferred' | 'failed'
   auditHash?: string | null
   score?: number | null
   hcsTransactionId?: string | null
@@ -256,6 +257,37 @@ export class PrismaDatabase {
       }
     })
     return payment.id
+  }
+
+  /** Moves a pending or failed payment to 'processing'. Returns false if another request got there first. */
+  async claimPaymentForRelease(paymentId: number): Promise<boolean> {
+    const { count } = await this.prisma.payments.updateMany({
+      where: { id: paymentId, status: { in: ['pending', 'failed'] } },
+      data: { status: 'processing' }
+    })
+    return count === 1
+  }
+
+  /** Records the ledger outcome of a release for a payment that is being processed. */
+  async recordPaymentRelease(paymentId: number, outcome: { status: 'completed' | 'deferred'; transactionId: string; transactionHash: string; onchainState: string }): Promise<void> {
+    await this.prisma.payments.updateMany({
+      where: { id: paymentId, status: 'processing' },
+      data: {
+        status: outcome.status,
+        transaction_id: outcome.transactionId,
+        transaction_hash: outcome.transactionHash,
+        onchain_state: outcome.onchainState,
+        processed_at: new Date()
+      }
+    })
+  }
+
+  /** Marks a payment that is being processed as failed, so it can be retried. */
+  async markPaymentFailed(paymentId: number): Promise<void> {
+    await this.prisma.payments.updateMany({
+      where: { id: paymentId, status: 'processing' },
+      data: { status: 'failed' }
+    })
   }
 
   async updatePaymentStatus(paymentId: number, status: string, transactionHash?: string): Promise<void> {

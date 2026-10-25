@@ -206,9 +206,10 @@ describe('removed and disabled fund-moving routes', () => {
     }
   })
 
-  it('POST /api/payments/process returns 501 instead of a fake success', async () => {
+  it('POST /api/payments/process never reports success without the ledger', async () => {
     const res = await request(app).post('/api/payments/process/1')
       .set('Authorization', `Bearer ${signAccess(3)}`).send({})
-    expect(res.status).toBe(501)
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(res.body.success).toBe(false)
   })
 })

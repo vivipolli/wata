@@ -77,6 +77,21 @@ class MockHederaService extends HederaService {
     }
   }
 
+  // Escrow v3 stand-in: every submitted batch is an Approved period whose audit hash is the batch's
+  getEscrowService(): any {
+    return {
+      getPeriod: async (_agreementId: number, periodId: number) => {
+        const batch = await getPrismaClient().batches.findUnique({ where: { id: periodId } })
+        return { state: 'Approved', auditHash: batch!.audit_hash, score: 80, scoreVersion: 1, approvalDeadline: 0 }
+      },
+      getAgreement: async () => ({ periodAmount: '50000', scoreThreshold: 70 }),
+      release: async () => ({
+        outcome: 'released', amount: '50000', producer: '0xp',
+        transactionId: '0.0.123456@1758983593.000000001', transactionHash: '0x' + 'cd'.repeat(48)
+      })
+    }
+  }
+
   async recordAudit(auditHash: string): Promise<any> {
     return {
       transactionId: '0.0.123456@1758983593753'
@@ -509,13 +524,15 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       }
 
       // Create a batch for testing
-      await database.createBatch({
+      const batchId = await database.createBatch({
         agreementId: agreementId,
         auditHash: 'test-audit-hash',
         score: 0.8,
         readingsCount: compliantReadings.length,
         averageTurbidity: compliantReadings.reduce((a, b) => a + b, 0) / compliantReadings.length
       })
+      // The oracle submits the batch to the escrow; the batch is the on-chain period
+      await database.updateBatchStatus(batchId, 'submitted', new Date(), batchId)
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
@@ -548,13 +565,14 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       }
 
       // Create a batch for testing with low score
-      await database.createBatch({
+      const batchId = await database.createBatch({
         agreementId: agreementId,
         auditHash: 'test-audit-hash-2',
         score: 0.8,
         readingsCount: nonCompliantReadings.length,
         averageTurbidity: nonCompliantReadings.reduce((a, b) => a + b, 0) / nonCompliantReadings.length
       })
+      await database.updateBatchStatus(batchId, 'submitted', new Date(), batchId)
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)
@@ -601,13 +619,15 @@ describe('W.A.T.A. Chain Integration Tests', () => {
       }
 
       // Create a batch for testing
-      await database.createBatch({
+      const batchId = await database.createBatch({
         agreementId: agreementId,
         auditHash: 'test-audit-hash-3',
         score: 0.9,
         readingsCount: compliantReadings.length,
         averageTurbidity: compliantReadings.reduce((a, b) => a + b, 0) / compliantReadings.length
       })
+      // The oracle submits the batch to the escrow; the batch is the on-chain period
+      await database.updateBatchStatus(batchId, 'submitted', new Date(), batchId)
 
       const response = await request(app)
         .post(`/api/payments/trigger-check/${agreementId}`)

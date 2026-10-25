@@ -5,13 +5,19 @@ import { AuthMiddleware } from '../middleware/auth'
 import { RelayerService } from '../services/relayer'
 import { isUniqueViolation } from '../utils/prismaErrors'
 import type { TriggerCheckRequest, ApiResponse } from '../types/index'
+import type { EscrowService, EscrowPeriod, ReleaseResult } from '../services/escrow'
+
+type EscrowPort = Pick<EscrowService, 'getPeriod' | 'getAgreement' | 'release'>
 
 interface PaymentCheckResult {
   success: boolean
   message: string
-  averageTurbidity?: number
-  amount?: number
-  threshold?: number
+  paymentId: number
+  outcome: ReleaseResult['outcome']
+  // Decimal string in the contract's native unit
+  amount: string
+  transactionId: string
+  transactionHash: string
 }
 
 interface PaymentStats {
@@ -20,7 +26,7 @@ interface PaymentStats {
   totalPendingAmount: string
 }
 
-export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService) {
+export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService, escrow?: EscrowPort) {
   const router = express.Router()
   const authMiddleware = new AuthMiddleware(database)
   const requireManager = authMiddleware.requireRole('MANAGER')
@@ -28,102 +34,138 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
   // Every payments route requires an authenticated user
   router.use(authMiddleware.authenticate)
 
-  // Trigger payment check for an agreement
+  // Resolved per request so a missing ESCROW_CONTRACT_ADDRESS fails the request, not the startup
+  const getEscrow = (): EscrowPort => escrow ?? hederaService.getEscrowService()
+
+  const fail = (res: Response, status: number, error: string, data?: unknown) => {
+    const response: ApiResponse = { success: false, error, ...(data ? { data } : {}) }
+    return res.status(status).json(response)
+  }
+
+  /**
+   * Explains why an on-chain period cannot be released. Returns null when it is Approved for
+   * this audit hash. The chain decides: local scores and statuses are never used for this.
+   */
+  async function blockReason(port: EscrowPort, onchainAgreementId: number, period: EscrowPeriod, auditHash: string | null) {
+    if (auditHash && period.auditHash.toLowerCase() !== auditHash.replace(/^0x/i, '').toLowerCase()) {
+      return { status: 409, error: 'The on-chain period holds a different audit hash than the local record' }
+    }
+    switch (period.state) {
+      case 'Approved':
+        return null
+      case 'PendingApproval':
+        return { status: 409, error: 'Period is awaiting approval by the financial manager', data: { approvalDeadline: period.approvalDeadline } }
+      case 'Released':
+        return { status: 409, error: 'Period was already released on-chain; reconcile the payment from the ledger record' }
+      case 'None':
+        return { status: 409, error: 'Batch is not registered on-chain for this period' }
+      case 'Rejected': {
+        const terms = await port.getAgreement(onchainAgreementId)
+        return { status: 400, error: `Score ${period.score} is below the on-chain threshold of ${terms.scoreThreshold}` }
+      }
+      default:
+        return { status: 400, error: `Period is ${period.state} on-chain and cannot be released` }
+    }
+  }
+
+  // Executes the release of a claimed payment and records the ledger outcome
+  async function executeRelease(res: Response, port: EscrowPort, paymentId: number, onchainAgreementId: number, periodId: number) {
+    let release: ReleaseResult
+    try {
+      release = await port.release(onchainAgreementId, periodId)
+    } catch (error) {
+      await database.markPaymentFailed(paymentId)
+      return fail(res, 502, 'Escrow release failed', { paymentId, reason: error instanceof Error ? error.message : 'Unknown error' })
+    }
+    await database.recordPaymentRelease(paymentId, {
+      status: release.outcome === 'released' ? 'completed' : 'deferred',
+      transactionId: release.transactionId,
+      transactionHash: release.transactionHash,
+      onchainState: 'Released'
+    })
+    const response: ApiResponse<PaymentCheckResult> = {
+      success: true,
+      data: {
+        success: true,
+        message: release.outcome === 'released'
+          ? `Period ${periodId} released to the producer`
+          : `Period ${periodId} released; the payout is held by the contract for the producer to withdraw`,
+        paymentId,
+        outcome: release.outcome,
+        amount: release.amount,
+        transactionId: release.transactionId,
+        transactionHash: release.transactionHash
+      }
+    }
+    return res.json(response)
+  }
+
+  // Release the latest validated period of an agreement through the escrow contract
   router.post('/trigger-check/:agreementId', requireManager, async (req: Request, res: Response) => {
     try {
       const agreementId = parseInt(req.params.agreementId)
-
       if (isNaN(agreementId) || agreementId < 0) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Invalid agreement ID'
-        }
-        return res.status(400).json(response)
+        return fail(res, 400, 'Invalid agreement ID')
       }
 
-      // Check if agreement exists
       const agreement = await database.getAgreement(agreementId)
       if (!agreement) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Agreement not found'
-        }
-        return res.status(404).json(response)
+        return fail(res, 404, 'Agreement not found')
       }
 
-      // Get the latest batch for this agreement
       const batches = await database.getBatchesByAgreement(agreementId, 1)
       if (batches.length === 0) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'No batches found for this agreement'
-        }
-        return res.status(404).json(response)
+        return fail(res, 404, 'No batches found for this agreement')
       }
-
       const latestBatch = batches[0]
-      
-      // Check if score meets threshold
-      if (latestBatch.score < 0.7) {
-        const response: ApiResponse = {
-          success: false,
-          error: `Score ${(latestBatch.score * 100).toFixed(1)}% is below threshold of 70%`
-        }
-        return res.status(400).json(response)
+
+      // On-chain IDs start at 0, so only null means "not on-chain"
+      if (agreement.blockchain_id == null) {
+        return fail(res, 409, 'Agreement is not linked to an on-chain agreement')
+      }
+      if (latestBatch.period_id == null) {
+        return fail(res, 409, 'Latest batch has not been submitted to the escrow contract')
       }
 
       // Idempotency: one payment record per validated batch (keyed by audit hash)
       const existingPayments = await database.getPaymentsByAgreement(agreementId)
       const existing = existingPayments.find(p => p.audit_hash === latestBatch.audit_hash)
       if (existing) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'A payment already exists for the latest validated batch',
-          data: { paymentId: existing.id, status: existing.status }
-        }
-        return res.status(409).json(response)
+        return fail(res, 409, 'A payment already exists for the latest validated batch', { paymentId: existing.id, status: existing.status })
       }
 
-      // Record an eligible payment as PENDING. No transfer happens here and no transaction
-      // hash is recorded: the payout must come from an actual on-ledger release, which will
-      // set the real hash when it executes.
-      const paymentAmount = agreement.base_value * agreement.hectares
+      const port = getEscrow()
+      const period = await port.getPeriod(agreement.blockchain_id, latestBatch.period_id)
+      const blocked = await blockReason(port, agreement.blockchain_id, period, latestBatch.audit_hash)
+      if (blocked) {
+        return fail(res, blocked.status, blocked.error, blocked.data)
+      }
+
+      // The amount is the contract's, not a local computation
+      const terms = await port.getAgreement(agreement.blockchain_id)
+
+      // Reserve the payment before touching the ledger: the unique (agreement, audit hash) index
+      // lets exactly one request through to the release.
       let paymentId: number
       try {
         paymentId = await database.createPayment({
           agreementId,
           batchId: latestBatch.id,
-          amount: String(paymentAmount),
-          status: 'pending',
+          amount: terms.periodAmount,
+          status: 'processing',
           auditHash: latestBatch.audit_hash,
-          score: latestBatch.score
+          score: latestBatch.score,
+          periodId: latestBatch.period_id,
+          onchainState: period.state
         })
       } catch (error) {
-        // A concurrent request inserted the same (agreement, audit hash) between the check
-        // above and this insert; the unique index rejects the duplicate.
         if (isUniqueViolation(error)) {
-          const response: ApiResponse = {
-            success: false,
-            error: 'A payment already exists for the latest validated batch'
-          }
-          return res.status(409).json(response)
+          return fail(res, 409, 'A payment already exists for the latest validated batch')
         }
         throw error
       }
 
-      const result = {
-        success: true,
-        message: `Agreement ${agreementId} is eligible: payment of ${paymentAmount} recorded as pending release`,
-        amount: paymentAmount,
-        paymentId
-      }
-
-      const response: ApiResponse<PaymentCheckResult> = {
-        success: true,
-        data: result
-      }
-
-      res.json(response)
+      return await executeRelease(res, port, paymentId, agreement.blockchain_id, latestBatch.period_id)
     } catch (error) {
       console.error('Error triggering payment check:', error)
       const response: ApiResponse = {
@@ -180,14 +222,49 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
     }
   })
 
-  // Payment release is not implemented yet. The previous handler called a non-existent
-  // relayer method and always failed with 500. Release will come from the escrow contract.
-  router.post('/process/:paymentId', requireManager, (req: Request, res: Response) => {
-    const response: ApiResponse = {
-      success: false,
-      error: 'Payment release is not available yet: it will be executed by the escrow contract'
+  // Retry the release of a pending or failed payment (idempotent: the chain state decides)
+  router.post('/process/:paymentId', requireManager, async (req: Request, res: Response) => {
+    try {
+      const paymentId = parseInt(req.params.paymentId)
+      if (isNaN(paymentId) || paymentId < 0) {
+        return fail(res, 400, 'Invalid payment ID')
+      }
+
+      const payment = await database.getPayment(paymentId)
+      if (!payment) {
+        return fail(res, 404, 'Payment not found')
+      }
+      if (payment.status !== 'pending' && payment.status !== 'failed') {
+        return fail(res, 409, `Payment is ${payment.status} and cannot be processed`)
+      }
+
+      const agreement = await database.getAgreement(payment.agreement_id)
+      if (!agreement || agreement.blockchain_id == null || payment.period_id == null) {
+        return fail(res, 409, 'Payment is not linked to an on-chain period')
+      }
+
+      const port = getEscrow()
+      const period = await port.getPeriod(agreement.blockchain_id, payment.period_id)
+      const blocked = await blockReason(port, agreement.blockchain_id, period, payment.audit_hash)
+      if (blocked) {
+        return fail(res, blocked.status, blocked.error, blocked.data)
+      }
+
+      // Only the request that moves the payment to 'processing' may release it
+      if (!(await database.claimPaymentForRelease(paymentId))) {
+        return fail(res, 409, 'Payment is already being processed')
+      }
+
+      return await executeRelease(res, port, paymentId, agreement.blockchain_id, payment.period_id)
+    } catch (error) {
+      console.error('Error processing payment:', error)
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to process payment',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
     }
-    res.status(501).json(response)
   })
 
   // Get payment history
