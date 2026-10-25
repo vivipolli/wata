@@ -104,6 +104,7 @@ model payments {
   period_id          Int?
   transaction_id     String?
   onchain_state      String?
+  certificate        certificates?
   agreement          agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   batch              batches?   @relation(fields: [batch_id], references: [id], onDelete: SetNull)
 
@@ -167,4 +168,25 @@ model users {
   last_login DateTime?
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
+}
+
+// NFT certificate of a released payment (HIP-412 metadata on IPFS, minted by a scheduled
+// TokenMint that the 2-of-3 supply key signs). One certificate per payment.
+model certificates {
+  id                       Int       @id @default(autoincrement())
+  payment_id               Int       @unique
+  // prepared -> scheduled -> minted; failed when the schedule expired or was deleted
+  status                   String    @default("prepared")
+  metadata_json            String
+  metadata_sha256          String
+  metadata_cid             String?
+  metadata_uri             String?
+  token_id                 String?
+  schedule_id              String?
+  scheduled_transaction_id String?
+  serial_number            Int?
+  mint_transaction_hash    String?
+  created_at               DateTime  @default(now())
+  minted_at                DateTime?
+  payment                  payments  @relation(fields: [payment_id], references: [id], onDelete: Cascade)
 }

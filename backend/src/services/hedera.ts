@@ -10,7 +10,10 @@ import {
   TransactionRecord,
   AccountInfoQuery,
   TransactionId,
-  TransactionRecordQuery
+  TransactionRecordQuery,
+  ScheduleCreateTransaction,
+  TokenMintTransaction,
+  TokenId
 } from '@hashgraph/sdk'
 import { ethers } from 'ethers'
 import crypto from 'crypto'
@@ -18,6 +21,7 @@ import dotenv from 'dotenv'
 import { sha256HexToBytes32 } from '../utils/bytes32'
 import { createHederaClient } from '../utils/hederaNetwork'
 import { EscrowService, type EscrowLedger, type ContractExecution, type OnPrepared } from './escrow'
+import type { CertificateLedger, ScheduledMint } from './certificate'
 
 dotenv.config()
 
@@ -56,7 +60,9 @@ function toHex(bytes: Uint8Array): string {
   return '0x' + Buffer.from(bytes).toString('hex')
 }
 
-export class HederaService implements EscrowLedger {
+const ENTITY_ID = /^\d+\.\d+\.\d+$/
+
+export class HederaService implements EscrowLedger, CertificateLedger {
   private client: Client | null = null
   private accountId: AccountId | null = null
   private privateKey: PrivateKey | null = null
@@ -157,6 +163,71 @@ export class HederaService implements EscrowLedger {
       transactionHash: hash.length > 0 ? toHex(hash) : null,
       logs: (result.logs ?? []).map(log => ({ address: log.address, topics: log.topics, data: log.data }))
     }
+  }
+
+  // CertificateLedger: schedules a TokenMint of one serial carrying the given metadata. The server only
+  // pays for the schedule; the mint executes when the token's supply key (2-of-3) has signed it.
+  async scheduleMint(tokenId: string, metadata: string, memo: string): Promise<{ scheduleId: string; scheduledTransactionId: string }> {
+    const mint = new TokenMintTransaction()
+      .setTokenId(TokenId.fromString(tokenId))
+      .addMetadata(Buffer.from(metadata, 'utf8'))
+    const response = await new ScheduleCreateTransaction()
+      .setScheduledTransaction(mint)
+      .setScheduleMemo(memo)
+      .execute(this.client!)
+    const receipt = await response.getReceiptQuery().setValidateStatus(false).execute(this.client!)
+    const status = receipt.status.toString()
+    // An identical pending schedule is not created twice: the ledger returns the existing one
+    if ((status !== 'SUCCESS' && status !== 'IDENTICAL_SCHEDULE_ALREADY_CREATED') || !receipt.scheduleId) {
+      throw new Error(`Scheduling the certificate mint failed with status ${status}`)
+    }
+    return {
+      scheduleId: receipt.scheduleId.toString(),
+      scheduledTransactionId: receipt.scheduledTransactionId?.toString() ?? ''
+    }
+  }
+
+  // CertificateLedger: outcome of a scheduled mint from the Mirror Node.
+  async findScheduledMint(scheduleId: string): Promise<ScheduledMint> {
+    if (!ENTITY_ID.test(scheduleId)) throw new Error(`Malformed schedule id: ${scheduleId}`)
+    const base = mirrorBaseUrl()
+    const response = await fetch(`${base}/api/v1/schedules/${scheduleId}`)
+    if (!response.ok) throw new Error(`Mirror Node returned ${response.status} for schedule ${scheduleId}`)
+    const schedule = await response.json() as { deleted?: boolean; executed_timestamp?: string | null; expiration_time?: string | null }
+    if (schedule.deleted) return { status: 'deleted' }
+
+    if (!schedule.executed_timestamp) {
+      const expiresAt = schedule.expiration_time ? Math.floor(Number(schedule.expiration_time)) : null
+      if (expiresAt !== null && Date.now() / 1000 > expiresAt) return { status: 'expired' }
+      return { status: 'pending', expiresAt }
+    }
+
+    const txResponse = await fetch(`${base}/api/v1/transactions?timestamp=${schedule.executed_timestamp}`)
+    if (!txResponse.ok) throw new Error(`Mirror Node returned ${txResponse.status} for the executed schedule ${scheduleId}`)
+    const body = await txResponse.json() as { transactions?: Array<Record<string, any>> }
+    const tx = (body.transactions ?? [])[0]
+    if (!tx) throw new Error(`Executed transaction of schedule ${scheduleId} not found on the Mirror Node`)
+    // Mints are NFT transfers without a sender
+    const mints = (tx.nft_transfers ?? []).filter((t: any) => t.sender_account_id == null)
+    const hash = Buffer.from(String(tx.transaction_hash ?? ''), 'base64')
+    return {
+      status: 'executed',
+      result: String(tx.result),
+      tokenId: mints[0]?.token_id ?? '',
+      serials: mints.map((t: any) => Number(t.serial_number)),
+      transactionHash: hash.length > 0 ? toHex(hash) : null
+    }
+  }
+
+  // CertificateLedger: metadata of a minted serial, from the Mirror Node.
+  async getNftMetadata(tokenId: string, serialNumber: number): Promise<string | null> {
+    if (!ENTITY_ID.test(tokenId)) throw new Error(`Malformed token id: ${tokenId}`)
+    if (!Number.isSafeInteger(serialNumber) || serialNumber < 1) throw new Error(`Malformed serial number: ${serialNumber}`)
+    const response = await fetch(`${mirrorBaseUrl()}/api/v1/tokens/${tokenId}/nfts/${serialNumber}`)
+    if (response.status === 404) return null
+    if (!response.ok) throw new Error(`Mirror Node returned ${response.status} for ${tokenId} serial ${serialNumber}`)
+    const nft = await response.json() as { metadata?: string }
+    return Buffer.from(String(nft.metadata ?? ''), 'base64').toString('utf8')
   }
 
   // EscrowLedger: read-only call; returns the raw ABI-encoded result.

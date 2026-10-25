@@ -577,6 +577,55 @@ export class PrismaDatabase {
     await this.prisma.investments.delete({ where: { id: investmentId } })
   }
 
+  async createCertificate(data: { paymentId: number; metadataJson: string; metadataSha256: string }): Promise<number> {
+    const certificate = await this.prisma.certificates.create({
+      data: { payment_id: data.paymentId, metadata_json: data.metadataJson, metadata_sha256: data.metadataSha256 }
+    })
+    return certificate.id
+  }
+
+  async getCertificate(id: number) {
+    return this.prisma.certificates.findUnique({ where: { id } })
+  }
+
+  async getCertificateByPayment(paymentId: number) {
+    return this.prisma.certificates.findUnique({ where: { payment_id: paymentId } })
+  }
+
+  /** prepared or failed -> scheduled. Returns false if the certificate was not in one of those states. */
+  async markCertificateScheduled(id: number, data: { cid: string; uri: string; tokenId: string; scheduleId: string; scheduledTransactionId: string }): Promise<boolean> {
+    const { count } = await this.prisma.certificates.updateMany({
+      where: { id, status: { in: ['prepared', 'failed'] } },
+      data: {
+        status: 'scheduled',
+        metadata_cid: data.cid,
+        metadata_uri: data.uri,
+        token_id: data.tokenId,
+        schedule_id: data.scheduleId,
+        scheduled_transaction_id: data.scheduledTransactionId
+      }
+    })
+    return count === 1
+  }
+
+  /** scheduled -> minted, only for the schedule the certificate is bound to. */
+  async markCertificateMinted(id: number, scheduleId: string, data: { serialNumber: number; mintTransactionHash: string | null }): Promise<boolean> {
+    const { count } = await this.prisma.certificates.updateMany({
+      where: { id, status: 'scheduled', schedule_id: scheduleId },
+      data: { status: 'minted', serial_number: data.serialNumber, mint_transaction_hash: data.mintTransactionHash, minted_at: new Date() }
+    })
+    return count === 1
+  }
+
+  /** scheduled -> failed (schedule expired, deleted or its mint failed), so it can be scheduled again. */
+  async markCertificateFailed(id: number, scheduleId: string): Promise<boolean> {
+    const { count } = await this.prisma.certificates.updateMany({
+      where: { id, status: 'scheduled', schedule_id: scheduleId },
+      data: { status: 'failed' }
+    })
+    return count === 1
+  }
+
   async getInvestment(investmentId: number): Promise<investments | null> {
     return this.prisma.investments.findUnique({ where: { id: investmentId } })
   }
