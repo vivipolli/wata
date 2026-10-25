@@ -69,7 +69,8 @@ model batches {
   oracle_signature  String?
   score             Float
   readings_count    Int
-  average_turbidity Float
+  // Legacy turbidity-only flow; empty for scores computed from measurements
+  average_turbidity Float?
   median_turbidity  Float?
   outliers_detected Int?      @default(0)
   validation_status String    @default("pending")
@@ -79,6 +80,12 @@ model batches {
   hcs_transaction_id String?
   hfs_file_id        String?
   period_id          Int?
+  // Measurement-based score (F3): scored period, rule version (on-chain scoreVersion) and the
+  // canonical audit document whose SHA-256 is audit_hash
+  period_start       DateTime?
+  period_end         DateTime?
+  score_version      Int?
+  audit_document     String?
   agreement         agreements @relation(fields: [agreement_id], references: [id], onDelete: Cascade)
   readings          readings[]
   payments          payments[]

@@ -430,6 +430,40 @@ export class PrismaDatabase {
     return batch.id
   }
 
+  /**
+   * Reserves the batch of a measurement-based score period. In one transaction: a period overlapping
+   * another period of the agreement is refused, except the same unsubmitted period (same audit hash),
+   * which is resumed so a failed submission can be retried.
+   */
+  async reserveScoreBatch(data: {
+    agreementId: number; auditHash: string; score: number; readingsCount: number
+    periodStart: Date; periodEnd: Date; scoreVersion: number; auditDocument: string
+  }): Promise<{ batchId: number; resumed: boolean } | { overlap: number }> {
+    return this.prisma.$transaction(async tx => {
+      const overlapping = await tx.batches.findFirst({
+        where: { agreement_id: data.agreementId, period_start: { lte: data.periodEnd }, period_end: { gte: data.periodStart } }
+      })
+      if (overlapping) {
+        const resumable = overlapping.audit_hash === data.auditHash && overlapping.validation_status !== 'submitted'
+        return resumable ? { batchId: overlapping.id, resumed: true } : { overlap: overlapping.id }
+      }
+      const batch = await tx.batches.create({
+        data: {
+          agreement_id: data.agreementId,
+          audit_hash: data.auditHash,
+          score: data.score,
+          readings_count: data.readingsCount,
+          validation_status: 'validated',
+          period_start: data.periodStart,
+          period_end: data.periodEnd,
+          score_version: data.scoreVersion,
+          audit_document: data.auditDocument
+        }
+      })
+      return { batchId: batch.id, resumed: false }
+    })
+  }
+
   async attachBatchLedgerReferences(batchId: number, info: { hfsFileId?: string | null; hcsTransactionId?: string | null }): Promise<void> {
     await this.prisma.batches.update({
       where: { id: batchId },

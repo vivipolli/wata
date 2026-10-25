@@ -110,6 +110,7 @@ const MANAGER_ONLY = [
   'post /api/certificates/payment/1/prepare',
   'post /api/certificates/1/confirm',
   'post /api/measurements/',
+  'post /api/oracle/score-period',
   'post /api/oracle/process',
   'post /api/oracle/process-all',
   'post /api/hedera/hcs/publish',
