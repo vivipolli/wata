@@ -22,6 +22,11 @@ const config: HardhatUserConfig = {
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
   },
+  // The installed gas reporter crashes after the run (strip-ansi/cli-table3 mismatch) and turns a
+  // green run into exit code 1. Off by default; opt in with REPORT_GAS=true.
+  gasReporter: {
+    enabled: process.env.REPORT_GAS === "true",
+  },
   paths: {
     sources: "./contracts",
     tests: "./test",
