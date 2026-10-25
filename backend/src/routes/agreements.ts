@@ -3,7 +3,40 @@ import crypto from 'crypto'
 import { HederaService } from '../services/hedera'
 import { PrismaDatabase } from '../services/orm/prismaDatabase'
 import { AuthMiddleware } from '../middleware/auth'
+import { isUniqueViolation } from '../utils/prismaErrors'
 import type { ApiResponse, CreateAgreementWithSignatureRequest } from '../types/index'
+import type { EscrowService, GovernanceMode } from '../services/escrow'
+
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/
+// Positive integer as a decimal string: uint256 values do not fit a JSON number
+const POSITIVE_DECIMAL = /^[1-9][0-9]*$/
+const TRANSACTION_ID = /^\d+\.\d+\.\d+@\d+\.\d+$/
+
+interface EscrowTerms {
+  periodAmount: string
+  scoreThreshold: number
+  governanceMode: GovernanceMode
+}
+
+// Validates the optional escrow v3 terms of a new agreement. Returns an error message, terms, or null if absent.
+function parseEscrowTerms(body: any): { error: string } | { terms: EscrowTerms } | null {
+  const { periodAmount, scoreThreshold, governanceMode } = body
+  if (periodAmount === undefined && scoreThreshold === undefined && governanceMode === undefined) return null
+  if (typeof periodAmount !== 'string' || !POSITIVE_DECIMAL.test(periodAmount)) {
+    return { error: 'periodAmount must be a positive integer written as a decimal string' }
+  }
+  if (!Number.isInteger(scoreThreshold) || scoreThreshold < 1 || scoreThreshold > 100) {
+    return { error: 'scoreThreshold must be an integer between 1 and 100' }
+  }
+  const mode = governanceMode ?? 'AUTO'
+  if (mode !== 'AUTO' && mode !== 'HYBRID') {
+    return { error: 'governanceMode must be AUTO or HYBRID' }
+  }
+  if (typeof body.producerAddress !== 'string' || !EVM_ADDRESS.test(body.producerAddress)) {
+    return { error: 'producerAddress must be a 0x EVM address to be paid by the escrow contract' }
+  }
+  return { terms: { periodAmount, scoreThreshold, governanceMode: mode } }
+}
 
 interface AgreementData {
   producerName: string
@@ -32,12 +65,17 @@ interface CreateAgreementResponse {
   // New fields for user signature flow
   transactionBytes?: string | undefined
   message?: string | undefined
+  // Call the escrow admin (threshold) account must sign; then link it with link-onchain
+  escrowCall?: {
+    function: 'createAgreement'
+    args: { producer: string; periodAmount: string; scoreThreshold: number; mode: GovernanceMode }
+  }
 }
 
 // Body fields that must never be accepted when creating an agreement
 const FORBIDDEN_CREATE_FIELDS = ['blockchainId', 'blockchain_id', 'signedTransaction'] as const
 
-export default function agreementRoutes(hederaService: HederaService, database: PrismaDatabase) {
+export default function agreementRoutes(hederaService: HederaService, database: PrismaDatabase, escrow?: Pick<EscrowService, 'getAgreement'>) {
   const router = express.Router()
   const authMiddleware = new AuthMiddleware(database)
 
@@ -78,6 +116,12 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         } as ApiResponse)
       }
 
+      const parsedTerms = parseEscrowTerms(body)
+      if (parsedTerms && 'error' in parsedTerms) {
+        return res.status(400).json({ success: false, error: parsedTerms.error } as ApiResponse)
+      }
+      const terms = parsedTerms && 'terms' in parsedTerms ? parsedTerms.terms : null
+
       // Update user address for producers (always update to match the agreement)
       const user = (req as any).user
       if (user && user.role === 'PRODUCER') {
@@ -109,26 +153,27 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         hectares,
         locationLat,
         locationLng,
-        durationDays
+        durationDays,
+        periodAmount: terms?.periodAmount ?? null,
+        scoreThreshold: terms?.scoreThreshold ?? null,
+        governanceMode: terms?.governanceMode
       })
 
-      // Create the agreement on-chain; the ID is read from the transaction record
-      const result = await hederaService.createAgreementWithSystem(
-        agreementHash,
-        producerAddress,
-        baseValue,
-        hectares
-      )
-      const blockchainId = result.agreementId
-      const transactionId = result.transactionId
-      await database.updateAgreementBlockchainId(agreementId, blockchainId)
-
+      // The server never creates the escrow agreement: createAgreement is restricted to the admin
+      // (threshold) account. The manager links the on-chain agreement afterwards with link-onchain.
       const response: ApiResponse<CreateAgreementResponse> = {
         success: true,
         data: {
           id: agreementId,
-          blockchainId: blockchainId,
-          transactionId: transactionId,
+          escrowCall: terms ? {
+            function: 'createAgreement',
+            args: {
+              producer: producerAddress.toLowerCase(),
+              periodAmount: terms.periodAmount,
+              scoreThreshold: terms.scoreThreshold,
+              mode: terms.governanceMode
+            }
+          } : undefined,
           agreementHash,
           producerName,
           producerAddress,
@@ -149,6 +194,80 @@ export default function agreementRoutes(hederaService: HederaService, database: 
         message: error instanceof Error ? error.message : 'Unknown error'
       }
       res.status(500).json(response)
+    }
+  })
+
+  // Link a local agreement to the escrow agreement created by the admin account. The on-chain
+  // state is the proof: producer, amount, threshold and mode must match the local terms exactly.
+  router.post('/:id/link-onchain',
+    authMiddleware.requireRole('MANAGER'),
+    async (req: Request, res: Response) => {
+    const fail = (status: number, error: string) => res.status(status).json({ success: false, error } as ApiResponse)
+    try {
+      const id = parseInt(req.params.id)
+      const { onchainAgreementId, transactionId } = req.body ?? {}
+      if (isNaN(id) || id < 0) {
+        return fail(400, 'Invalid agreement ID')
+      }
+      if (!Number.isSafeInteger(onchainAgreementId) || onchainAgreementId < 0) {
+        return fail(400, 'onchainAgreementId must be a non-negative integer')
+      }
+      if (transactionId !== undefined && (typeof transactionId !== 'string' || !TRANSACTION_ID.test(transactionId))) {
+        return fail(400, 'transactionId must look like 0.0.1234@1700000000.000000001')
+      }
+
+      const agreement = await database.getAgreement(id)
+      if (!agreement) {
+        return fail(404, 'Agreement not found')
+      }
+      // On-chain IDs start at 0, so only null means "not linked"
+      if (agreement.blockchain_id != null) {
+        return fail(409, 'Agreement is already linked to an on-chain agreement')
+      }
+      if (agreement.period_amount == null || agreement.score_threshold == null || !EVM_ADDRESS.test(agreement.producer_address)) {
+        return fail(409, 'Agreement has no escrow terms or no EVM producer address to compare with the chain')
+      }
+
+      let onchain
+      try {
+        onchain = await (escrow ?? hederaService.getEscrowService()).getAgreement(onchainAgreementId)
+      } catch (error) {
+        return res.status(502).json({
+          success: false,
+          error: 'Could not read the on-chain agreement',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        } as ApiResponse)
+      }
+
+      const mismatches = [
+        onchain.producer.toLowerCase() !== agreement.producer_address.toLowerCase() && 'producer',
+        onchain.periodAmount !== agreement.period_amount && 'periodAmount',
+        onchain.scoreThreshold !== agreement.score_threshold && 'scoreThreshold',
+        onchain.mode !== agreement.governance_mode && 'governanceMode',
+        !onchain.active && 'active'
+      ].filter(Boolean)
+      if (mismatches.length > 0) {
+        return fail(409, `On-chain agreement ${onchainAgreementId} does not match the local terms: ${mismatches.join(', ')}`)
+      }
+
+      try {
+        if (!(await database.linkAgreementOnchain(id, onchainAgreementId, transactionId ?? null))) {
+          return fail(409, 'Agreement is already linked to an on-chain agreement')
+        }
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          return fail(409, `On-chain agreement ${onchainAgreementId} is already linked to another agreement`)
+        }
+        throw error
+      }
+
+      res.json({ success: true, data: { id, blockchainId: onchainAgreementId, transactionId: transactionId ?? null } } as ApiResponse)
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to link agreement',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      } as ApiResponse)
     }
   })
 

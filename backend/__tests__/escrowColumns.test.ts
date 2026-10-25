@@ -105,6 +105,53 @@ describe('Escrow v3 columns', () => {
   })
 })
 
+describe('Agreement on-chain link', () => {
+  let database: PrismaDatabase
+
+  beforeEach(async () => {
+    process.env.DATABASE_URL = 'file:./data/test-db.sqlite'
+    database = new PrismaDatabase()
+    await database.initialize()
+    const prisma = getPrismaClient()
+    await prisma.$transaction([
+      prisma.payments.deleteMany(),
+      prisma.batches.deleteMany(),
+      prisma.readings.deleteMany(),
+      prisma.agreements.deleteMany()
+    ])
+  })
+
+  afterEach(async () => {
+    await database.close()
+  })
+
+  const create = (hash: string) => database.createAgreement({
+    agreementHash: hash, producerName: 'P', producerAddress: '0x' + '11'.repeat(20), baseValue: 1, hectares: 1,
+    periodAmount: '100', scoreThreshold: 70, governanceMode: 'HYBRID'
+  })
+
+  it('stores the escrow terms given at creation', async () => {
+    const id = await create('terms')
+    expect(await database.getAgreement(id)).toMatchObject({ period_amount: '100', score_threshold: 70, governance_mode: 'HYBRID' })
+  })
+
+  it('links an agreement once, including on-chain id 0, and never replaces the link', async () => {
+    const id = await create('once')
+
+    await expect(database.linkAgreementOnchain(id, 0, '0.0.1@1.2')).resolves.toBe(true)
+    await expect(database.linkAgreementOnchain(id, 5)).resolves.toBe(false)
+    expect(await database.getAgreement(id)).toMatchObject({ blockchain_id: 0, transaction_id: '0.0.1@1.2' })
+  })
+
+  it('refuses to link one on-chain agreement to two local agreements', async () => {
+    const first = await create('first')
+    const second = await create('second')
+
+    await database.linkAgreementOnchain(first, 3)
+    await expect(database.linkAgreementOnchain(second, 3)).rejects.toMatchObject({ code: 'P2002' })
+  })
+})
+
 describe('Escrow v3 migration', () => {
   const migrationsDir = path.join(__dirname, '..', 'prisma', 'migrations')
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wata-migration-'))

@@ -289,7 +289,6 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         success: true,
         data: expect.objectContaining({
           id: expect.any(Number),
-          blockchainId: expect.any(Number),
           agreementHash: expect.any(String),
           producerName: validAgreementData.producerName,
           producerAddress: validAgreementData.producerAddress,
@@ -505,6 +504,8 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         .send(agreementData)
 
       agreementId = response.body.data.id
+      // The escrow admin creates the on-chain agreement; the link is made directly in these tests
+      await database.linkAgreementOnchain(agreementId, agreementId)
     })
 
     it('should return automatic payment processing message for V3', async () => {

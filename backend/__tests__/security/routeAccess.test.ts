@@ -97,6 +97,7 @@ const MUTATING_ROUTES = ALL_ROUTES.filter(r => r.method !== 'get')
 // Operational routes: spend operator funds, write readings/scores or change payout basis
 const MANAGER_ONLY = [
   'post /api/agreements/',
+  'post /api/agreements/1/link-onchain',
   'post /api/readings/submit',
   'post /api/readings/simulate',
   'post /api/payments/trigger-check/1',

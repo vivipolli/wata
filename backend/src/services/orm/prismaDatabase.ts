@@ -39,6 +39,10 @@ export interface AgreementData {
   locationLat?: number
   locationLng?: number
   durationDays?: number
+  // Escrow v3 terms: decimal string in the contract's native unit, threshold 1-100
+  periodAmount?: string | null
+  scoreThreshold?: number | null
+  governanceMode?: 'AUTO' | 'HYBRID'
 }
 
 export interface ReadingData {
@@ -126,7 +130,10 @@ export class PrismaDatabase {
         hectares: data.hectares,
         location_lat: data.locationLat ?? null,
         location_lng: data.locationLng ?? null,
-        duration_days: data.durationDays ?? null
+        duration_days: data.durationDays ?? null,
+        period_amount: data.periodAmount ?? null,
+        score_threshold: data.scoreThreshold ?? null,
+        governance_mode: data.governanceMode ?? 'AUTO'
       }
     })
     return agreement.id
@@ -145,6 +152,18 @@ export class PrismaDatabase {
       where: { id },
       data: { blockchain_id: blockchainId }
     })
+  }
+
+  /**
+   * Links a local agreement to its on-chain agreement. Only an unlinked agreement can be linked;
+   * returns false otherwise. A second link to the same on-chain ID fails on the unique index.
+   */
+  async linkAgreementOnchain(id: number, blockchainId: number, transactionId?: string | null): Promise<boolean> {
+    const { count } = await this.prisma.agreements.updateMany({
+      where: { id, blockchain_id: null },
+      data: { blockchain_id: blockchainId, transaction_id: transactionId ?? undefined }
+    })
+    return count === 1
   }
 
   async updateAgreementTransactionId(id: number, transactionId: string): Promise<void> {

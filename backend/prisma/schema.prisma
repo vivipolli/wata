@@ -25,7 +25,8 @@ model agreements {
   duration_days    Int?
   created_at       DateTime  @default(now())
   is_active        Boolean   @default(true)
-  blockchain_id    Int?
+  // One local agreement per on-chain escrow agreement
+  blockchain_id    Int?      @unique
   transaction_id   String?
   investor_address String?
   governance_mode  String    @default("AUTO")
