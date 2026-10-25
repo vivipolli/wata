@@ -373,12 +373,13 @@ export class PrismaDatabase {
     })
   }
 
-  async updateBatchStatus(batchId: number, status: string, submittedAt?: Date): Promise<void> {
+  async updateBatchStatus(batchId: number, status: string, submittedAt?: Date, periodId?: number): Promise<void> {
     await this.prisma.batches.update({
       where: { id: batchId },
       data: {
         validation_status: status,
-        submitted_at: submittedAt ?? undefined
+        submitted_at: submittedAt ?? undefined,
+        period_id: periodId ?? undefined
       }
     })
   }

@@ -19,6 +19,7 @@ import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { sha256HexToBytes32 } from '../utils/bytes32'
 import { createHederaClient } from '../utils/hederaNetwork'
+import { EscrowService, type EscrowLedger, type ContractExecution } from './escrow'
 
 dotenv.config()
 
@@ -31,7 +32,17 @@ interface AgreementData {
   createdAt: bigint
 }
 
-export class HederaService {
+// Gas limits for escrow v3 calls. Hedera charges at least 80% of the gas limit, so these stay tight;
+// they are to be confirmed against measured usage on a local network.
+const ESCROW_EXECUTE_GAS = 300000
+const ESCROW_QUERY_GAS = 100000
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/
+
+function toHex(bytes: Uint8Array): string {
+  return '0x' + Buffer.from(bytes).toString('hex')
+}
+
+export class HederaService implements EscrowLedger {
   private client: Client | null = null
   private accountId: AccountId | null = null
   private privateKey: PrivateKey | null = null
@@ -60,6 +71,54 @@ export class HederaService {
     } catch (error) {
       throw error
     }
+  }
+
+  /** EscrowService bound to ESCROW_CONTRACT_ADDRESS, using this service as the ledger. */
+  getEscrowService(): EscrowService {
+    const address = process.env.ESCROW_CONTRACT_ADDRESS
+    if (!address || !EVM_ADDRESS.test(address)) {
+      throw new Error('ESCROW_CONTRACT_ADDRESS must be set to the 0x-prefixed EVM address of PESEscrowV3')
+    }
+    return new EscrowService(this, address)
+  }
+
+  // EscrowLedger: executes a contract call and reports the outcome from the receipt and record.
+  // A failed receipt is returned as is (no logs, no hash) so the caller decides; nothing is fabricated.
+  async execute(contractAddress: string, callData: string): Promise<ContractExecution> {
+    const response = await new ContractExecuteTransaction()
+      .setContractId(ContractId.fromEvmAddress(0, 0, contractAddress))
+      .setGas(ESCROW_EXECUTE_GAS)
+      .setFunctionParameters(Buffer.from(callData.slice(2), 'hex'))
+      .execute(this.client!)
+    const transactionId = response.transactionId.toString()
+    const receipt = await response.getReceiptQuery().setValidateStatus(false).execute(this.client!)
+    const status = receipt.status.toString()
+    if (status !== 'SUCCESS') {
+      return { transactionId, status, transactionHash: null, logs: [] }
+    }
+
+    const record = await response.getRecord(this.client!)
+    const hash = record.transactionHash
+    return {
+      transactionId,
+      status,
+      transactionHash: hash && hash.length > 0 ? toHex(hash) : null,
+      logs: (record.contractFunctionResult?.logs ?? []).map(log => ({
+        address: '0x' + log.contractId.toEvmAddress(),
+        topics: log.topics.map(toHex),
+        data: toHex(log.data)
+      }))
+    }
+  }
+
+  // EscrowLedger: read-only call; returns the raw ABI-encoded result.
+  async query(contractAddress: string, callData: string): Promise<string> {
+    const result = await new ContractCallQuery()
+      .setContractId(ContractId.fromEvmAddress(0, 0, contractAddress))
+      .setGas(ESCROW_QUERY_GAS)
+      .setFunctionParameters(Buffer.from(callData.slice(2), 'hex'))
+      .execute(this.client!)
+    return toHex(result.bytes)
   }
 
   async createAgreementWithSystem(agreementHash: string, producerAddress: string, baseValue: number, hectares: number): Promise<{ agreementId: number, transactionId: string }> {
