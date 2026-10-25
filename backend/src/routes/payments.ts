@@ -7,7 +7,7 @@ import { isUniqueViolation } from '../utils/prismaErrors'
 import type { TriggerCheckRequest, ApiResponse } from '../types/index'
 import type { EscrowService, EscrowPeriod, ReleaseResult } from '../services/escrow'
 
-type EscrowPort = Pick<EscrowService, 'getPeriod' | 'getAgreement' | 'release' | 'findRelease'>
+type EscrowPort = Pick<EscrowService, 'getPeriod' | 'getAgreement' | 'release' | 'findRelease' | 'encodeCall' | 'contractAddress' | 'findDeposit'>
 
 // A transaction unknown to the ledger this long after its valid start can no longer reach consensus:
 // the SDK's valid duration (120 s) plus a margin for Mirror Node lag.
@@ -15,6 +15,10 @@ const UNKNOWN_TX_GRACE_SECONDS = 180
 // A processing payment without a transaction id this old was never sent (the id is stored first).
 const NO_TX_GRACE_SECONDS = 300
 const SDK_TRANSACTION_ID = /^\d+\.\d+\.\d+@(\d+)\.\d+$/
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+// Positive integer as a decimal string: uint256 values do not fit a JSON number
+const POSITIVE_DECIMAL = /^[1-9][0-9]*$/
 type AuditPublisher = Pick<HederaConsensusService, 'publishAuditRecord'>
 
 interface PaymentDeps {
@@ -505,89 +509,173 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
   })
 
   // Create investment transaction for investor to sign
-  router.post('/create-investment-transaction/:agreementId', authMiddleware.requireRole('INVESTOR'), async (req: Request, res: Response) => {
+  // Prepare the approve or reject call for the financial manager's wallet (HYBRID mode). The server
+  // never signs it; once the wallet sends it, trigger-check reads the new state from the chain.
+  router.post('/approval-call/:agreementId', requireManager, async (req: Request, res: Response) => {
     try {
       const agreementId = parseInt(req.params.agreementId)
-      const { amount, investorAddress } = req.body
-
+      const decision = req.body?.decision
       if (isNaN(agreementId) || agreementId < 0) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Invalid agreement ID'
-        }
-        return res.status(400).json(response)
+        return fail(res, 400, 'Invalid agreement ID')
+      }
+      if (decision !== 'approve' && decision !== 'reject') {
+        return fail(res, 400, 'decision must be approve or reject')
       }
 
-      if (!amount || amount <= 0) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Investment amount must be greater than 0'
-        }
-        return res.status(400).json(response)
-      }
-
-      if (!investorAddress) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Investor address is required'
-        }
-        return res.status(400).json(response)
-      }
-
-      // Check if agreement exists and is active
       const agreement = await database.getAgreement(agreementId)
       if (!agreement) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Agreement not found'
-        }
-        return res.status(404).json(response)
+        return fail(res, 404, 'Agreement not found')
+      }
+      const batches = await database.getBatchesByAgreement(agreementId, 1)
+      if (agreement.blockchain_id == null || batches.length === 0 || batches[0].period_id == null) {
+        return fail(res, 409, 'Agreement has no period on-chain to decide on')
+      }
+      const periodId = batches[0].period_id
+
+      const port = getEscrow()
+      const period = await port.getPeriod(agreement.blockchain_id, periodId)
+      if (period.state !== 'PendingApproval') {
+        return fail(res, 409, `Period is ${period.state} on-chain, not awaiting approval`)
+      }
+      if (decision === 'approve' && Date.now() / 1000 > period.approvalDeadline) {
+        return fail(res, 409, 'The approval deadline has passed; the period can only be expired to review')
       }
 
-      if (!agreement.is_active) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Agreement is not active'
-        }
-        return res.status(400).json(response)
-      }
-
-      // Create investment transaction for investor to sign
-      const transactionResult = await hederaService.createInvestmentTransaction(
-        agreementId,
-        amount,
-        investorAddress
-      )
-
-      if (transactionResult.success) {
-        const response: ApiResponse = {
-          success: true,
-          data: {
-            agreementId,
-            amount,
-            investorAddress,
-            transactionBytes: transactionResult.transactionBytes,
-            message: 'Transaction created for investor signature'
-          }
-        }
-
-        res.json(response)
-      } else {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Failed to create investment transaction',
-          message: transactionResult.error
-        }
-        res.status(500).json(response)
-      }
-    } catch (error) {
-      console.error('Error creating investment transaction:', error)
       const response: ApiResponse = {
-        success: false,
-        error: 'Failed to create investment transaction',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        success: true,
+        data: {
+          contract: port.contractAddress,
+          function: decision,
+          args: { agreementId: agreement.blockchain_id, periodId },
+          callData: port.encodeCall(decision, agreement.blockchain_id, periodId),
+          signer: 'financialManager',
+          approvalDeadline: period.approvalDeadline
+        }
       }
-      res.status(500).json(response)
+      res.json(response)
+    } catch (error) {
+      console.error('Error preparing approval call:', error)
+      res.status(500).json({ success: false, error: 'Failed to prepare approval call', message: error instanceof Error ? error.message : 'Unknown error' } as ApiResponse)
+    }
+  })
+
+  // Prepare the deposit call for the investor's own wallet. The server never moves investor funds.
+  router.post('/deposit-call/:agreementId', authMiddleware.requireRole('INVESTOR'), async (req: Request, res: Response) => {
+    try {
+      const agreementId = parseInt(req.params.agreementId)
+      const amountTinybar = req.body?.amountTinybar
+      const investorAddress: string | undefined = (req as any).user?.address
+      if (isNaN(agreementId) || agreementId < 0) {
+        return fail(res, 400, 'Invalid agreement ID')
+      }
+      if (typeof amountTinybar !== 'string' || !POSITIVE_DECIMAL.test(amountTinybar)) {
+        return fail(res, 400, 'amountTinybar must be a positive integer written as a decimal string')
+      }
+      if (!investorAddress || !EVM_ADDRESS.test(investorAddress)) {
+        return fail(res, 409, 'Register a 0x EVM wallet address before depositing')
+      }
+
+      const agreement = await database.getAgreement(agreementId)
+      if (!agreement) {
+        return fail(res, 404, 'Agreement not found')
+      }
+      if (agreement.blockchain_id == null) {
+        return fail(res, 409, 'Agreement is not linked to an on-chain agreement')
+      }
+
+      const port = getEscrow()
+      const onchain = await port.getAgreement(agreement.blockchain_id)
+      if (!onchain.active) {
+        return fail(res, 409, 'The on-chain agreement is not active')
+      }
+      // One funder per agreement: the first depositor becomes the funder
+      if (onchain.funder !== ZERO_ADDRESS && onchain.funder.toLowerCase() !== investorAddress.toLowerCase()) {
+        return fail(res, 409, 'Another account is already the funder of this agreement')
+      }
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          contract: port.contractAddress,
+          function: 'deposit',
+          args: { agreementId: agreement.blockchain_id },
+          payableTinybar: amountTinybar,
+          callData: port.encodeCall('deposit', agreement.blockchain_id),
+          signer: investorAddress.toLowerCase()
+        }
+      }
+      res.json(response)
+    } catch (error) {
+      console.error('Error preparing deposit call:', error)
+      res.status(500).json({ success: false, error: 'Failed to prepare deposit call', message: error instanceof Error ? error.message : 'Unknown error' } as ApiResponse)
+    }
+  })
+
+  // Record a deposit the investor's wallet sent, after reading it from the ledger record
+  router.post('/deposits/confirm', authMiddleware.requireRole('INVESTOR'), async (req: Request, res: Response) => {
+    try {
+      const { agreementId, transactionId } = req.body ?? {}
+      const investorAddress: string | undefined = (req as any).user?.address
+      if (!Number.isSafeInteger(agreementId) || agreementId < 0) {
+        return fail(res, 400, 'agreementId must be a non-negative integer')
+      }
+      if (typeof transactionId !== 'string' || !SDK_TRANSACTION_ID.test(transactionId)) {
+        return fail(res, 400, 'transactionId must look like 0.0.1234@1700000000.000000001')
+      }
+      if (!investorAddress || !EVM_ADDRESS.test(investorAddress)) {
+        return fail(res, 409, 'Register a 0x EVM wallet address before depositing')
+      }
+
+      const agreement = await database.getAgreement(agreementId)
+      if (!agreement) {
+        return fail(res, 404, 'Agreement not found')
+      }
+      if (agreement.blockchain_id == null) {
+        return fail(res, 409, 'Agreement is not linked to an on-chain agreement')
+      }
+
+      let deposit
+      try {
+        deposit = await getEscrow().findDeposit(transactionId, agreement.blockchain_id)
+      } catch (error) {
+        return fail(res, 409, error instanceof Error ? error.message : 'The ledger record does not prove a deposit')
+      }
+      if (deposit.status === 'not_found') {
+        return fail(res, 404, 'Transaction not found on the ledger yet; try again shortly')
+      }
+      if (deposit.status === 'failed') {
+        return fail(res, 409, `Deposit transaction failed on the ledger: ${deposit.ledgerStatus}`)
+      }
+      // Only the funder's own deposit can be recorded under this investor
+      if (deposit.funder.toLowerCase() !== investorAddress.toLowerCase()) {
+        return fail(res, 403, 'The deposit was made by another address')
+      }
+
+      let investmentId: number
+      try {
+        investmentId = await database.createInvestment({
+          agreementId,
+          investorAddress: deposit.funder,
+          amount: deposit.amount,
+          transactionId: deposit.transactionId,
+          transactionHash: deposit.transactionHash,
+          status: 'confirmed'
+        })
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          return fail(res, 409, 'This deposit is already recorded')
+        }
+        throw error
+      }
+
+      const response: ApiResponse = {
+        success: true,
+        data: { investmentId, amount: deposit.amount, transactionId: deposit.transactionId, transactionHash: deposit.transactionHash }
+      }
+      res.status(201).json(response)
+    } catch (error) {
+      console.error('Error confirming deposit:', error)
+      res.status(500).json({ success: false, error: 'Failed to confirm deposit', message: error instanceof Error ? error.message : 'Unknown error' } as ApiResponse)
     }
   })
 

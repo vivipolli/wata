@@ -68,7 +68,7 @@ describe('Database Tests', () => {
     const investmentId = await database.createInvestment({
       agreementId,
       investorAddress: '0.0.789012',
-      amount: 1000,
+      amount: '1000',
       transactionHash: '0x1234567890abcdef'
     })
 
@@ -78,7 +78,7 @@ describe('Database Tests', () => {
     expect(investment).toBeDefined()
     expect(investment?.agreement_id).toBe(agreementId)
     expect(investment?.investor_address).toBe('0.0.789012')
-    expect(investment?.amount).toBe(1000)
+    expect(investment?.amount).toBe('1000')
   })
 
   it('should create audit record', async () => {
@@ -211,7 +211,7 @@ describe('Database Tests', () => {
     await database.createInvestment({
       agreementId,
       investorAddress: '0.0.111111',
-      amount: 500
+      amount: '500'
     })
 
     await new Promise(resolve => setTimeout(resolve, 10))
@@ -219,13 +219,13 @@ describe('Database Tests', () => {
     await database.createInvestment({
       agreementId,
       investorAddress: '0.0.222222',
-      amount: 1000
+      amount: '1000'
     })
 
     const investments = await database.getInvestmentsByAgreement(agreementId)
     expect(investments).toHaveLength(2)
-    const amounts = investments.map(inv => inv.amount).sort((a, b) => b - a)
-    expect(amounts).toEqual([1000, 500])
+    const amounts = investments.map(inv => inv.amount).sort((a, b) => Number(BigInt(b) - BigInt(a)))
+    expect(amounts).toEqual(['1000', '500'])
   })
 
   it('should get audit records by agreement', async () => {

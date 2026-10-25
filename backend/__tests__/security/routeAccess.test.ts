@@ -102,6 +102,7 @@ const MANAGER_ONLY = [
   'post /api/payments/trigger-check/1',
   'post /api/payments/process/1',
   'post /api/payments/reconcile',
+  'post /api/payments/approval-call/1',
   'post /api/oracle/process',
   'post /api/oracle/process-all',
   'post /api/hedera/hcs/publish',
@@ -110,6 +111,12 @@ const MANAGER_ONLY = [
   'post /api/batch-scheduler/start',
   'post /api/batch-scheduler/stop',
   'post /api/batch-scheduler/process/1'
+]
+
+// Investor wallet flows: the investor's own deposit, prepared and confirmed
+const INVESTOR_ONLY = [
+  'post /api/payments/deposit-call/1',
+  'post /api/payments/deposits/confirm'
 ]
 
 // Routes that are intentionally disabled regardless of role
@@ -123,7 +130,7 @@ describe('route inventory', () => {
   })
 
   it('classifies every mutating route', () => {
-    const known = new Set([...MANAGER_ONLY, ...DISABLED, 'post /api/payments/create-investment-transaction/1'])
+    const known = new Set([...MANAGER_ONLY, ...DISABLED, ...INVESTOR_ONLY])
     const unclassified = MUTATING_ROUTES.map(key).filter(k => !known.has(k))
     expect(unclassified).toEqual([])
   })
@@ -183,10 +190,10 @@ describe('operational routes require MANAGER', () => {
     expect([401, 403]).not.toContain(res.status)
   })
 
-  it('create-investment-transaction is restricted to INVESTOR', async () => {
+  it.each(INVESTOR_ONLY)('%s is restricted to INVESTOR', async route => {
+    const [method, path] = route.split(' ')
     for (const userId of [1, 3]) {
-      const res = await request(app).post('/api/payments/create-investment-transaction/1')
-        .set('Authorization', `Bearer ${signAccess(userId)}`).send({})
+      const res = await (request(app) as any)[method](path).set('Authorization', `Bearer ${signAccess(userId)}`).send({})
       expect(res.status).toBe(403)
     }
   })

@@ -537,13 +537,15 @@ export class PrismaDatabase {
     })
   }
 
-  async createInvestment(data: { agreementId: number; investorAddress: string; amount: number; transactionHash?: string | null }): Promise<number> {
+  async createInvestment(data: { agreementId: number; investorAddress: string; amount: string; transactionId?: string | null; transactionHash?: string | null; status?: string }): Promise<number> {
     const investment = await this.prisma.investments.create({
       data: {
         agreement_id: data.agreementId,
         investor_address: data.investorAddress,
         amount: data.amount,
-        transaction_hash: data.transactionHash ?? null
+        transaction_id: data.transactionId ?? null,
+        transaction_hash: data.transactionHash ?? null,
+        status: data.status ?? undefined
       }
     })
     return investment.id

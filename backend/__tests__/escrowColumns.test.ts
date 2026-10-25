@@ -152,6 +152,32 @@ describe('Agreement on-chain link', () => {
   })
 })
 
+describe('Investments from escrow deposits', () => {
+  let database: PrismaDatabase
+
+  beforeEach(async () => {
+    process.env.DATABASE_URL = 'file:./data/test-db.sqlite'
+    database = new PrismaDatabase()
+    await database.initialize()
+    const prisma = getPrismaClient()
+    await prisma.$transaction([prisma.investments.deleteMany(), prisma.payments.deleteMany(), prisma.batches.deleteMany(), prisma.agreements.deleteMany()])
+  })
+
+  afterEach(async () => {
+    await database.close()
+  })
+
+  it('stores an exact deposit amount and records each deposit transaction once', async () => {
+    const agreementId = await database.createAgreement({ agreementHash: 'inv', producerName: 'P', producerAddress: '0x' + '11'.repeat(20), baseValue: 1, hectares: 1 })
+    const deposit = { agreementId, investorAddress: '0x' + '22'.repeat(20), amount: ABOVE_INT64, transactionId: '0.0.1@1.2', transactionHash: '0x' + 'cd'.repeat(48), status: 'confirmed' }
+
+    const id = await database.createInvestment(deposit)
+
+    expect(await database.getInvestment(id)).toMatchObject({ amount: ABOVE_INT64, transaction_id: '0.0.1@1.2', status: 'confirmed' })
+    await expect(database.createInvestment(deposit)).rejects.toMatchObject({ code: 'P2002' })
+  })
+})
+
 describe('Escrow v3 migration', () => {
   const migrationsDir = path.join(__dirname, '..', 'prisma', 'migrations')
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wata-migration-'))

@@ -129,7 +129,10 @@ model investments {
   id               Int       @id @default(autoincrement())
   agreement_id     Int
   investor_address String
-  amount           Float
+  // Decimal string in the contract's native unit (tinybar), read from the Deposited event
+  amount           String
+  // Ledger transaction of the deposit: a deposit is recorded once
+  transaction_id   String?   @unique
   transaction_hash String?
   status           String?   @default("pending")
   created_at       DateTime  @default(now())

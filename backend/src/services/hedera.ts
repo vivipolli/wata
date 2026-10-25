@@ -5,7 +5,6 @@ import {
   ContractFunctionParameters,
   ContractCallQuery,
   ContractExecuteTransaction,
-  Hbar,
   ContractId,
   AccountBalanceQuery,
   TransactionRecord,
@@ -393,85 +392,6 @@ export class HederaService implements EscrowLedger {
       }
     } catch (error) {
       throw error
-    }
-  }
-
-  async investInAgreement(agreementId: number, amount: number, investorAddress: string): Promise<{ success: boolean; transactionId?: string; error?: string }> {
-    try {
-      if (!this.client || !this.contractId || !this.accountId || !this.privateKey) {
-        throw new Error('Hedera service not initialized')
-      }
-
-      // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
-      const amountInTinybars = Math.floor(amount * 100000000)
-
-      // Create investment transaction
-      const transaction = new ContractExecuteTransaction()
-        .setContractId(this.contractId)
-        .setGas(1000000)
-        .setFunction('investInAgreement', new ContractFunctionParameters().addUint256(agreementId))
-        .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
-        .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`)
-
-      // Freeze, sign and execute transaction
-      const frozenTransaction = await transaction.freezeWith(this.client!)
-      const signedTransaction = await frozenTransaction.sign(this.privateKey)
-      const txResponse = await signedTransaction.execute(this.client)
-
-      // Get transaction receipt
-      const receipt = await txResponse.getReceipt(this.client)
-      const transactionId = txResponse.transactionId.toString()
-
-      console.log(`Investment successful for agreement ${agreementId}: ${transactionId}`)
-      console.log(`Investment made by server on behalf of investor: ${investorAddress}`)
-
-      return {
-        success: true,
-        transactionId
-      }
-    } catch (error) {
-      console.error('Error investing in agreement:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
-    }
-  }
-
-  // New method: Create investment transaction for investor to sign
-  async createInvestmentTransaction(agreementId: number, amount: number, investorAddress: string): Promise<{ success: boolean; transactionBytes?: string; error?: string }> {
-    try {
-      if (!this.client || !this.contractId) {
-        throw new Error('Hedera service not initialized')
-      }
-
-      // Convert amount to tinybars (1 HBAR = 100,000,000 tinybars)
-      const amountInTinybars = Math.floor(amount * 100000000)
-
-      // Create investment transaction
-      const transaction = new ContractExecuteTransaction()
-        .setContractId(this.contractId)
-        .setGas(1000000)
-        .setFunction('investInAgreement', new ContractFunctionParameters().addUint256(agreementId))
-        .setPayableAmount(Hbar.fromTinybars(amountInTinybars))
-        .setTransactionMemo(`Investment in agreement ${agreementId} by ${investorAddress}`)
-
-      // Freeze transaction for investor to sign
-      const frozenTransaction = await transaction.freezeWith(this.client!)
-      
-      // Convert to bytes for investor to sign
-      const transactionBytes = frozenTransaction.toBytes()
-
-      return {
-        success: true,
-        transactionBytes: Buffer.from(transactionBytes).toString('hex')
-      }
-    } catch (error) {
-      console.error('Error creating investment transaction:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
     }
   }
 }

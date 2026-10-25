@@ -85,7 +85,10 @@ describe('embedded ABI', () => {
       names.push(e.name)
       expect(e.format('full')).toBe(artifact.getEvent(e.name)!.format('full'))
     })
-    expect(names).toEqual(expect.arrayContaining(['submitBatch', 'release', 'getAgreement', 'getPeriod', 'PeriodReleased', 'PayoutDeferred', 'BatchSubmitted']))
+    expect(names).toEqual(expect.arrayContaining([
+      'submitBatch', 'release', 'getAgreement', 'getPeriod', 'approve', 'reject', 'deposit',
+      'PeriodReleased', 'PayoutDeferred', 'BatchSubmitted', 'Deposited'
+    ]))
   })
 })
 
@@ -216,6 +219,48 @@ describe('findRelease (reconciliation from the ledger)', () => {
     await expect(escrow.findRelease(TX_ID, 3, 7)).rejects.toMatchObject({ code: 'MISSING_EVENT' })
     ledger.lookupResult = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: null, logs: [log(ESCROW, 'PeriodReleased', [3, 7, PRODUCER, 100])] }
     await expect(escrow.findRelease(TX_ID, 3, 7)).rejects.toMatchObject({ code: 'MISSING_HASH' })
+  })
+})
+
+describe('calls prepared for a wallet to sign', () => {
+  it('encodes approve, reject and deposit exactly as the compiled contract expects', () => {
+    expect(artifact.decodeFunctionData('approve', escrow.encodeCall('approve', 3, 7)).map(String)).toEqual(['3', '7'])
+    expect(artifact.decodeFunctionData('reject', escrow.encodeCall('reject', 3, 7)).map(String)).toEqual(['3', '7'])
+    expect(artifact.decodeFunctionData('deposit', escrow.encodeCall('deposit', 3)).map(String)).toEqual(['3'])
+    expect(escrow.contractAddress).toBe(ESCROW)
+    expect(ledger.calls).toHaveLength(0)
+  })
+
+  it('rejects invalid ids', () => {
+    expect(() => escrow.encodeCall('approve', -1, 7)).toThrow(EscrowError)
+    expect(() => escrow.encodeCall('approve', 3)).toThrow(EscrowError)
+  })
+})
+
+describe('findDeposit', () => {
+  const FUNDER = '0x0000000000000000000000000000000000000f0f'
+  const deposited = (address = ESCROW, agreementId = 3) => log(address, 'Deposited', [agreementId, FUNDER, 2n ** 70n])
+
+  it('reads the funder and exact amount of a deposit from the ledger record', async () => {
+    ledger.lookupResult = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: TX_HASH, logs: [deposited()] }
+    await expect(escrow.findDeposit(TX_ID, 3)).resolves.toEqual({
+      status: 'deposited', funder: FUNDER, amount: (2n ** 70n).toString(), transactionId: TX_ID, transactionHash: TX_HASH
+    })
+  })
+
+  it('reports not_found and failed transactions', async () => {
+    await expect(escrow.findDeposit(TX_ID, 3)).resolves.toEqual({ status: 'not_found' })
+    ledger.lookupResult = { transactionId: TX_ID, status: 'CONTRACT_REVERT_EXECUTED', transactionHash: null, logs: [] }
+    await expect(escrow.findDeposit(TX_ID, 3)).resolves.toEqual({ status: 'failed', ledgerStatus: 'CONTRACT_REVERT_EXECUTED' })
+  })
+
+  it('ignores a Deposited event from another contract or for another agreement, and requires the hash', async () => {
+    ledger.lookupResult = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: TX_HASH, logs: [deposited(OTHER)] }
+    await expect(escrow.findDeposit(TX_ID, 3)).rejects.toMatchObject({ code: 'MISSING_EVENT' })
+    ledger.lookupResult = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: TX_HASH, logs: [deposited(ESCROW, 4)] }
+    await expect(escrow.findDeposit(TX_ID, 3)).rejects.toMatchObject({ code: 'MISSING_EVENT' })
+    ledger.lookupResult = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: null, logs: [deposited()] }
+    await expect(escrow.findDeposit(TX_ID, 3)).rejects.toMatchObject({ code: 'MISSING_HASH' })
   })
 })
 

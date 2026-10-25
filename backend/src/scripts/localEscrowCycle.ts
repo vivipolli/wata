@@ -9,7 +9,9 @@
  *  - the backend path: EscrowService + HederaService ledger adapter for submitBatch and release,
  *    with the producer balance checked before and after;
  *  - reconciliation: the transaction id handed over before sending, and the Mirror Node lookup of a
- *    successful release, a failed one and an unknown id.
+ *    successful release, a failed one and an unknown id;
+ *  - HYBRID mode: deposit and approve signed by the funder's and financial manager's own accounts
+ *    from the call data the server prepares, the deposit read back from the Mirror Node.
  *
  * Environment (values are read, never printed):
  *   LOCAL_NODE_ADDRESS    default 127.0.0.1:50211
@@ -227,6 +229,59 @@ async function main(): Promise<void> {
   report.reconcileReplay = await lookupWhenAvailable(replayIds[0])
   const unknownId = `${oracleId.toString()}@1000000000.000000001`
   report.reconcileUnknown = await escrow.findRelease(unknownId, 0, 1)
+
+  // HYBRID agreement: the server prepares call data; the wallets (here, the role accounts) sign and send.
+  const hybrid = await new ContractExecuteTransaction()
+    .setTransactionId(TransactionId.generate(adminId))
+    .setContractId(escrowId)
+    .setGas(300_000)
+    .setFunction('createAgreement', new ContractFunctionParameters()
+      .addAddress(evm(producerId))
+      .addUint256(Number(HBAR_IN_TINYBAR))
+      .addUint8(70)
+      .addUint8(1))
+    .freezeWith(operator)
+  await hybrid.sign(adminKeys[1])
+  await hybrid.sign(adminKeys[2])
+  await (await hybrid.execute(operator)).getReceipt(operator)
+
+  async function sendWalletCall(client: Client, callData: string, payableTinybar?: bigint) {
+    const tx = new ContractExecuteTransaction()
+      .setContractId(escrowId)
+      .setGas(300_000)
+      .setFunctionParameters(Buffer.from(callData.slice(2), 'hex'))
+    if (payableTinybar) tx.setPayableAmount(Hbar.fromTinybars(Number(payableTinybar)))
+    const response = await tx.execute(client)
+    const receipt = await response.getReceipt(client)
+    return { transactionId: response.transactionId.toString(), status: receipt.status.toString() }
+  }
+
+  const depositTx = await sendWalletCall(funder, escrow.encodeCall('deposit', 1), 5n * HBAR_IN_TINYBAR)
+  let depositRead: any = { status: 'not_found' }
+  for (let attempt = 0; attempt < 30 && depositRead.status === 'not_found'; attempt++) {
+    depositRead = await escrow.findDeposit(depositTx.transactionId, 1)
+    if (depositRead.status === 'not_found') await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  report.hybridDeposit = { status: depositRead.status, funderIsFunderAccount: depositRead.funder === evm(funderId), amount: depositRead.amount }
+
+  const hybridBatch = await escrow.submitBatch({ agreementId: 1, periodId: 1, auditHash: 'cd'.repeat(32), score: 85, scoreVersion: 1 })
+  const manager = localClient(managerId, managerKey)
+  // The oracle (submitter) is not the financial manager: its approve must revert on-chain
+  const oracleApprove = await sendWalletCall((oracleLedger as any).client, escrow.encodeCall('approve', 1, 1)).catch((error: Error) => ({ status: error.message.split('\n')[0] }))
+  const managerApprove = await sendWalletCall(manager, escrow.encodeCall('approve', 1, 1))
+  const afterApproval = await escrow.getPeriod(1, 1)
+  const hybridBefore = (await new AccountBalanceQuery().setAccountId(producerId).execute(operator)).hbars.toTinybars().toString()
+  const hybridRelease = await escrow.release(1, 1)
+  const hybridAfter = (await new AccountBalanceQuery().setAccountId(producerId).execute(operator)).hbars.toTinybars().toString()
+  report.hybrid = {
+    stateAfterSubmit: hybridBatch.state,
+    approveByOracle: oracleApprove.status,
+    approveByFinancialManager: managerApprove.status,
+    stateAfterApprove: afterApproval.state,
+    release: hybridRelease.outcome,
+    producerDelta: (BigInt(hybridAfter) - BigInt(hybridBefore)).toString()
+  }
+  manager.close()
 
   console.log(JSON.stringify(report, null, 2))
   // Open gRPC channels keep the process alive: close every client

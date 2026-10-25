@@ -11,9 +11,14 @@ export const ESCROW_ABI = [
   'function release(uint256 agreementId, uint256 periodId)',
   'function getAgreement(uint256 agreementId) view returns (tuple(address producer, address funder, uint256 periodAmount, uint8 scoreThreshold, uint8 mode, bool active, uint256 deposited, uint256 released, uint256 refunded, uint256 committed))',
   'function getPeriod(uint256 agreementId, uint256 periodId) view returns (tuple(uint8 state, bytes32 auditHash, uint8 score, uint16 scoreVersion, address submitter, uint64 approvalDeadline))',
+  // Signed by wallets, never by the server: the financial manager (approve, reject) and the funder (deposit)
+  'function approve(uint256 agreementId, uint256 periodId)',
+  'function reject(uint256 agreementId, uint256 periodId)',
+  'function deposit(uint256 agreementId) payable',
   'event BatchSubmitted(uint256 indexed agreementId, uint256 indexed periodId, bytes32 auditHash, uint8 score, uint16 scoreVersion, uint8 state)',
   'event PeriodReleased(uint256 indexed agreementId, uint256 indexed periodId, address indexed producer, uint256 amount)',
-  'event PayoutDeferred(address indexed to, uint256 amount)'
+  'event PayoutDeferred(address indexed to, uint256 amount)',
+  'event Deposited(uint256 indexed agreementId, address indexed funder, uint256 amount)'
 ]
 
 // Order must follow the Solidity enum declarations.
@@ -90,6 +95,13 @@ export type ReleaseLookup =
   | { status: 'failed'; ledgerStatus: string }
   | { status: 'released'; release: ReleaseResult }
 
+export type DepositLookup =
+  | { status: 'not_found' }
+  | { status: 'failed'; ledgerStatus: string }
+  | { status: 'deposited'; funder: string; amount: string; transactionId: string; transactionHash: string }
+
+export type WalletCall = 'approve' | 'reject' | 'deposit'
+
 export interface EscrowAgreement {
   producer: string
   funder: string
@@ -125,6 +137,40 @@ export class EscrowService {
 
   constructor(private readonly ledger: EscrowLedger, contractAddress: string) {
     this.address = contractAddress.toLowerCase()
+  }
+
+  get contractAddress(): string {
+    return this.address
+  }
+
+  /** Call data for a wallet to sign and send; the server never sends these calls itself. */
+  encodeCall(name: WalletCall, agreementId: number, periodId?: number): string {
+    requireUint(agreementId, Number.MAX_SAFE_INTEGER, 'agreementId')
+    if (name === 'deposit') return this.iface.encodeFunctionData('deposit', [agreementId])
+    requireUint(periodId as number, Number.MAX_SAFE_INTEGER, 'periodId')
+    return this.iface.encodeFunctionData(name, [agreementId, periodId])
+  }
+
+  /** Reads a deposit sent by a funder's wallet from the ledger record. */
+  async findDeposit(transactionId: string, agreementId: number): Promise<DepositLookup> {
+    requireUint(agreementId, Number.MAX_SAFE_INTEGER, 'agreementId')
+    const execution = await this.ledger.lookup(transactionId)
+    if (!execution) return { status: 'not_found' }
+    if (execution.status !== 'SUCCESS') return { status: 'failed', ledgerStatus: execution.status }
+    const event = this.findEvent(execution, 'Deposited', e => e.args.agreementId === BigInt(agreementId))
+    if (!event) {
+      throw new EscrowError('MISSING_EVENT', `Transaction ${transactionId} has no Deposited event for agreement ${agreementId} from the escrow contract`)
+    }
+    if (!execution.transactionHash) {
+      throw new EscrowError('MISSING_HASH', 'The transaction record did not include a transaction hash')
+    }
+    return {
+      status: 'deposited',
+      funder: String(event.args.funder).toLowerCase(),
+      amount: (event.args.amount as bigint).toString(),
+      transactionId: execution.transactionId,
+      transactionHash: execution.transactionHash
+    }
   }
 
   async submitBatch(input: SubmitBatchInput): Promise<SubmitBatchResult> {
