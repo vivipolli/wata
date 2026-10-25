@@ -9,7 +9,6 @@ import {
   ContractId,
   AccountBalanceQuery,
   TransactionRecord,
-  TransferTransaction,
   AccountInfoQuery,
   TransactionId,
   TransactionRecordQuery
@@ -325,31 +324,6 @@ export class HederaService implements EscrowLedger {
       return balance.hbars.toString()
     } catch (error) {
       throw error
-    }
-  }
-
-  async transferHBAR(toAddress: string, amountInTinybars: number): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
-    try {
-      const transferTransaction = new TransferTransaction()
-        .addHbarTransfer(AccountId.fromString(process.env.HEDERA_ACCOUNT_ID!), new Hbar(-amountInTinybars / 100000000))
-        .addHbarTransfer(AccountId.fromString(toAddress), new Hbar(amountInTinybars / 100000000))
-        .setMaxTransactionFee(new Hbar(5))
-
-      const frozenTransaction = await transferTransaction.freezeWith(this.client!)
-      const response = await frozenTransaction.execute(this.client!)
-      const receipt = await response.getReceipt(this.client!)
-      
-      const transactionId = response.transactionId.toString()
-
-      return {
-        success: true,
-        transactionHash: transactionId
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
     }
   }
 

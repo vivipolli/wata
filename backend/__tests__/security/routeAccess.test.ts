@@ -9,7 +9,6 @@ import jwt from 'jsonwebtoken'
 
 jest.mock('../../src/services/orm/prismaDatabase', () => ({ PrismaDatabase: class {} }))
 jest.mock('../../src/services/hedera', () => ({ HederaService: class {} }))
-jest.mock('../../src/services/relayer', () => ({ RelayerService: class {} }))
 jest.mock('../../src/services/oracle', () => ({ OracleService: class {} }))
 jest.mock('../../src/services/hcs', () => ({ hcsService: {} }))
 jest.mock('../../src/services/hfs', () => ({ hfsService: {} }))
@@ -65,7 +64,7 @@ function signRefresh(userId: number): string {
 const MOUNTS: Array<{ base: string; router: Router }> = [
   { base: '/api/agreements', router: agreementRoutes(fakeService, fakeDb) },
   { base: '/api/readings', router: readingRoutes(fakeDb) },
-  { base: '/api/payments', router: paymentRoutes(fakeService, fakeDb, fakeService) },
+  { base: '/api/payments', router: paymentRoutes(fakeService, fakeDb) },
   { base: '/api/oracle', router: oracleRoutes(fakeDb, fakeService) },
   { base: '/api/hedera', router: hederaRoutes(fakeService, fakeDb) },
   { base: '/api/batch-scheduler', router: batchSchedulerRoutes(fakeService, fakeDb) }

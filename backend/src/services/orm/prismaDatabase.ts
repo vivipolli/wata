@@ -301,6 +301,10 @@ export class PrismaDatabase {
     })
   }
 
+  async attachPaymentHcs(paymentId: number, hcsTransactionId: string): Promise<void> {
+    await this.prisma.payments.update({ where: { id: paymentId }, data: { hcs_transaction_id: hcsTransactionId } })
+  }
+
   /** Marks a payment that is being processed as failed, so it can be retried. */
   async markPaymentFailed(paymentId: number): Promise<void> {
     await this.prisma.payments.updateMany({

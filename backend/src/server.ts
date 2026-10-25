@@ -3,7 +3,6 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { PrismaDatabase } from './services/orm/prismaDatabase.js'
 import { HederaService } from './services/hedera.js'
-import { RelayerService } from './services/relayer.js'
 import { OracleService } from './services/oracle.js'
 import { BatchSchedulerService } from './services/batchScheduler.js'
 import agreementRoutes from './routes/agreements.js'
@@ -53,7 +52,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 // Initialize services
 const db = new PrismaDatabase()
 const hederaService = new HederaService()
-const relayerService = new RelayerService(hederaService, db)
 const oracleService = new OracleService(db, hederaService)
 const batchSchedulerService = new BatchSchedulerService(db, oracleService)
 
@@ -61,7 +59,7 @@ const batchSchedulerService = new BatchSchedulerService(db, oracleService)
 app.use('/api/auth', authRoutes)
 app.use('/api/agreements', agreementRoutes(hederaService, db))
 app.use('/api/readings', readingRoutes(db))
-app.use('/api/payments', paymentRoutes(hederaService, db, relayerService))
+app.use('/api/payments', paymentRoutes(hederaService, db))
 app.use('/api/oracle', oracleRoutes(db, hederaService))
 app.use('/api/hedera', hederaRoutes(hederaService, db))
 app.use('/api/batch-scheduler', batchSchedulerRoutes(batchSchedulerService, db))
@@ -73,8 +71,7 @@ app.get('/api/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     services: {
       database: true,
-      hedera: true,
-      relayer: true
+      hedera: true
     },
     version: '1.0.0'
   }
@@ -87,14 +84,12 @@ async function startServer(): Promise<void> {
   try {
     await db.initialize()
     await hederaService.initialize()
-    await relayerService.start()
     await batchSchedulerService.start() // Start batch scheduler
     
     app.listen(PORT, () => {
         console.log(`🚀 W.A.T.A. Backend running on port ${PORT}`)
         console.log(`🌐 Hedera Network: ${resolveHederaNetwork()}`)
         console.log(`📊 Database initialized`)
-        console.log(`🔄 Relayer service started`)
         console.log(`⏰ Batch scheduler started (6-hour intervals)`)
         console.log(`🔐 Authentication system enabled`)
       })

@@ -10,7 +10,6 @@ import jwt from 'jsonwebtoken'
 
 jest.mock('../../src/services/orm/prismaDatabase', () => ({ PrismaDatabase: class {} }))
 jest.mock('../../src/services/hedera', () => ({ HederaService: class {} }))
-jest.mock('../../src/services/relayer', () => ({ RelayerService: class {} }))
 
 const JWT_SECRET = 'test-secret-that-is-long-enough-for-hs256-0123456789'
 process.env.JWT_SECRET = JWT_SECRET
@@ -30,6 +29,7 @@ const TX_HASH = '0x' + 'cd'.repeat(48)
 
 let db: any
 let escrow: any
+let audit: any
 let app: express.Application
 
 function period(state: string, overrides: Record<string, unknown> = {}) {
@@ -48,8 +48,10 @@ beforeEach(() => {
     getPayment: jest.fn(async () => null),
     claimPaymentForRelease: jest.fn(async () => true),
     recordPaymentRelease: jest.fn(async () => undefined),
-    markPaymentFailed: jest.fn(async () => undefined)
+    markPaymentFailed: jest.fn(async () => undefined),
+    attachPaymentHcs: jest.fn(async () => undefined)
   }
+  audit = { publishAuditRecord: jest.fn(async () => '0.0.7@1700000001.000000002') }
   escrow = {
     getPeriod: jest.fn(async () => period('Approved')),
     getAgreement: jest.fn(async () => ({ periodAmount: PERIOD_AMOUNT, scoreThreshold: 70 })),
@@ -59,7 +61,7 @@ beforeEach(() => {
   }
   app = express()
   app.use(express.json())
-  app.use('/api/payments', paymentRoutes({} as any, db, {} as any, escrow))
+  app.use('/api/payments', paymentRoutes({} as any, db, { escrow, audit }))
 })
 
 afterEach(() => jest.restoreAllMocks())
@@ -84,6 +86,26 @@ describe('POST /api/payments/trigger-check', () => {
       status: 'completed', transactionId: TX_ID, transactionHash: TX_HASH, onchainState: 'Released'
     })
     expect(res.body.data).toMatchObject({ paymentId: 1, outcome: 'released', amount: PERIOD_AMOUNT, transactionHash: TX_HASH })
+  })
+
+  it('publishes the release to HCS with the ledger record hash and links it to the payment', async () => {
+    const res = await trigger()
+
+    expect(res.status).toBe(200)
+    expect(audit.publishAuditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      agreementId: '1', batchId: 9, auditHash: AUDIT, score: 0.9, transactionHash: TX_HASH, producerAddress: '0xp'
+    }))
+    expect(db.attachPaymentHcs).toHaveBeenCalledWith(1, '0.0.7@1700000001.000000002')
+  })
+
+  it('keeps the recorded release when the HCS publication fails', async () => {
+    audit.publishAuditRecord.mockRejectedValueOnce(new Error('INSUFFICIENT_PAYER_BALANCE'))
+
+    const res = await trigger()
+
+    expect(res.status).toBe(200)
+    expect(db.recordPaymentRelease).toHaveBeenCalledWith(1, expect.objectContaining({ status: 'completed' }))
+    expect(db.attachPaymentHcs).not.toHaveBeenCalled()
   })
 
   it('records a deferred payout as deferred, not completed', async () => {
@@ -158,11 +180,12 @@ describe('POST /api/payments/trigger-check', () => {
     expect(res.status).toBe(502)
     expect(db.markPaymentFailed).toHaveBeenCalledWith(1)
     expect(db.recordPaymentRelease).not.toHaveBeenCalled()
+    expect(audit.publishAuditRecord).not.toHaveBeenCalled()
   })
 })
 
 describe('POST /api/payments/process/:paymentId', () => {
-  const failedPayment = { id: 5, agreement_id: 1, status: 'failed', period_id: 9, audit_hash: AUDIT }
+  const failedPayment = { id: 5, agreement_id: 1, batch_id: 9, status: 'failed', period_id: 9, audit_hash: AUDIT, score: 0.9 }
 
   it('retries the release of a failed payment after claiming it', async () => {
     db.getPayment.mockResolvedValueOnce(failedPayment)

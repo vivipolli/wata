@@ -62,6 +62,11 @@ describe('Payment release claim', () => {
     expect((await database.getPayment(paymentId))?.status).toBe('completed')
   })
 
+  it('links the HCS audit record to the payment', async () => {
+    await database.attachPaymentHcs(paymentId, '0.0.7@1.2')
+    expect((await database.getPayment(paymentId))?.hcs_transaction_id).toBe('0.0.7@1.2')
+  })
+
   it('records a release only for a payment that is being processed', async () => {
     await database.recordPaymentRelease(paymentId, release)
 

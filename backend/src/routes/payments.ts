@@ -2,12 +2,28 @@ import express, { Request, Response } from 'express'
 import { HederaService } from '../services/hedera'
 import type { PrismaDatabase } from '../services/orm/prismaDatabase'
 import { AuthMiddleware } from '../middleware/auth'
-import { RelayerService } from '../services/relayer'
+import type { HederaConsensusService } from '../services/hcs'
 import { isUniqueViolation } from '../utils/prismaErrors'
 import type { TriggerCheckRequest, ApiResponse } from '../types/index'
 import type { EscrowService, EscrowPeriod, ReleaseResult } from '../services/escrow'
 
 type EscrowPort = Pick<EscrowService, 'getPeriod' | 'getAgreement' | 'release'>
+type AuditPublisher = Pick<HederaConsensusService, 'publishAuditRecord'>
+
+interface PaymentDeps {
+  escrow?: EscrowPort
+  // Publishes each release to HCS as an immutable audit record; defaults to the HCS service
+  audit?: AuditPublisher
+}
+
+// Local context of a payment, used for its audit record
+interface ReleaseContext {
+  paymentId: number
+  agreementId: number
+  batchId: number | null
+  auditHash: string | null
+  score: number | null
+}
 
 interface PaymentCheckResult {
   success: boolean
@@ -18,6 +34,7 @@ interface PaymentCheckResult {
   amount: string
   transactionId: string
   transactionHash: string
+  hcsTransactionId?: string
 }
 
 interface PaymentStats {
@@ -26,7 +43,10 @@ interface PaymentStats {
   totalPendingAmount: string
 }
 
-export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, relayerService: RelayerService, escrow?: EscrowPort) {
+export default function paymentRoutes(hederaService: HederaService, database: PrismaDatabase, deps: PaymentDeps = {}) {
+  const { escrow } = deps
+  // The HCS service builds its client from the environment on import, so it is loaded on first use
+  const getAudit = async (): Promise<AuditPublisher> => deps.audit ?? (await import('../services/hcs')).hcsService
   const router = express.Router()
   const authMiddleware = new AuthMiddleware(database)
   const requireManager = authMiddleware.requireRole('MANAGER')
@@ -68,8 +88,9 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
     }
   }
 
-  // Executes the release of a claimed payment and records the ledger outcome
-  async function executeRelease(res: Response, port: EscrowPort, paymentId: number, onchainAgreementId: number, periodId: number) {
+  // Executes the release of a claimed payment, records the ledger outcome and publishes it to HCS
+  async function executeRelease(res: Response, port: EscrowPort, context: ReleaseContext, onchainAgreementId: number, periodId: number) {
+    const { paymentId } = context
     let release: ReleaseResult
     try {
       release = await port.release(onchainAgreementId, periodId)
@@ -83,6 +104,25 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
       transactionHash: release.transactionHash,
       onchainState: 'Released'
     })
+
+    // The release is already final on-chain; a failed publication is logged and never undoes it
+    let hcsTransactionId: string | undefined
+    try {
+      hcsTransactionId = await (await getAudit()).publishAuditRecord({
+        agreementId: String(context.agreementId),
+        batchId: context.batchId ?? periodId,
+        auditHash: context.auditHash ?? '',
+        score: context.score ?? 0,
+        timestamp: new Date().toISOString(),
+        transactionHash: release.transactionHash,
+        producerAddress: release.producer
+      })
+      await database.attachPaymentHcs(paymentId, hcsTransactionId)
+    } catch (error) {
+      hcsTransactionId = undefined
+      console.error(`HCS publication failed for payment ${paymentId}:`, error)
+    }
+
     const response: ApiResponse<PaymentCheckResult> = {
       success: true,
       data: {
@@ -94,7 +134,8 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
         outcome: release.outcome,
         amount: release.amount,
         transactionId: release.transactionId,
-        transactionHash: release.transactionHash
+        transactionHash: release.transactionHash,
+        hcsTransactionId
       }
     }
     return res.json(response)
@@ -165,7 +206,8 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
         throw error
       }
 
-      return await executeRelease(res, port, paymentId, agreement.blockchain_id, latestBatch.period_id)
+      const context = { paymentId, agreementId, batchId: latestBatch.id, auditHash: latestBatch.audit_hash, score: latestBatch.score }
+      return await executeRelease(res, port, context, agreement.blockchain_id, latestBatch.period_id)
     } catch (error) {
       console.error('Error triggering payment check:', error)
       const response: ApiResponse = {
@@ -255,7 +297,8 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
         return fail(res, 409, 'Payment is already being processed')
       }
 
-      return await executeRelease(res, port, paymentId, agreement.blockchain_id, payment.period_id)
+      const context = { paymentId, agreementId: payment.agreement_id, batchId: payment.batch_id, auditHash: payment.audit_hash, score: payment.score }
+      return await executeRelease(res, port, context, agreement.blockchain_id, payment.period_id)
     } catch (error) {
       console.error('Error processing payment:', error)
       const response: ApiResponse = {

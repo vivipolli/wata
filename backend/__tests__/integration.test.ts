@@ -23,20 +23,6 @@ const prismaCleanup = async () => {
     // Ignore errors if tables don't exist yet
   }
 }
-// Mock RelayerService to avoid HederaService import issues
-class MockRelayerService {
-  async initialize(): Promise<void> {
-    console.log('Mock RelayerService initialized')
-  }
-
-  async start(): Promise<void> {
-    console.log('Mock RelayerService started')
-  }
-
-  async stop(): Promise<void> {
-    console.log('Mock RelayerService stopped')
-  }
-}
 // Auth middleware refuses to start without a strong secret; use a fixed test-only value
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret-0123456789abcdef'
 
@@ -151,7 +137,6 @@ describe('W.A.T.A. Chain Integration Tests', () => {
   let app: express.Application
   let database: PrismaDatabase
   let hederaService: HederaService
-  let relayerService: MockRelayerService
   let authToken: string
 
   beforeAll(async () => {
@@ -168,7 +153,6 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     hederaService = new MockHederaService()
     await hederaService.initialize()
 
-    relayerService = new MockRelayerService()
 
     // Health check endpoint (must be before error handling)
     app.get('/api/health', (req, res) => {
@@ -184,7 +168,9 @@ describe('W.A.T.A. Chain Integration Tests', () => {
     app.use('/api/auth', authRoutes)
     app.use('/api/agreements', agreementRoutes(hederaService, database))
     app.use('/api/readings', readingRoutes(database))
-    app.use('/api/payments', paymentRoutes(hederaService, database, relayerService as any))
+    // HCS publication is stubbed: no network in tests
+    const audit = { publishAuditRecord: async () => '0.0.7@1758983593.000000002' }
+    app.use('/api/payments', paymentRoutes(hederaService, database, { audit }))
 
     // Add error handling middleware (must be last)
     app.use((req: express.Request, res: express.Response) => {
@@ -643,8 +629,7 @@ describe('W.A.T.A. Chain Integration Tests', () => {
         })
       })
 
-      // Note: In V3, payment records are created automatically by the relayer
-      // when it processes PaymentApproved events from the smart contract
+      // The payment is created by trigger-check and paid only by the escrow release
     })
   })
 

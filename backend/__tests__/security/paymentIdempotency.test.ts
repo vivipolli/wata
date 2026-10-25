@@ -9,7 +9,6 @@ import jwt from 'jsonwebtoken'
 
 jest.mock('../../src/services/orm/prismaDatabase', () => ({ PrismaDatabase: class {} }))
 jest.mock('../../src/services/hedera', () => ({ HederaService: class {} }))
-jest.mock('../../src/services/relayer', () => ({ RelayerService: class {} }))
 
 const JWT_SECRET = 'test-secret-that-is-long-enough-for-hs256-0123456789'
 process.env.JWT_SECRET = JWT_SECRET
@@ -35,7 +34,8 @@ beforeEach(() => {
     getPaymentsByAgreement: jest.fn(async () => []),
     createPayment: jest.fn(async () => 1),
     recordPaymentRelease: jest.fn(async () => undefined),
-    markPaymentFailed: jest.fn(async () => undefined)
+    markPaymentFailed: jest.fn(async () => undefined),
+    attachPaymentHcs: jest.fn(async () => undefined)
   }
   const escrow = {
     getPeriod: jest.fn(async () => ({ state: 'Approved', auditHash: 'ab'.repeat(32), score: 90, scoreVersion: 1, approvalDeadline: 0 })),
@@ -44,7 +44,8 @@ beforeEach(() => {
   }
   app = express()
   app.use(express.json())
-  app.use('/api/payments', paymentRoutes({} as any, db, {} as any, escrow as any))
+  const audit = { publishAuditRecord: jest.fn(async () => '0.0.7@1.2') }
+  app.use('/api/payments', paymentRoutes({} as any, db, { escrow: escrow as any, audit }))
 })
 
 afterEach(() => jest.restoreAllMocks())
