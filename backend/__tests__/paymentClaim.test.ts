@@ -67,6 +67,56 @@ describe('Payment release claim', () => {
     expect((await database.getPayment(paymentId))?.hcs_transaction_id).toBe('0.0.7@1.2')
   })
 
+  it('stores the transaction id only on a payment that is being processed', async () => {
+    await expect(database.setPaymentTransactionId(paymentId, '0.0.1@1.2')).resolves.toBe(false)
+    await database.claimPaymentForRelease(paymentId)
+    await expect(database.setPaymentTransactionId(paymentId, '0.0.1@1.2')).resolves.toBe(true)
+    expect((await database.getPayment(paymentId))?.transaction_id).toBe('0.0.1@1.2')
+  })
+
+  it('reconciles only the payment still bound to the expected status and transaction id', async () => {
+    await database.claimPaymentForRelease(paymentId)
+    await database.setPaymentTransactionId(paymentId, '0.0.1@1.2')
+    await database.markPaymentFailed(paymentId)
+
+    // A retry claimed the payment with a new transaction id: the old outcome must not apply
+    await database.claimPaymentForRelease(paymentId)
+    await database.setPaymentTransactionId(paymentId, '0.0.1@3.4')
+    await database.recordPaymentRelease(paymentId, release, 'failed', '0.0.1@1.2')
+    await database.markPaymentFailed(paymentId, '0.0.1@1.2')
+    expect(await database.getPayment(paymentId)).toMatchObject({ status: 'processing', transaction_id: '0.0.1@3.4' })
+
+    await database.recordPaymentRelease(paymentId, release, 'processing', '0.0.1@3.4')
+    expect((await database.getPayment(paymentId))?.status).toBe('completed')
+  })
+
+  it('ignores a stale outcome for a failed payment whose transaction id was replaced by a retry', async () => {
+    await database.claimPaymentForRelease(paymentId)
+    await database.setPaymentTransactionId(paymentId, '0.0.1@1.2')
+    await database.markPaymentFailed(paymentId)
+    // Retry with a new id that also failed: same status, different transaction
+    await database.claimPaymentForRelease(paymentId)
+    await database.setPaymentTransactionId(paymentId, '0.0.1@3.4')
+    await database.markPaymentFailed(paymentId)
+
+    await database.recordPaymentRelease(paymentId, release, 'failed', '0.0.1@1.2')
+    expect(await database.getPayment(paymentId)).toMatchObject({ status: 'failed', transaction_id: '0.0.1@3.4' })
+
+    await database.recordPaymentRelease(paymentId, release, 'failed', '0.0.1@3.4')
+    expect((await database.getPayment(paymentId))?.status).toBe('completed')
+  })
+
+  it('lists processing payments and failed payments that carry a transaction id for reconciliation', async () => {
+    await database.claimPaymentForRelease(paymentId)
+    expect((await database.getPaymentsToReconcile()).map(p => p.id)).toEqual([paymentId])
+    await database.markPaymentFailed(paymentId)
+    expect(await database.getPaymentsToReconcile()).toEqual([])
+    await database.claimPaymentForRelease(paymentId)
+    await database.setPaymentTransactionId(paymentId, '0.0.1@1.2')
+    await database.markPaymentFailed(paymentId)
+    expect((await database.getPaymentsToReconcile()).map(p => p.id)).toEqual([paymentId])
+  })
+
   it('records a release only for a payment that is being processed', async () => {
     await database.recordPaymentRelease(paymentId, release)
 

@@ -40,13 +40,23 @@ function log(address: string, event: string, args: unknown[]): EscrowLog {
 }
 
 class FakeLedger implements EscrowLedger {
-  calls: Array<{ kind: 'execute' | 'query'; contract: string; data: string }> = []
+  calls: Array<{ kind: 'execute' | 'query' | 'prepared' | 'lookup'; contract: string; data: string }> = []
   execution: ContractExecution = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: TX_HASH, logs: [] }
   queryResult = '0x'
+  lookupResult: ContractExecution | null = null
 
-  async execute(contract: string, data: string): Promise<ContractExecution> {
+  async execute(contract: string, data: string, onPrepared?: (transactionId: string) => Promise<void>): Promise<ContractExecution> {
+    if (onPrepared) {
+      await onPrepared(this.execution.transactionId)
+      this.calls.push({ kind: 'prepared', contract, data: this.execution.transactionId })
+    }
     this.calls.push({ kind: 'execute', contract, data })
     return this.execution
+  }
+
+  async lookup(transactionId: string): Promise<ContractExecution | null> {
+    this.calls.push({ kind: 'lookup', contract: '', data: transactionId })
+    return this.lookupResult
   }
 
   async query(contract: string, data: string): Promise<string> {
@@ -160,6 +170,52 @@ describe('release', () => {
   it('never reports success without the transaction hash from the record', async () => {
     ledger.execution = { ...ledger.execution, transactionHash: null, logs: [released()] }
     await expect(escrow.release(3, 7)).rejects.toMatchObject({ code: 'MISSING_HASH' })
+  })
+})
+
+describe('release with a prepared transaction id', () => {
+  const releasedLog = () => log(ESCROW, 'PeriodReleased', [3, 7, PRODUCER, 100])
+
+  it('hands the transaction id to the caller before the transaction is sent', async () => {
+    ledger.execution.logs = [releasedLog()]
+    const seen: string[] = []
+
+    await escrow.release(3, 7, async id => { seen.push(id) })
+
+    expect(seen).toEqual([TX_ID])
+    expect(ledger.calls.map(c => c.kind)).toEqual(['prepared', 'execute'])
+  })
+})
+
+describe('findRelease (reconciliation from the ledger)', () => {
+  it('reports not_found when the ledger has no such transaction', async () => {
+    await expect(escrow.findRelease(TX_ID, 3, 7)).resolves.toEqual({ status: 'not_found' })
+    expect(ledger.calls).toEqual([{ kind: 'lookup', contract: '', data: TX_ID }])
+  })
+
+  it('reports a failed transaction with its ledger status', async () => {
+    ledger.lookupResult = { transactionId: TX_ID, status: 'CONTRACT_REVERT_EXECUTED', transactionHash: null, logs: [] }
+    await expect(escrow.findRelease(TX_ID, 3, 7)).resolves.toEqual({ status: 'failed', ledgerStatus: 'CONTRACT_REVERT_EXECUTED' })
+  })
+
+  it('reports the release read from the ledger, with its hash and outcome', async () => {
+    ledger.lookupResult = {
+      transactionId: TX_ID, status: 'SUCCESS', transactionHash: TX_HASH,
+      logs: [log(ESCROW, 'PeriodReleased', [3, 7, PRODUCER, 100]), log(ESCROW, 'PayoutDeferred', [PRODUCER, 100])]
+    }
+    await expect(escrow.findRelease(TX_ID, 3, 7)).resolves.toEqual({
+      status: 'released',
+      release: { outcome: 'deferred', amount: '100', producer: PRODUCER, transactionId: TX_ID, transactionHash: TX_HASH }
+    })
+  })
+
+  it('applies the same checks as a live release: emitter, agreement, period and hash', async () => {
+    ledger.lookupResult = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: TX_HASH, logs: [log(OTHER, 'PeriodReleased', [3, 7, PRODUCER, 100])] }
+    await expect(escrow.findRelease(TX_ID, 3, 7)).rejects.toMatchObject({ code: 'MISSING_EVENT' })
+    ledger.lookupResult = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: TX_HASH, logs: [log(ESCROW, 'PeriodReleased', [3, 8, PRODUCER, 100])] }
+    await expect(escrow.findRelease(TX_ID, 3, 7)).rejects.toMatchObject({ code: 'MISSING_EVENT' })
+    ledger.lookupResult = { transactionId: TX_ID, status: 'SUCCESS', transactionHash: null, logs: [log(ESCROW, 'PeriodReleased', [3, 7, PRODUCER, 100])] }
+    await expect(escrow.findRelease(TX_ID, 3, 7)).rejects.toMatchObject({ code: 'MISSING_HASH' })
   })
 })
 

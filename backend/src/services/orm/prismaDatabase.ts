@@ -287,10 +287,35 @@ export class PrismaDatabase {
     return count === 1
   }
 
-  /** Records the ledger outcome of a release for a payment that is being processed. */
-  async recordPaymentRelease(paymentId: number, outcome: { status: 'completed' | 'deferred'; transactionId: string; transactionHash: string; onchainState: string }): Promise<void> {
-    await this.prisma.payments.updateMany({
+  /** Stores the release transaction id before it is sent; only on a payment that is being processed. */
+  async setPaymentTransactionId(paymentId: number, transactionId: string): Promise<boolean> {
+    const { count } = await this.prisma.payments.updateMany({
       where: { id: paymentId, status: 'processing' },
+      data: { transaction_id: transactionId }
+    })
+    return count === 1
+  }
+
+  /** Payments whose release outcome may be missing: processing, or failed with a transaction id. */
+  async getPaymentsToReconcile(): Promise<payments[]> {
+    return this.prisma.payments.findMany({
+      where: { OR: [{ status: 'processing' }, { status: 'failed', transaction_id: { not: null } }] },
+      orderBy: { created_at: 'asc' }
+    })
+  }
+
+  /**
+   * Records the ledger outcome of a release. Applies only while the payment is still in fromStatus
+   * and, when given, still bound to expectedTransactionId (a retry may have replaced it).
+   */
+  async recordPaymentRelease(
+    paymentId: number,
+    outcome: { status: 'completed' | 'deferred'; transactionId: string; transactionHash: string; onchainState: string },
+    fromStatus: 'processing' | 'failed' = 'processing',
+    expectedTransactionId?: string
+  ): Promise<void> {
+    await this.prisma.payments.updateMany({
+      where: { id: paymentId, status: fromStatus, ...(expectedTransactionId !== undefined ? { transaction_id: expectedTransactionId } : {}) },
       data: {
         status: outcome.status,
         transaction_id: outcome.transactionId,
@@ -305,10 +330,10 @@ export class PrismaDatabase {
     await this.prisma.payments.update({ where: { id: paymentId }, data: { hcs_transaction_id: hcsTransactionId } })
   }
 
-  /** Marks a payment that is being processed as failed, so it can be retried. */
-  async markPaymentFailed(paymentId: number): Promise<void> {
+  /** Marks a payment that is being processed as failed, so it can be retried; optionally only if still bound to expectedTransactionId. */
+  async markPaymentFailed(paymentId: number, expectedTransactionId?: string | null): Promise<void> {
     await this.prisma.payments.updateMany({
-      where: { id: paymentId, status: 'processing' },
+      where: { id: paymentId, status: 'processing', ...(expectedTransactionId !== undefined ? { transaction_id: expectedTransactionId } : {}) },
       data: { status: 'failed' }
     })
   }

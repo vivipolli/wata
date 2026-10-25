@@ -101,6 +101,7 @@ const MANAGER_ONLY = [
   'post /api/readings/simulate',
   'post /api/payments/trigger-check/1',
   'post /api/payments/process/1',
+  'post /api/payments/reconcile',
   'post /api/oracle/process',
   'post /api/oracle/process-all',
   'post /api/hedera/hcs/publish',

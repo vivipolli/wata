@@ -18,7 +18,7 @@ import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { sha256HexToBytes32 } from '../utils/bytes32'
 import { createHederaClient } from '../utils/hederaNetwork'
-import { EscrowService, type EscrowLedger, type ContractExecution } from './escrow'
+import { EscrowService, type EscrowLedger, type ContractExecution, type OnPrepared } from './escrow'
 
 dotenv.config()
 
@@ -36,6 +36,22 @@ interface AgreementData {
 const ESCROW_EXECUTE_GAS = 300000
 const ESCROW_QUERY_GAS = 100000
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/
+const SDK_TRANSACTION_ID = /^(\d+\.\d+\.\d+)@(\d+)\.(\d{1,9})$/
+
+// 0.0.1001@1700000000.42 -> 0.0.1001-1700000000-000000042 (Mirror Node format)
+function toMirrorTransactionId(transactionId: string): string {
+  const match = SDK_TRANSACTION_ID.exec(transactionId)
+  if (!match) throw new Error(`Malformed transaction id: ${transactionId}`)
+  return `${match[1]}-${match[2]}-${match[3].padStart(9, '0')}`
+}
+
+function mirrorBaseUrl(): string {
+  const url = process.env.MIRROR_NODE_URL
+  if (!url || !/^https?:\/\/[^\s/]+(:\d+)?\/?$/.test(url)) {
+    throw new Error('MIRROR_NODE_URL must be set to the http(s) base URL of the Mirror Node REST API')
+  }
+  return url.replace(/\/$/, '')
+}
 
 function toHex(bytes: Uint8Array): string {
   return '0x' + Buffer.from(bytes).toString('hex')
@@ -83,13 +99,18 @@ export class HederaService implements EscrowLedger {
 
   // EscrowLedger: executes a contract call and reports the outcome from the receipt and record.
   // A failed receipt is returned as is (no logs, no hash) so the caller decides; nothing is fabricated.
-  async execute(contractAddress: string, callData: string): Promise<ContractExecution> {
-    const response = await new ContractExecuteTransaction()
+  // The transaction id is generated here and handed to onPrepared before sending, so a lost outcome
+  // can be reconciled from the ledger. If onPrepared throws, the transaction is never sent.
+  async execute(contractAddress: string, callData: string, onPrepared?: OnPrepared): Promise<ContractExecution> {
+    const transaction = new ContractExecuteTransaction()
+      .setTransactionId(TransactionId.generate(this.client!.operatorAccountId!))
       .setContractId(ContractId.fromEvmAddress(0, 0, contractAddress))
       .setGas(ESCROW_EXECUTE_GAS)
       .setFunctionParameters(Buffer.from(callData.slice(2), 'hex'))
-      .execute(this.client!)
-    const transactionId = response.transactionId.toString()
+      .freezeWith(this.client!)
+    const transactionId = transaction.transactionId!.toString()
+    if (onPrepared) await onPrepared(transactionId)
+    const response = await transaction.execute(this.client!)
     const receipt = await response.getReceiptQuery().setValidateStatus(false).execute(this.client!)
     const status = receipt.status.toString()
     if (status !== 'SUCCESS') {
@@ -107,6 +128,35 @@ export class HederaService implements EscrowLedger {
         topics: log.topics.map(toHex),
         data: toHex(log.data)
       }))
+    }
+  }
+
+  // EscrowLedger: outcome of an earlier transaction from the Mirror Node. The hash is the full record
+  // hash (same as the SDK record); logs come from the contract result. Unknown transaction -> null.
+  async lookup(transactionId: string): Promise<ContractExecution | null> {
+    const id = toMirrorTransactionId(transactionId)
+    const base = mirrorBaseUrl()
+    const txResponse = await fetch(`${base}/api/v1/transactions/${id}`)
+    if (txResponse.status === 404) return null
+    if (!txResponse.ok) throw new Error(`Mirror Node returned ${txResponse.status} for transaction ${transactionId}`)
+    const body = await txResponse.json() as { transactions?: Array<Record<string, any>> }
+    // The top-level transaction, not a child record it may have produced
+    const tx = (body.transactions ?? []).find(t => t.parent_consensus_timestamp == null && (t.nonce ?? 0) === 0)
+    if (!tx) return null
+    const status = String(tx.result)
+    if (status !== 'SUCCESS') {
+      return { transactionId, status, transactionHash: null, logs: [] }
+    }
+
+    const resultResponse = await fetch(`${base}/api/v1/contracts/results/${id}`)
+    if (!resultResponse.ok) throw new Error(`Mirror Node returned ${resultResponse.status} for contract result ${transactionId}`)
+    const result = await resultResponse.json() as { logs?: Array<{ address: string; topics: string[]; data: string }> }
+    const hash = Buffer.from(String(tx.transaction_hash ?? ''), 'base64')
+    return {
+      transactionId,
+      status,
+      transactionHash: hash.length > 0 ? toHex(hash) : null,
+      logs: (result.logs ?? []).map(log => ({ address: log.address, topics: log.topics, data: log.data }))
     }
   }
 

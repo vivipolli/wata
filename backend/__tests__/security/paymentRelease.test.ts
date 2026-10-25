@@ -49,15 +49,20 @@ beforeEach(() => {
     claimPaymentForRelease: jest.fn(async () => true),
     recordPaymentRelease: jest.fn(async () => undefined),
     markPaymentFailed: jest.fn(async () => undefined),
-    attachPaymentHcs: jest.fn(async () => undefined)
+    attachPaymentHcs: jest.fn(async () => undefined),
+    setPaymentTransactionId: jest.fn(async () => true),
+    getPaymentsToReconcile: jest.fn(async () => [])
   }
   audit = { publishAuditRecord: jest.fn(async () => '0.0.7@1700000001.000000002') }
   escrow = {
     getPeriod: jest.fn(async () => period('Approved')),
     getAgreement: jest.fn(async () => ({ periodAmount: PERIOD_AMOUNT, scoreThreshold: 70 })),
-    release: jest.fn(async () => ({
-      outcome: 'released', amount: PERIOD_AMOUNT, producer: '0xp', transactionId: TX_ID, transactionHash: TX_HASH
-    }))
+    // Like the real ledger, hands the transaction id over before sending
+    release: jest.fn(async (_a: number, _p: number, onPrepared?: (id: string) => Promise<void>) => {
+      if (onPrepared) await onPrepared(TX_ID)
+      return { outcome: 'released', amount: PERIOD_AMOUNT, producer: '0xp', transactionId: TX_ID, transactionHash: TX_HASH }
+    }),
+    findRelease: jest.fn(async () => ({ status: 'not_found' }))
   }
   app = express()
   app.use(express.json())
@@ -78,7 +83,7 @@ describe('POST /api/payments/trigger-check', () => {
     expect(res.status).toBe(200)
     expect(escrow.getPeriod).toHaveBeenCalledWith(0, 9)
     expect(escrow.release).toHaveBeenCalledTimes(1)
-    expect(escrow.release).toHaveBeenCalledWith(0, 9)
+    expect(escrow.release).toHaveBeenCalledWith(0, 9, expect.any(Function))
     expect(db.createPayment).toHaveBeenCalledWith(expect.objectContaining({
       agreementId: 1, batchId: 9, amount: PERIOD_AMOUNT, status: 'processing', auditHash: AUDIT, periodId: 9, onchainState: 'Approved'
     }))
@@ -184,6 +189,118 @@ describe('POST /api/payments/trigger-check', () => {
   })
 })
 
+describe('transaction id recorded before the release is sent', () => {
+  it('stores the transaction id on the payment before the release', async () => {
+    const order: string[] = []
+    db.setPaymentTransactionId.mockImplementationOnce(async () => { order.push('stored'); return true })
+    escrow.release.mockImplementationOnce(async (_a: number, _p: number, onPrepared: (id: string) => Promise<void>) => {
+      await onPrepared(TX_ID)
+      order.push('sent')
+      return { outcome: 'released', amount: PERIOD_AMOUNT, producer: '0xp', transactionId: TX_ID, transactionHash: TX_HASH }
+    })
+
+    expect((await trigger()).status).toBe(200)
+    expect(db.setPaymentTransactionId).toHaveBeenCalledWith(1, TX_ID)
+    expect(order).toEqual(['stored', 'sent'])
+  })
+
+  it('does not send the release when the transaction id cannot be stored', async () => {
+    db.setPaymentTransactionId.mockResolvedValueOnce(false)
+    let sent = false
+    escrow.release.mockImplementationOnce(async (_a: number, _p: number, onPrepared: (id: string) => Promise<void>) => {
+      await onPrepared(TX_ID)
+      sent = true
+      return {} as any
+    })
+
+    const res = await trigger()
+
+    expect(res.status).toBe(502)
+    expect(sent).toBe(false)
+    expect(db.markPaymentFailed).toHaveBeenCalledWith(1)
+  })
+})
+
+describe('POST /api/payments/reconcile', () => {
+  // Real clock: transaction ids and creation times are offsets from now
+  const NOW = Math.floor(Date.now() / 1000)
+  const reconcile = () => request(app).post('/api/payments/reconcile').set('Authorization', `Bearer ${token}`).send({})
+  const stuck = (overrides: Record<string, unknown> = {}) => ({
+    id: 5, agreement_id: 1, batch_id: 9, period_id: 9, audit_hash: AUDIT, score: 0.9, status: 'processing',
+    transaction_id: `0.0.1013@${NOW - 600}.000000001`, created_at: new Date((NOW - 600) * 1000), ...overrides
+  })
+
+  it('completes a stuck payment from the ledger record, with its hash, and publishes it', async () => {
+    db.getPaymentsToReconcile.mockResolvedValueOnce([stuck()])
+    escrow.findRelease.mockResolvedValueOnce({ status: 'released', release: { outcome: 'released', amount: PERIOD_AMOUNT, producer: '0xp', transactionId: TX_ID, transactionHash: TX_HASH } })
+
+    const res = await reconcile()
+
+    expect(res.status).toBe(200)
+    expect(escrow.findRelease).toHaveBeenCalledWith(`0.0.1013@${NOW - 600}.000000001`, 0, 9)
+    expect(db.recordPaymentRelease).toHaveBeenCalledWith(5, {
+      status: 'completed', transactionId: TX_ID, transactionHash: TX_HASH, onchainState: 'Released'
+    }, 'processing', `0.0.1013@${NOW - 600}.000000001`)
+    expect(audit.publishAuditRecord).toHaveBeenCalledWith(expect.objectContaining({ transactionHash: TX_HASH }))
+    expect(res.body.data).toEqual([{ paymentId: 5, action: 'completed' }])
+    expect(escrow.release).not.toHaveBeenCalled()
+  })
+
+  it('also completes a payment marked failed whose release did reach consensus', async () => {
+    db.getPaymentsToReconcile.mockResolvedValueOnce([stuck({ status: 'failed' })])
+    escrow.findRelease.mockResolvedValueOnce({ status: 'released', release: { outcome: 'deferred', amount: PERIOD_AMOUNT, producer: '0xp', transactionId: TX_ID, transactionHash: TX_HASH } })
+
+    await reconcile()
+
+    expect(db.recordPaymentRelease).toHaveBeenCalledWith(5, expect.objectContaining({ status: 'deferred' }), 'failed', expect.any(String))
+  })
+
+  it('marks failed a stuck payment whose transaction failed on the ledger', async () => {
+    db.getPaymentsToReconcile.mockResolvedValueOnce([stuck()])
+    escrow.findRelease.mockResolvedValueOnce({ status: 'failed', ledgerStatus: 'CONTRACT_REVERT_EXECUTED' })
+
+    const res = await reconcile()
+
+    expect(db.markPaymentFailed).toHaveBeenCalledWith(5, `0.0.1013@${NOW - 600}.000000001`)
+    expect(db.recordPaymentRelease).not.toHaveBeenCalled()
+    expect(res.body.data[0].action).toBe('failed')
+  })
+
+  it('waits while an unknown transaction may still reach consensus, then marks it failed', async () => {
+    db.getPaymentsToReconcile.mockResolvedValueOnce([stuck({ transaction_id: `0.0.1013@${NOW - 60}.000000001` })])
+    const early = await reconcile()
+    expect(early.body.data[0].action).toBe('waiting')
+    expect(db.markPaymentFailed).not.toHaveBeenCalled()
+
+    db.getPaymentsToReconcile.mockResolvedValueOnce([stuck({ transaction_id: `0.0.1013@${NOW - 600}.000000001` })])
+    const late = await reconcile()
+    expect(late.body.data[0].action).toBe('failed')
+    expect(db.markPaymentFailed).toHaveBeenCalledWith(5, `0.0.1013@${NOW - 600}.000000001`)
+  })
+
+  it('marks failed a payment that never got a transaction id, only after the grace period', async () => {
+    db.getPaymentsToReconcile.mockResolvedValueOnce([stuck({ transaction_id: null, created_at: new Date((NOW - 30) * 1000) })])
+    expect((await reconcile()).body.data[0].action).toBe('waiting')
+
+    db.getPaymentsToReconcile.mockResolvedValueOnce([stuck({ transaction_id: null })])
+    expect((await reconcile()).body.data[0].action).toBe('failed')
+    expect(db.markPaymentFailed).toHaveBeenCalledWith(5, null)
+    expect(escrow.findRelease).not.toHaveBeenCalled()
+  })
+
+  it('leaves a payment untouched when the ledger record does not check out', async () => {
+    db.getPaymentsToReconcile.mockResolvedValueOnce([stuck()])
+    escrow.findRelease.mockRejectedValueOnce(new EscrowError('MISSING_EVENT', 'no PeriodReleased from the escrow contract'))
+
+    const res = await reconcile()
+
+    expect(res.status).toBe(200)
+    expect(res.body.data[0]).toMatchObject({ paymentId: 5, action: 'error' })
+    expect(db.recordPaymentRelease).not.toHaveBeenCalled()
+    expect(db.markPaymentFailed).not.toHaveBeenCalled()
+  })
+})
+
 describe('POST /api/payments/process/:paymentId', () => {
   const failedPayment = { id: 5, agreement_id: 1, batch_id: 9, status: 'failed', period_id: 9, audit_hash: AUDIT, score: 0.9 }
 
@@ -194,7 +311,7 @@ describe('POST /api/payments/process/:paymentId', () => {
 
     expect(res.status).toBe(200)
     expect(db.claimPaymentForRelease).toHaveBeenCalledWith(5)
-    expect(escrow.release).toHaveBeenCalledWith(0, 9)
+    expect(escrow.release).toHaveBeenCalledWith(0, 9, expect.any(Function))
     expect(db.recordPaymentRelease).toHaveBeenCalledWith(5, expect.objectContaining({ status: 'completed', transactionHash: TX_HASH }))
   })
 

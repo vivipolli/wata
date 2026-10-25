@@ -7,7 +7,14 @@ import { isUniqueViolation } from '../utils/prismaErrors'
 import type { TriggerCheckRequest, ApiResponse } from '../types/index'
 import type { EscrowService, EscrowPeriod, ReleaseResult } from '../services/escrow'
 
-type EscrowPort = Pick<EscrowService, 'getPeriod' | 'getAgreement' | 'release'>
+type EscrowPort = Pick<EscrowService, 'getPeriod' | 'getAgreement' | 'release' | 'findRelease'>
+
+// A transaction unknown to the ledger this long after its valid start can no longer reach consensus:
+// the SDK's valid duration (120 s) plus a margin for Mirror Node lag.
+const UNKNOWN_TX_GRACE_SECONDS = 180
+// A processing payment without a transaction id this old was never sent (the id is stored first).
+const NO_TX_GRACE_SECONDS = 300
+const SDK_TRANSACTION_ID = /^\d+\.\d+\.\d+@(\d+)\.\d+$/
 type AuditPublisher = Pick<HederaConsensusService, 'publishAuditRecord'>
 
 interface PaymentDeps {
@@ -88,12 +95,37 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
     }
   }
 
+  // Publishes a recorded release to HCS. The release is final on-chain; a failed publication is logged and never undoes it.
+  async function publishRelease(context: ReleaseContext, release: ReleaseResult, periodId: number): Promise<string | undefined> {
+    try {
+      const hcsTransactionId = await (await getAudit()).publishAuditRecord({
+        agreementId: String(context.agreementId),
+        batchId: context.batchId ?? periodId,
+        auditHash: context.auditHash ?? '',
+        score: context.score ?? 0,
+        timestamp: new Date().toISOString(),
+        transactionHash: release.transactionHash,
+        producerAddress: release.producer
+      })
+      await database.attachPaymentHcs(context.paymentId, hcsTransactionId)
+      return hcsTransactionId
+    } catch (error) {
+      console.error(`HCS publication failed for payment ${context.paymentId}:`, error)
+      return undefined
+    }
+  }
+
   // Executes the release of a claimed payment, records the ledger outcome and publishes it to HCS
   async function executeRelease(res: Response, port: EscrowPort, context: ReleaseContext, onchainAgreementId: number, periodId: number) {
     const { paymentId } = context
     let release: ReleaseResult
     try {
-      release = await port.release(onchainAgreementId, periodId)
+      // The transaction id is stored before sending, so a lost outcome can be reconciled from the ledger
+      release = await port.release(onchainAgreementId, periodId, async transactionId => {
+        if (!(await database.setPaymentTransactionId(paymentId, transactionId))) {
+          throw new Error('Payment is no longer being processed; release not sent')
+        }
+      })
     } catch (error) {
       await database.markPaymentFailed(paymentId)
       return fail(res, 502, 'Escrow release failed', { paymentId, reason: error instanceof Error ? error.message : 'Unknown error' })
@@ -105,23 +137,7 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
       onchainState: 'Released'
     })
 
-    // The release is already final on-chain; a failed publication is logged and never undoes it
-    let hcsTransactionId: string | undefined
-    try {
-      hcsTransactionId = await (await getAudit()).publishAuditRecord({
-        agreementId: String(context.agreementId),
-        batchId: context.batchId ?? periodId,
-        auditHash: context.auditHash ?? '',
-        score: context.score ?? 0,
-        timestamp: new Date().toISOString(),
-        transactionHash: release.transactionHash,
-        producerAddress: release.producer
-      })
-      await database.attachPaymentHcs(paymentId, hcsTransactionId)
-    } catch (error) {
-      hcsTransactionId = undefined
-      console.error(`HCS publication failed for payment ${paymentId}:`, error)
-    }
+    const hcsTransactionId = await publishRelease(context, release, periodId)
 
     const response: ApiResponse<PaymentCheckResult> = {
       success: true,
@@ -304,6 +320,83 @@ export default function paymentRoutes(hederaService: HederaService, database: Pr
       const response: ApiResponse = {
         success: false,
         error: 'Failed to process payment',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+      res.status(500).json(response)
+    }
+  })
+
+  // Reconcile payments whose release outcome was lost (crash, timeout) from the ledger record.
+  // Nothing is sent: outcomes are read by the stored transaction id and recorded only if they check out.
+  router.post('/reconcile', requireManager, async (req: Request, res: Response) => {
+    try {
+      const port = getEscrow()
+      const now = Date.now() / 1000
+      const results: Array<{ paymentId: number; action: string; reason?: string }> = []
+
+      for (const payment of await database.getPaymentsToReconcile()) {
+        const done = (action: string, reason?: string) => results.push({ paymentId: payment.id, action, ...(reason ? { reason } : {}) })
+        const agreement = await database.getAgreement(payment.agreement_id)
+        if (!agreement || agreement.blockchain_id == null || payment.period_id == null) {
+          done('error', 'Payment is not linked to an on-chain period')
+          continue
+        }
+
+        const transactionId = payment.transaction_id
+        if (!transactionId) {
+          // The id is stored before sending, so no id means the release was never sent
+          if (payment.status === 'processing' && now - payment.created_at.getTime() / 1000 > NO_TX_GRACE_SECONDS) {
+            await database.markPaymentFailed(payment.id, null)
+            done('failed')
+          } else {
+            done('waiting')
+          }
+          continue
+        }
+
+        let lookup
+        try {
+          lookup = await port.findRelease(transactionId, agreement.blockchain_id, payment.period_id)
+        } catch (error) {
+          done('error', error instanceof Error ? error.message : 'Unknown error')
+          continue
+        }
+
+        if (lookup.status === 'released') {
+          const fromStatus = payment.status === 'failed' ? 'failed' : 'processing'
+          await database.recordPaymentRelease(payment.id, {
+            status: lookup.release.outcome === 'released' ? 'completed' : 'deferred',
+            transactionId: lookup.release.transactionId,
+            transactionHash: lookup.release.transactionHash,
+            onchainState: 'Released'
+          }, fromStatus, transactionId)
+          await publishRelease({
+            paymentId: payment.id, agreementId: payment.agreement_id, batchId: payment.batch_id,
+            auditHash: payment.audit_hash, score: payment.score
+          }, lookup.release, payment.period_id)
+          done(lookup.release.outcome === 'released' ? 'completed' : 'deferred')
+          continue
+        }
+
+        const validStart = Number(SDK_TRANSACTION_ID.exec(transactionId)?.[1] ?? NaN)
+        const settled = lookup.status === 'failed' || (Number.isFinite(validStart) && now - validStart > UNKNOWN_TX_GRACE_SECONDS)
+        if (!settled) {
+          done('waiting')
+        } else if (payment.status === 'processing') {
+          await database.markPaymentFailed(payment.id, transactionId)
+          done('failed')
+        } else {
+          done('unchanged')
+        }
+      }
+
+      const response: ApiResponse = { success: true, data: results }
+      res.json(response)
+    } catch (error) {
+      console.error('Error reconciling payments:', error)
+      const response: ApiResponse = {
+        success: false,
+        error: 'Failed to reconcile payments',
         message: error instanceof Error ? error.message : 'Unknown error'
       }
       res.status(500).json(response)

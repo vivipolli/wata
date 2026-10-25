@@ -7,13 +7,16 @@
  *  - the EVM address format of accounts and contracts;
  *  - the unit the contract sees for msg.value (tinybar or weibar);
  *  - the backend path: EscrowService + HederaService ledger adapter for submitBatch and release,
- *    with the producer balance checked before and after.
+ *    with the producer balance checked before and after;
+ *  - reconciliation: the transaction id handed over before sending, and the Mirror Node lookup of a
+ *    successful release, a failed one and an unknown id.
  *
  * Environment (values are read, never printed):
  *   LOCAL_NODE_ADDRESS    default 127.0.0.1:50211
  *   LOCAL_NODE_ACCOUNT    default 0.0.3
  *   LOCAL_OPERATOR_ID     funded local account that pays for setup
  *   LOCAL_OPERATOR_KEY    its private key (0x-prefixed hex is read as ECDSA, as in HederaService)
+ *   MIRROR_NODE_URL       local Mirror Node REST, e.g. http://127.0.0.1:38081
  *
  * Run from backend/: npx tsx src/scripts/localEscrowCycle.ts
  */
@@ -63,6 +66,10 @@ function localClient(operatorId: AccountId, operatorKey: PrivateKey): Client {
 const evm = (id: AccountId | ContractId) => '0x' + id.toEvmAddress()
 
 async function main(): Promise<void> {
+  const mirror = requireEnv('MIRROR_NODE_URL')
+  if (!/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+\/?$/.test(mirror)) {
+    throw new Error('MIRROR_NODE_URL must be a loopback address: this script only runs on a local network')
+  }
   const operatorId = AccountId.fromString(requireEnv('LOCAL_OPERATOR_ID'))
   const rawKey = requireEnv('LOCAL_OPERATOR_KEY')
   const operatorKey = rawKey.startsWith('0x') ? PrivateKey.fromStringECDSA(rawKey.slice(2)) : PrivateKey.fromString(rawKey)
@@ -185,18 +192,41 @@ async function main(): Promise<void> {
   report.submitBatch = submission
 
   const before = (await new AccountBalanceQuery().setAccountId(producerId).execute(operator)).hbars.toTinybars().toString()
-  const release = await escrow.release(0, 1)
+  const prepared: string[] = []
+  const release = await escrow.release(0, 1, async id => { prepared.push(id) })
+  report.preparedTransactionId = { handedOverBeforeSend: prepared[0], matchesExecuted: prepared[0] === release.transactionId }
   const after = (await new AccountBalanceQuery().setAccountId(producerId).execute(operator)).hbars.toTinybars().toString()
   report.release = { ...release, producerTinybarBefore: before, producerTinybarAfter: after, delta: (BigInt(after) - BigInt(before)).toString() }
   report.periodAfterRelease = await escrow.getPeriod(0, 1)
 
   // Replay of the same period must fail on-chain.
+  const replayIds: string[] = []
   try {
-    await escrow.release(0, 1)
+    await escrow.release(0, 1, async id => { replayIds.push(id) })
     report.secondRelease = 'ACCEPTED: replay NOT blocked'
   } catch (error) {
     report.secondRelease = `rejected: ${(error as Error).message}`
   }
+
+  // Reconciliation reads: the Mirror Node lags consensus by a few seconds, so poll briefly.
+  async function lookupWhenAvailable(id: string) {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const found = await escrow.findRelease(id, 0, 1).catch(error => ({ status: 'error', message: (error as Error).message }))
+      if ((found as any).status !== 'not_found') return found
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+    return { status: 'not_found' }
+  }
+  const fromMirror: any = await lookupWhenAvailable(release.transactionId)
+  report.reconcileRelease = {
+    status: fromMirror.status,
+    sameHashAsRecord: fromMirror.release?.transactionHash === release.transactionHash,
+    sameAmount: fromMirror.release?.amount === release.amount,
+    outcome: fromMirror.release?.outcome
+  }
+  report.reconcileReplay = await lookupWhenAvailable(replayIds[0])
+  const unknownId = `${oracleId.toString()}@1000000000.000000001`
+  report.reconcileUnknown = await escrow.findRelease(unknownId, 0, 1)
 
   console.log(JSON.stringify(report, null, 2))
   // Open gRPC channels keep the process alive: close every client

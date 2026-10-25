@@ -39,10 +39,15 @@ export interface ContractExecution {
   logs: EscrowLog[]
 }
 
-/** Transport to the ledger. Production uses the Hedera SDK; tests use a fake. */
+/** Called with the transaction id before the transaction is sent; if it throws, nothing is sent. */
+export type OnPrepared = (transactionId: string) => Promise<void>
+
+/** Transport to the ledger. Production uses the Hedera SDK and Mirror Node; tests use a fake. */
 export interface EscrowLedger {
-  execute(contractAddress: string, callData: string): Promise<ContractExecution>
+  execute(contractAddress: string, callData: string, onPrepared?: OnPrepared): Promise<ContractExecution>
   query(contractAddress: string, callData: string): Promise<string>
+  // Outcome of an earlier transaction as recorded by the ledger; null when it is unknown
+  lookup(transactionId: string): Promise<ContractExecution | null>
 }
 
 export type EscrowErrorCode = 'INVALID_INPUT' | 'TX_FAILED' | 'MISSING_EVENT' | 'MISSING_HASH'
@@ -79,6 +84,11 @@ export interface ReleaseResult {
   transactionId: string
   transactionHash: string
 }
+
+export type ReleaseLookup =
+  | { status: 'not_found' }
+  | { status: 'failed'; ledgerStatus: string }
+  | { status: 'released'; release: ReleaseResult }
 
 export interface EscrowAgreement {
   producer: string
@@ -146,13 +156,28 @@ export class EscrowService {
     }
   }
 
-  async release(agreementId: number, periodId: number): Promise<ReleaseResult> {
+  /**
+   * Releases a period. onPrepared receives the transaction id before the transaction is sent,
+   * so the caller can record it and reconcile later if the outcome is lost.
+   */
+  async release(agreementId: number, periodId: number, onPrepared?: OnPrepared): Promise<ReleaseResult> {
     requireUint(agreementId, Number.MAX_SAFE_INTEGER, 'agreementId')
     requireUint(periodId, Number.MAX_SAFE_INTEGER, 'periodId')
 
     const data = this.iface.encodeFunctionData('release', [agreementId, periodId])
-    const execution = await this.executeOrFail(data, 'release')
+    const execution = await this.executeOrFail(data, 'release', onPrepared)
+    return this.interpretRelease(execution, agreementId, periodId)
+  }
 
+  /** Reads the recorded outcome of an earlier release transaction, with the same checks as a live release. */
+  async findRelease(transactionId: string, agreementId: number, periodId: number): Promise<ReleaseLookup> {
+    const execution = await this.ledger.lookup(transactionId)
+    if (!execution) return { status: 'not_found' }
+    if (execution.status !== 'SUCCESS') return { status: 'failed', ledgerStatus: execution.status }
+    return { status: 'released', release: this.interpretRelease(execution, agreementId, periodId) }
+  }
+
+  private interpretRelease(execution: ContractExecution, agreementId: number, periodId: number): ReleaseResult {
     const released = this.findEvent(execution, 'PeriodReleased', e =>
       e.args.agreementId === BigInt(agreementId) && e.args.periodId === BigInt(periodId))
     if (!released) {
@@ -206,8 +231,8 @@ export class EscrowService {
     }
   }
 
-  private async executeOrFail(data: string, label: string): Promise<ContractExecution> {
-    const execution = await this.ledger.execute(this.address, data)
+  private async executeOrFail(data: string, label: string, onPrepared?: OnPrepared): Promise<ContractExecution> {
+    const execution = await this.ledger.execute(this.address, data, onPrepared)
     if (execution.status !== 'SUCCESS') {
       throw new EscrowError('TX_FAILED', `${label} failed on the ledger with status ${execution.status} (${execution.transactionId})`)
     }
